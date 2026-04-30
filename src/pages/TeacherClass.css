@@ -1,0 +1,228 @@
+.page-layout {
+  display: flex;
+  background-color: #f4f7fe;
+  min-height: 100vh;
+}
+
+.main-content {
+  margin-left: 260px; /* Sukat ng sidebar para hindi tabon */
+  flex: 1;
+  padding: 40px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.add-btn {
+  background-color: #4483f2;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* Grid System para sa Cards */
+.class-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 25px;
+}
+
+.class-card {
+  background: white;
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  transition: 0.3s;
+}
+
+.class-card:hover {
+  transform: translateY(-5px);
+}
+
+.subject-label {
+  background: #e0e7ff;
+  color: #4338ca;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.card-info h3 {
+  margin: 15px 0 5px 0;
+  font-size: 1.2rem;
+  color: #1a2233;
+}
+
+.card-info p {
+  color: #718096;
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+}
+
+.view-btn {
+  margin-top: auto;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 10px;
+  border-radius: 10px;
+  color: #1a2233;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.view-btn:hover {
+  background: #4483f2;
+  color: white;
+  border-color: #4483f2;
+}
+
+/* ===== CREATE CLASS MODAL ===== */
+.create-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+    animation: createFadeIn 0.2s ease;
+}
+
+@keyframes createFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes createSlideUp {
+    from { opacity: 0; transform: translateY(30px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.create-modal-content {
+    background: #f8fafc;
+    border-radius: 18px;
+    width: 460px;
+    max-width: 94vw;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+    animation: createSlideUp 0.3s ease;
+}
+
+.create-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px 8px;
+}
+
+.create-prof-label {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.create-close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #94a3b8;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.15s;
+}
+
+.create-close-btn:hover {
+    color: #334155;
+}
+
+.create-title-banner {
+    background: linear-gradient(135deg, #3b5fe0, #5b7ff5);
+    color: white;
+    text-align: center;
+    padding: 14px 20px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0 20px;
+    border-radius: 12px;
+    letter-spacing: 0.3px;
+}
+
+/* Form */
+.create-form {
+    padding: 20px 24px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.create-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.create-label {
+    font-weight: 700;
+    font-size: 0.92rem;
+    color: #1e293b;
+}
+
+.create-input {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    color: #334155;
+    background: white;
+    font-family: inherit;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+}
+
+.create-input:focus {
+    outline: none;
+    border-color: #4483f2;
+    box-shadow: 0 0 0 3px rgba(68, 131, 242, 0.1);
+}
+
+.create-input::placeholder {
+    color: #cbd5e1;
+}
+
+/* Footer */
+.create-modal-footer {
+    padding: 20px 24px 26px;
+    display: flex;
+    justify-content: center;
+}
+
+.create-submit-btn {
+    background: linear-gradient(135deg, #4483f2, #6366f1);
+    color: white;
+    border: none;
+    padding: 14px 48px;
+    border-radius: 30px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 4px 16px rgba(68, 131, 242, 0.35);
+}
+
+.create-submit-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 22px rgba(68, 131, 242, 0.5);
+}

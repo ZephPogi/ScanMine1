@@ -1,0 +1,150 @@
+/* TeacherDashboard.css */
+.main-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: #f8fafc;
+}
+
+.main-content {
+  margin-left: 260px; /* Space para sa sidebar */
+  flex: 1;
+  padding: 40px;
+  box-sizing: border-box;
+}
+
+.content-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 40px;
+}
+
+.header-info h1 {
+  font-size: 1.8rem;
+  color: #1a2233;
+  margin: 0;
+}
+
+.header-info p {
+  color: #64748b;
+  margin-top: 5px;
+}
+
+.avatar {
+  width: 45px;
+  height: 45px;
+  background-color: #4483f2;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-weight: bold;
+}
+
+/* Stats Section */
+.stats-container {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 25px;
+  margin-bottom: 40px;
+}
+
+.stat-card {
+  background: white;
+  padding: 25px;
+  border-radius: 20px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+  transition: transform 0.2s;
+}
+
+.stat-card:hover {
+  transform: translateY(-5px);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.icon-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.blue { background: #e0e7ff; color: #4338ca; }
+.green { background: #dcfce7; color: #15803d; }
+.orange { background: #ffedd5; color: #c2410c; }
+
+.value {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #1a2233;
+  margin: 0;
+}
+
+/* Table Section */
+.table-container {
+  background: white;
+  padding: 30px;
+  border-radius: 20px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.performance-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.performance-table th {
+  text-align: left;
+  padding: 15px;
+  color: #64748b;
+  border-bottom: 1px solid #f1f5f9;
+  font-weight: 600;
+}
+
+.performance-table td {
+  padding: 18px 15px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+}
+
+/* Badges */
+.badge {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.pass { background: #dcfce7; color: #166534; }
+.warn { background: #fef3c7; color: #92400e; }
+
+.btn-view-all {
+  background: none;
+  border: 1px solid #e2e8f0;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #64748b;
+  font-weight: 500;
+}

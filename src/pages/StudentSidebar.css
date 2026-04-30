@@ -1,0 +1,95 @@
+.student-sidebar {
+    width: 200px;
+    min-height: 100vh;
+    background: linear-gradient(180deg, #1e2a3a 0%, #162032 100%);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 100;
+    padding-bottom: 20px;
+}
+
+.student-sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 24px 20px 20px;
+}
+
+.student-brand-logo {
+    width: 32px;
+    height: 32px;
+    background: #4483f2;
+    color: white;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 1rem;
+}
+
+.student-sidebar-brand h2 {
+    color: white;
+    font-size: 1.1rem;
+    margin: 0;
+    font-weight: 700;
+}
+
+.student-sidebar-nav {
+    flex: 1;
+    padding: 8px 12px;
+}
+
+.student-sidebar-nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.student-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 14px;
+    border-radius: 10px;
+    color: #94a3b8;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.18s;
+}
+
+.student-nav-item:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: white;
+}
+
+.student-nav-item.active {
+    background: #4483f2;
+    color: white;
+    font-weight: 600;
+}
+
+.student-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.student-sidebar-footer {
+    padding: 10px 12px;
+}
+
+.student-logout {
+    color: #ef4444 !important;
+}
+
+.student-logout:hover {
+    background: rgba(239, 68, 68, 0.12) !important;
+    color: #ef4444 !important;
+}

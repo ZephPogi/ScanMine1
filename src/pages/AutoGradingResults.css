@@ -1,0 +1,517 @@
+.grading-container {
+    margin-left: 260px;
+    padding: 30px;
+    background-color: #f8fafc;
+    min-height: 100vh;
+    flex: 1;
+}
+
+/* Header */
+.grading-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 25px;
+}
+
+.grading-header h1 {
+    font-size: 1.8rem;
+    color: #1e293b;
+    margin: 0;
+}
+
+.grading-subtitle {
+    color: #64748b;
+    font-size: 0.95rem;
+    margin: 4px 0 0 0;
+}
+
+.grading-edit-btn {
+    background: #4483f2;
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 2px 8px rgba(68, 131, 242, 0.3);
+}
+
+.grading-edit-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(68, 131, 242, 0.4);
+}
+
+/* Stats Row */
+.stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 14px;
+    padding: 18px 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border: 1.5px solid #f1f5f9;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.stat-card.stat-highlight {
+    border-color: #10b981;
+    background: linear-gradient(135deg, #f0fdf4, #ecfdf5);
+}
+
+.stat-label {
+    font-size: 0.78rem;
+    color: #94a3b8;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #1e293b;
+}
+
+.stat-percent {
+    color: #10b981;
+}
+
+.stat-method {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+/* Results Table Section */
+.results-section {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    border: 1.5px solid #f1f5f9;
+    margin-bottom: 20px;
+}
+
+.results-title {
+    font-size: 1.1rem;
+    color: #1e293b;
+    margin: 0 0 18px 0;
+    font-weight: 700;
+}
+
+.results-table-wrapper {
+    overflow-x: auto;
+}
+
+.results-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.results-table th {
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 2px solid #f1f5f9;
+    color: #64748b;
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.results-table td {
+    padding: 14px;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 0.9rem;
+    color: #334155;
+}
+
+.results-table tbody tr {
+    transition: background 0.15s;
+}
+
+.results-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+.student-name-cell {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.method-badge {
+    background: #eef2ff;
+    color: #4483f2;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.score-cell {
+    font-weight: 600;
+    color: #10b981;
+}
+
+.status-badge {
+    padding: 5px 16px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.status-badge.pass {
+    background: #ecfdf5;
+    color: #059669;
+}
+
+.status-badge.fail {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+/* Footer */
+.grading-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.filter-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.filter-label {
+    font-size: 0.85rem;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.filter-tabs {
+    display: flex;
+    gap: 8px;
+}
+
+.filter-tab {
+    padding: 7px 18px;
+    border-radius: 8px;
+    border: 1.5px solid #e2e8f0;
+    background: white;
+    color: #64748b;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.filter-tab:hover {
+    border-color: #a78bfa;
+    color: #7c3aed;
+}
+
+.filter-tab.active {
+    background: #7c3aed;
+    color: white;
+    border-color: #7c3aed;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    gap: 12px;
+}
+
+.scan-btn {
+    background: linear-gradient(135deg, #7c3aed, #9333ea);
+    color: white;
+    border: none;
+    padding: 11px 24px;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 3px 12px rgba(124, 58, 237, 0.3);
+}
+
+.scan-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 18px rgba(124, 58, 237, 0.45);
+}
+
+.export-btn {
+    background: linear-gradient(135deg, #10b981, #34d399);
+    color: white;
+    border: none;
+    padding: 11px 24px;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 3px 12px rgba(16, 185, 129, 0.3);
+}
+
+.export-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 18px rgba(16, 185, 129, 0.45);
+}
+
+/* ===== SCAN STUDENT PAPER MODAL ===== */
+.scan-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+    animation: scanFadeIn 0.2s ease;
+}
+
+@keyframes scanFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes scanSlideUp {
+    from { opacity: 0; transform: translateY(30px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.scan-modal-content {
+    background: #f8fafc;
+    border-radius: 18px;
+    width: 500px;
+    max-width: 94vw;
+    max-height: 90vh;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+    overflow-y: auto;
+    animation: scanSlideUp 0.3s ease;
+}
+
+.scan-modal-header {
+    padding: 14px 20px 8px;
+}
+
+.scan-prof-label {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* Title Banner */
+.scan-title-banner {
+    background: linear-gradient(135deg, #2d3a5c, #3b4a6b);
+    color: white;
+    text-align: center;
+    padding: 14px 20px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0 20px;
+    border-radius: 12px;
+    letter-spacing: 0.3px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+}
+
+.scan-close-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #ef4444;
+    color: white;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, transform 0.15s;
+}
+
+.scan-close-btn:hover {
+    background: #dc2626;
+    transform: translateY(-50%) scale(1.1);
+}
+
+/* Steps */
+.scan-step {
+    padding: 14px 24px 0;
+}
+
+.scan-step-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 8px;
+}
+
+/* Step 1: Search */
+.scan-search-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.scan-search-input {
+    flex: 1;
+    padding: 11px 14px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    color: #334155;
+    background: white;
+    font-family: inherit;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}
+
+.scan-search-input:focus {
+    outline: none;
+    border-color: #4483f2;
+    box-shadow: 0 0 0 3px rgba(68, 131, 242, 0.1);
+}
+
+.scan-search-input::placeholder {
+    color: #cbd5e1;
+}
+
+.scan-browse-btn {
+    padding: 10px 22px;
+    background: #4483f2;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.15s;
+    flex-shrink: 0;
+}
+
+.scan-browse-btn:hover {
+    opacity: 0.88;
+    transform: translateY(-1px);
+}
+
+/* Step 2: Exam input */
+.scan-exam-input {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    color: #64748b;
+    background: #f8fafc;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+/* Step 3: Capture Zone */
+.scan-capture-zone {
+    border: 2px dashed #cbd5e1;
+    border-radius: 14px;
+    padding: 30px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    background: white;
+}
+
+.scan-capture-zone:hover {
+    border-color: #4483f2;
+    background: #f8faff;
+}
+
+.scan-camera-icon {
+    font-size: 2.2rem;
+    margin-bottom: 8px;
+    opacity: 0.7;
+}
+
+.scan-capture-title {
+    font-weight: 700;
+    font-size: 1rem;
+    color: #1e293b;
+    margin: 0 0 4px;
+}
+
+.scan-capture-sub {
+    font-size: 0.82rem;
+    color: #94a3b8;
+    margin: 0;
+}
+
+/* Auto-detect info */
+.scan-autodetect {
+    margin: 16px 24px 0;
+    background: linear-gradient(135deg, #ede9fe, #e0e7ff);
+    padding: 14px 18px;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 0.85rem;
+    color: #4c1d95;
+    font-weight: 600;
+    line-height: 1.6;
+}
+
+/* Footer */
+.scan-modal-footer {
+    padding: 18px 24px 24px;
+    display: flex;
+    justify-content: center;
+}
+
+.scan-record-btn {
+    background: linear-gradient(135deg, #7c3aed, #9333ea);
+    color: white;
+    border: none;
+    padding: 14px 40px;
+    border-radius: 12px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 4px 16px rgba(124, 58, 237, 0.35);
+}
+
+.scan-record-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 22px rgba(124, 58, 237, 0.5);
+}

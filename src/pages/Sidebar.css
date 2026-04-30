@@ -1,0 +1,74 @@
+/* Sidebar.css */
+.sidebar {
+  width: 260px;
+  background-color: #1a2233;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  padding: 30px;
+  position: fixed;
+  height: 100vh;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 50px;
+}
+
+.brand-logo {
+  background-color: #4483f2;
+  width: 35px;
+  height: 35px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 1.2rem;
+}
+
+.sidebar-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.nav-item {
+  padding: 14px 18px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  color: #a0aec0;
+  transition: all 0.3s ease;
+  margin-bottom: 10px;
+}
+
+.nav-item .icon {
+  font-size: 1.2rem;
+}
+
+.nav-item:hover, 
+.nav-item.active {
+  background-color: #4483f2;
+  color: white;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+}
+
+.logout {
+  color: #ff6b6b;
+}
+
+.logout:hover {
+  background-color: rgba(255, 107, 107, 0.1);
+  color: #ff6b6b;
+}

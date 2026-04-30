@@ -1,0 +1,424 @@
+/* Shared layout */
+.student-page-layout {
+    display: flex;
+    background: #f1f5f9;
+    min-height: 100vh;
+}
+
+.student-main {
+    margin-left: 200px;
+    flex: 1;
+    padding: 30px 36px;
+    min-height: 100vh;
+}
+
+/* Header */
+.student-dash-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 26px;
+}
+
+.student-dash-label {
+    font-size: 0.78rem;
+    color: #94a3b8;
+    margin: 0 0 4px;
+}
+
+.student-dash-header h1 {
+    font-size: 1.8rem;
+    color: #1e293b;
+    margin: 0;
+    font-weight: 800;
+}
+
+.student-avatar-circle {
+    width: 42px;
+    height: 42px;
+    background: linear-gradient(135deg, #4483f2, #7c3aed);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.9rem;
+    box-shadow: 0 4px 12px rgba(68, 131, 242, 0.3);
+    flex-shrink: 0;
+}
+
+/* Cards */
+.student-card {
+    background: white;
+    border-radius: 16px;
+    padding: 24px 26px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    margin-bottom: 22px;
+}
+
+.student-section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 18px;
+}
+
+/* Exam List */
+.exam-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.exam-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.exam-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.exam-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.exam-title {
+    font-weight: 600;
+    color: #1e293b;
+    font-size: 0.95rem;
+}
+
+.exam-due {
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.exam-status {
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-pending { color: #f59e0b; }
+.status-overdue { color: #ef4444; }
+
+/* Exam Action Buttons */
+.exam-actions {
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.btn-take-quiz {
+    background: linear-gradient(135deg, #4483f2, #6366f1);
+    color: white;
+    border: none;
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: 0.83rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    white-space: nowrap;
+}
+
+.btn-take-quiz:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(68, 131, 242, 0.35);
+}
+
+.btn-upload-paper {
+    background: linear-gradient(135deg, #7c3aed, #9333ea);
+    color: white;
+    border: none;
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: 0.83rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    white-space: nowrap;
+}
+
+.btn-upload-paper:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);
+}
+
+.btn-submit-late {
+    background: #ef4444;
+    color: white;
+    border: none;
+    padding: 9px 20px;
+    border-radius: 8px;
+    font-size: 0.83rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.btn-submit-late:hover { opacity: 0.88; }
+
+/* Leaderboard */
+.leaderboard-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.leaderboard-table th {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 2px solid #f1f5f9;
+    color: #64748b;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.leaderboard-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid #f8fafc;
+    font-size: 0.9rem;
+    color: #334155;
+}
+
+.leaderboard-table tbody tr:hover { background: #f8fafc; }
+
+.leaderboard-me {
+    background: #eff6ff !important;
+}
+
+.rank-cell {
+    font-size: 1.1rem;
+    text-align: center;
+    width: 50px;
+}
+
+.leaderboard-name {
+    font-weight: 600;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.you-badge {
+    background: #4483f2;
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-weight: 700;
+}
+
+.avg-badge {
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.avg-high { background: #ecfdf5; color: #059669; }
+.avg-mid  { background: #fffbeb; color: #d97706; }
+.avg-low  { background: #fef2f2; color: #dc2626; }
+
+/* ===== UPLOAD ANSWER SHEET MODAL ===== */
+.upload-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+    animation: uploadFadeIn 0.2s ease;
+}
+
+@keyframes uploadFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes uploadSlideUp {
+    from { opacity: 0; transform: translateY(28px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+.upload-modal-content {
+    background: #f8fafc;
+    border-radius: 18px;
+    width: 460px;
+    max-width: 94vw;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+    animation: uploadSlideUp 0.3s ease;
+}
+
+/* Prof label */
+.upload-modal-header {
+    padding: 12px 20px 6px;
+}
+
+.upload-prof-label {
+    font-size: 0.78rem;
+    color: #94a3b8;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* Dark title banner */
+.upload-title-banner {
+    background: linear-gradient(135deg, #2d3a5c, #3b4a6b);
+    color: white;
+    padding: 14px 20px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0 20px;
+    border-radius: 12px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    letter-spacing: 0.3px;
+}
+
+.upload-close-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #ef4444;
+    color: white;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, transform 0.15s;
+    line-height: 1;
+}
+
+.upload-close-btn:hover {
+    background: #dc2626;
+    transform: translateY(-50%) scale(1.1);
+}
+
+/* Exam info */
+.upload-exam-info {
+    padding: 16px 24px 6px;
+}
+
+.upload-exam-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 4px;
+}
+
+.upload-exam-sub {
+    font-size: 0.82rem;
+    color: #64748b;
+    margin: 0;
+}
+
+/* Drop Zone */
+.upload-drop-zone {
+    margin: 14px 24px;
+    background: #f1f5f9;
+    border: 2px dashed #cbd5e1;
+    border-radius: 14px;
+    padding: 30px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.upload-drop-zone:hover {
+    border-color: #4483f2;
+    background: #f0f4ff;
+}
+
+.upload-camera-icon {
+    font-size: 2.4rem;
+    margin-bottom: 8px;
+    opacity: 0.65;
+}
+
+.upload-take-photo {
+    font-weight: 700;
+    font-size: 1rem;
+    color: #1e293b;
+    margin: 0 0 4px;
+}
+
+.upload-or {
+    font-size: 0.82rem;
+    color: #94a3b8;
+    margin: 0 0 4px;
+}
+
+.upload-gallery-link {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #4483f2;
+    margin: 0 0 10px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.upload-gallery-link:hover { opacity: 0.75; }
+
+.upload-supported {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin: 0;
+}
+
+/* Footer */
+.upload-modal-footer {
+    padding: 16px 24px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.upload-submit-btn {
+    background: linear-gradient(135deg, #10b981, #34d399);
+    color: white;
+    border: none;
+    padding: 14px 0;
+    width: 100%;
+    border-radius: 12px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+
+.upload-submit-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
+}
+
+.upload-submit-hint {
+    font-size: 0.78rem;
+    color: #94a3b8;
+    margin: 0;
+    text-align: center;
+}

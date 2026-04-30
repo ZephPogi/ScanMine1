@@ -1,0 +1,104 @@
+/* Shared layout */
+.student-page-layout { display: flex; background: #f1f5f9; min-height: 100vh; }
+.student-main { margin-left: 200px; flex: 1; padding: 30px 36px; min-height: 100vh; }
+.student-avatar-circle {
+    width: 42px; height: 42px;
+    background: linear-gradient(135deg, #4483f2, #7c3aed);
+    color: white; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.9rem;
+    box-shadow: 0 4px 12px rgba(68,131,242,0.3); flex-shrink: 0;
+}
+
+/* Header */
+.smg-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+.smg-label { font-size: 0.78rem; color: #94a3b8; margin: 0 0 2px; }
+.smg-header h1 { font-size: 1.7rem; color: #1e293b; margin: 0 0 6px; font-weight: 800; }
+.smg-back-btn {
+    background: none; border: none; color: #4483f2;
+    font-size: 0.85rem; font-weight: 600; cursor: pointer; padding: 0;
+}
+.smg-back-btn:hover { text-decoration: underline; }
+
+/* Class Selector */
+.smg-class-selector { margin-bottom: 18px; }
+.smg-select {
+    padding: 9px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px;
+    font-size: 0.9rem; color: #334155; background: white;
+    font-family: inherit; cursor: pointer; min-width: 200px;
+}
+.smg-select:focus { outline: none; border-color: #4483f2; }
+
+/* Summary Card */
+.smg-summary-card {
+    background: white; border-radius: 16px; padding: 22px 26px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px;
+}
+.smg-summary-title { font-size: 1rem; font-weight: 700; color: #1e293b; margin: 0 0 16px; }
+.smg-summary-body { display: flex; align-items: center; gap: 32px; flex-wrap: wrap; }
+
+/* Donut Chart */
+.smg-donut-wrapper { width: 110px; flex-shrink: 0; }
+.smg-donut { width: 100%; height: auto; }
+
+/* Stats */
+.smg-summary-stats { display: flex; flex-direction: column; gap: 8px; }
+.smg-stat-row { display: flex; gap: 10px; align-items: center; font-size: 0.88rem; }
+.smg-stat-label { color: #64748b; }
+.smg-stat-val { font-weight: 700; color: #1e293b; }
+
+/* Grade Distribution */
+.smg-grade-dist { display: flex; gap: 8px; flex-wrap: wrap; }
+.smg-dist-item {
+    padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 700;
+}
+.grade-a-bg { background: #ecfdf5; color: #059669; }
+.grade-b-bg { background: #eff6ff; color: #2563eb; }
+.grade-c-bg { background: #fffbeb; color: #d97706; }
+.grade-f-bg { background: #fef2f2; color: #dc2626; }
+
+/* Table Card */
+.smg-table-card {
+    background: white; border-radius: 16px; padding: 22px 26px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px;
+}
+.smg-table-title { font-size: 1rem; font-weight: 700; color: #1e293b; margin: 0 0 16px; }
+.smg-table { width: 100%; border-collapse: collapse; }
+.smg-table th {
+    text-align: left; padding: 10px 14px;
+    border-bottom: 2px solid #f1f5f9; color: #64748b;
+    font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px;
+}
+.smg-table td { padding: 13px 14px; border-bottom: 1px solid #f8fafc; font-size: 0.88rem; color: #334155; }
+.smg-table tbody tr:hover { background: #f8fafc; }
+.smg-highlighted-row { background: #fff7ed !important; }
+.smg-name-cell { font-weight: 600; color: #1e293b; }
+.smg-date-cell { color: #64748b; font-size: 0.82rem; }
+
+/* Grade badge */
+.smg-grade-badge { font-weight: 700; font-size: 0.85rem; }
+.grade-a { color: #059669; }
+.grade-b { color: #2563eb; }
+.grade-c { color: #d97706; }
+.grade-f { color: #dc2626; }
+
+/* Status badge */
+.smg-status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 700; }
+.st-done    { background: #ecfdf5; color: #059669; }
+.st-pending { background: #fef3c7; color: #d97706; }
+
+/* Footer */
+.smg-footer { display: flex; justify-content: flex-end; gap: 12px; }
+.smg-print-btn {
+    background: white; border: 1.5px solid #e2e8f0; color: #64748b;
+    padding: 10px 22px; border-radius: 10px; font-weight: 600; font-size: 0.88rem; cursor: pointer;
+    transition: background 0.15s;
+}
+.smg-print-btn:hover { background: #f1f5f9; }
+.smg-export-btn {
+    background: linear-gradient(135deg, #10b981, #34d399); color: white;
+    border: none; padding: 10px 22px; border-radius: 10px;
+    font-weight: 700; font-size: 0.88rem; cursor: pointer;
+    box-shadow: 0 3px 10px rgba(16,185,129,0.3); transition: transform 0.15s, box-shadow 0.15s;
+}
+.smg-export-btn:hover { transform: translateY(-1px); box-shadow: 0 5px 16px rgba(16,185,129,0.4); }
