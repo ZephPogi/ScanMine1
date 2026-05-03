@@ -15,7 +15,7 @@ const Login = () => {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:5000/api/login', {
+      const response = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, role: activeRole }),
@@ -27,7 +27,9 @@ const Login = () => {
         throw new Error(data.error || 'Failed to login');
       }
 
-      // Login successful, save token or user data if needed here
+      // Login successful, save user data to localStorage
+      localStorage.setItem('user', JSON.stringify(data));
+
       if (data.role === 'teacher') {
         navigate('/dashboard');
       } else {

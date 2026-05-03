@@ -1,33 +1,71 @@
-import { useState } from 'react';
-import SectionDetails from './SectionDetails'; // I-import natin yung bagong view
+import { useState, useEffect, useCallback } from 'react';
+import SectionDetails from './SectionDetails';
 import Sidebar from './Sidebar';
+import { BookOpen, Plus, X, Users } from 'lucide-react';
 import './TeacherClass.css';
 
 const TeacherClass = () => {
   const [selectedSection, setSelectedSection] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newClass, setNewClass] = useState({ name: '', subject: '', students: '' });
+  const [newClass, setNewClass] = useState({ name: '', subject: '' });
+  const [classes, setClasses] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const classes = [
-    { id: 1, name: "Grade 10 - Rizal", students: 45, subject: "History" },
-    { id: 2, name: "Grade 11 - Bonifacio", students: 38, subject: "PolSci" },
-    { id: 3, name: "Grade 12 - Mabini", students: 42, subject: "Social Science" },
-    { id: 4, name: "Grade 10 - Luna", students: 40, subject: "Arts" },
-  ];
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-  const handleCreateClass = () => {
-    // TODO: Implement create class logic
-    console.log('New class:', newClass);
-    setShowCreateModal(false);
-    setNewClass({ name: '', subject: '', students: '' });
+  const fetchClasses = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/classes?teacherId=${user.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setClasses(Array.isArray(data) ? data : []);
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching classes:', error);
+      setLoading(false);
+    }
+  }, [user.id]);
+
+  useEffect(() => {
+    if (user.id) {
+      fetchClasses();
+    } else {
+      setLoading(false);
+    }
+  }, [user.id, fetchClasses]);
+
+  const handleCreateClass = async () => {
+    if (!user.id) return alert('Please login again. User session missing.');
+    if (!newClass.name) return alert('Please enter a class name');
+    
+    try {
+      const response = await fetch('/api/classes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teacherId: user.id,
+          name: newClass.name,
+          subject: newClass.subject
+        }),
+      });
+
+      if (response.ok) {
+        const created = await response.json();
+        setClasses([...classes, created]);
+        setShowCreateModal(false);
+        setNewClass({ name: '', subject: '' });
+      }
+    } catch (error) {
+      console.error('Error creating class:', error);
+    }
   };
 
   const closeCreateModal = () => {
     setShowCreateModal(false);
-    setNewClass({ name: '', subject: '', students: '' });
+    setNewClass({ name: '', subject: '' });
   };
 
-  // Kung may napiling section, ipakita ang SectionDetails view
   if (selectedSection) {
     return <SectionDetails section={selectedSection} onBack={() => setSelectedSection(null)} />;
   }
@@ -38,43 +76,48 @@ const TeacherClass = () => {
       <div className="main-content">
         <header className="page-header">
           <h2>My Classes</h2>
-          <button className="add-btn" onClick={() => setShowCreateModal(true)}>+ Create Class</button>
+          <button className="add-btn" onClick={() => setShowCreateModal(true)}>
+            <Plus size={18} />
+            <span>Create Class</span>
+          </button>
         </header>
 
-        <div className="class-grid">
-          {classes.map((item) => (
-            <div key={item.id} className="class-card">
-              <div className="card-top">
-                <span className="subject-label">{item.subject}</span>
+        {loading ? (
+          <p>Loading classes...</p>
+        ) : (
+          <div className="class-grid">
+            {classes.map((item) => (
+              <div key={item.id} className="class-card">
+                <div className="card-top">
+                  <span className="subject-label">{item.subject || 'No Subject'}</span>
+                </div>
+                <div className="card-info">
+                  <h3>{item.name}</h3>
+                  <p><Users size={16} /> View Students & Exams</p>
+                </div>
+                <button className="view-btn" onClick={() => setSelectedSection(item)}>
+                  View Section
+                </button>
               </div>
-              <div className="card-info">
-                <h3>{item.name}</h3>
-                <p>👤 {item.students} Students</p>
-              </div>
-              {/* Pag click dito, ise-set ang state para magpalit ng view */}
-              <button className="view-btn" onClick={() => setSelectedSection(item)}>
-                View Section
-              </button>
-            </div>
-          ))}
-        </div>
+            ))}
+            {classes.length === 0 && <p>No classes created yet.</p>}
+          </div>
+        )}
       </div>
 
-      {/* ===== CREATE CLASS MODAL ===== */}
       {showCreateModal && (
         <div className="create-modal-overlay" onClick={closeCreateModal}>
           <div className="create-modal-content" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
             <div className="create-modal-header">
               <span className="create-prof-label">prof</span>
-              <button className="create-close-btn" onClick={closeCreateModal}>×</button>
+              <button className="create-close-btn" onClick={closeCreateModal}><X size={20} /></button>
             </div>
 
             <div className="create-title-banner">
-              📚 Create New Class
+              <BookOpen size={20} />
+              <span>Create New Class</span>
             </div>
 
-            {/* Form Fields */}
             <div className="create-form">
               <div className="create-field">
                 <label className="create-label">Class / Section Name</label>
@@ -97,20 +140,8 @@ const TeacherClass = () => {
                   onChange={(e) => setNewClass({ ...newClass, subject: e.target.value })}
                 />
               </div>
-
-              <div className="create-field">
-                <label className="create-label">Number of Students</label>
-                <input
-                  type="number"
-                  className="create-input"
-                  placeholder="e.g. 45"
-                  value={newClass.students}
-                  onChange={(e) => setNewClass({ ...newClass, students: e.target.value })}
-                />
-              </div>
             </div>
 
-            {/* Create Button */}
             <div className="create-modal-footer">
               <button className="create-submit-btn" onClick={handleCreateClass}>
                 Create Class

@@ -1,12 +1,13 @@
 import './Dashboard.css';
 import Sidebar from './Sidebar';
+import { Users, FileText, TrendingUp, Camera, Scan, Bot, FileDown } from 'lucide-react';
 
 const TeacherDashboard = () => {
   const stats = [
-    { id: 1, label: "Total Students", value: "165", icon: "👥", trend: "+12%" },
-    { id: 2, label: "Quizzes Generated", value: "24", icon: "📝", trend: "+5" },
-    { id: 3, label: "Average Score", value: "82%", icon: "📊", trend: "+3%" },
-    { id: 4, label: "Pending Scans", value: "12", icon: "📸", trend: "Action Required" },
+    { id: 1, label: "Total Students", value: "165", icon: Users, trend: "+12%" },
+    { id: 2, label: "Quizzes Generated", value: "24", icon: FileText, trend: "+5" },
+    { id: 3, label: "Average Score", value: "82%", icon: TrendingUp, trend: "+3%" },
+    { id: 4, label: "Pending Scans", value: "12", icon: Camera, trend: "Action Required" },
   ];
 
   return (
@@ -15,7 +16,7 @@ const TeacherDashboard = () => {
       <main className="dashboard-content">
         <header className="dashboard-header">
           <div>
-            <h1>Welcome back, Teacher Maria! 👋</h1>
+            <h1>Welcome back, Teacher Maria</h1>
             <p>Here's what's happening with your classes today.</p>
           </div>
           <button className="primary-action-btn">+ Create New Quiz</button>
@@ -23,18 +24,21 @@ const TeacherDashboard = () => {
 
         {/* Stats Grid */}
         <section className="stats-grid">
-          {stats.map(stat => (
-            <div key={stat.id} className="stat-card">
-              <div className="stat-icon">{stat.icon}</div>
-              <div className="stat-info">
-                <span className="stat-label">{stat.label}</span>
-                <h2 className="stat-value">{stat.value}</h2>
-                <span className={`stat-trend ${stat.trend.includes('+') ? 'positive' : 'neutral'}`}>
-                  {stat.trend}
-                </span>
+          {stats.map(stat => {
+            const Icon = stat.icon;
+            return (
+              <div key={stat.id} className="stat-card">
+                <div className="stat-icon"><Icon size={24} /></div>
+                <div className="stat-info">
+                  <span className="stat-label">{stat.label}</span>
+                  <h2 className="stat-value">{stat.value}</h2>
+                  <span className={`stat-trend ${stat.trend.includes('+') ? 'positive' : 'neutral'}`}>
+                    {stat.trend}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </section>
 
         {/* Main Section */}
@@ -81,9 +85,18 @@ const TeacherDashboard = () => {
           <section className="dashboard-card shortcuts">
             <h3>Quick Actions</h3>
             <div className="shortcut-list">
-              <button className="shortcut-item">📸 Scan Answer Sheets</button>
-              <button className="shortcut-item">🤖 AI Quiz Generator</button>
-              <button className="shortcut-item">📋 Export Grade Reports</button>
+              <button className="shortcut-item">
+                <Scan size={18} />
+                <span>Scan Answer Sheets</span>
+              </button>
+              <button className="shortcut-item">
+                <Bot size={18} />
+                <span>AI Quiz Generator</span>
+              </button>
+              <button className="shortcut-item">
+                <FileDown size={18} />
+                <span>Export Grade Reports</span>
+              </button>
             </div>
           </section>
         </div>

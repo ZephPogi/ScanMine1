@@ -1,24 +1,15 @@
 const fs = require('fs');
-const { Pool } = require('pg');
-require('dotenv').config();
-
-const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
-});
+const path = require('path');
+const db = require('./db');
 
 async function setup() {
   try {
-    const schemaSql = fs.readFileSync('schema.sql', 'utf8');
-    await pool.query(schemaSql);
+    const schemaPath = path.join(__dirname, 'schema.sql');
+    const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+    await db.query(schemaSql);
     console.log('Successfully executed schema.sql on the database!');
   } catch (error) {
     console.error('Error executing schema.sql:', error);
-  } finally {
-    pool.end();
   }
 }
 

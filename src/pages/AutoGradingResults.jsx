@@ -1,98 +1,292 @@
-import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Camera, Eye, Trash2, Edit, BookOpen, X, CheckCircle, XCircle, Clock, FileText } from 'lucide-react';
 import './AutoGradingResults.css';
 import Sidebar from './Sidebar';
 
 const AutoGradingResults = () => {
   const navigate = useNavigate();
-  const [activeFilter, setActiveFilter] = useState('all');
+  const location = useLocation();
+  // Try to get section from location state, fallback to localStorage
+  const [section] = useState(() => {
+    if (location.state?.section) {
+      localStorage.setItem('currentSection', JSON.stringify(location.state.section));
+      return location.state.section;
+    }
+    const saved = localStorage.getItem('currentSection');
+    return saved ? JSON.parse(saved) : null;
+  });
 
-  // Scan modal state
   const [showScanModal, setShowScanModal] = useState(false);
-  const [studentSearch, setStudentSearch] = useState('');
+  
+  // Selection state
+  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [selectedExamId, setSelectedExamId] = useState('');
+  const [students, setStudents] = useState([]);
+  const [exams, setExams] = useState([]);
+
   const [scanFile, setScanFile] = useState(null);
   const scanFileRef = useRef(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [manualAnswers, setManualAnswers] = useState('');
+  const [inputMode, setInputMode] = useState('scan'); // 'scan' or 'manual'
+  const [showFeedback, setShowFeedback] = useState(null); // stores feedback string
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [capturedImage, setCapturedImage] = useState(null);
 
-  // Mock exam info
-  const examInfo = {
-    title: 'Introduction to Algebra - Midterm Exam',
-    className: 'Class 1',
+  const [studentResults, setStudentResults] = useState([]);
+
+  const fetchSubmissions = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/submissions/${section.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        const formatted = data.map(sub => ({
+          id: sub.id,
+          name: sub.student_name,
+          exam: sub.exam_title,
+          submittedBy: 'System',
+          method: 'AI Grading',
+          score: `${Math.round(sub.score)}%`,
+          status: sub.score >= 50 ? 'Pass' : 'Fail',
+          feedback: sub.feedback || ''
+        }));
+        setStudentResults(formatted);
+      }
+    } catch (error) {
+      console.error('Error fetching submissions:', error);
+    }
+  }, [section?.id]);
+
+  const fetchStudents = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/classes/${section.id}/students`);
+      if (response.ok) {
+        const data = await response.json();
+        setStudents(Array.isArray(data) ? data : []);
+      }
+    } catch (error) {
+      console.error('Error fetching students:', error);
+    }
+  }, [section?.id]);
+
+  const fetchExams = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/exams?classId=${section.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setExams(Array.isArray(data) ? data : []);
+      }
+    } catch (error) {
+      console.error('Error fetching exams:', error);
+    }
+  }, [section?.id]);
+
+  useEffect(() => {
+    if (section?.id) {
+      fetchStudents();
+      fetchExams();
+      fetchSubmissions();
+    }
+  }, [section?.id, fetchStudents, fetchExams, fetchSubmissions]);
+
+  if (!section) {
+    return (
+      <div className="grading-container">
+        <div className="no-section-error">
+          <h2>No Section Selected</h2>
+          <button onClick={() => navigate('/teacher')}>Go Back to Dashboard</button>
+        </div>
+      </div>
+    );
+  }
+
+  const handleDeleteSubmission = async (submissionId) => {
+    if (!window.confirm('Remove this submission record?')) return;
+    try {
+      const res = await fetch(`/api/submissions/${submissionId}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchSubmissions();
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+    }
   };
 
-  // Mock stats
-  const stats = {
-    totalStudents: 24,
-    graded: 24,
-    classAverage: 84,
-    examMethod: 'AI Grading',
-  };
-
-  // Mock student results
-  const studentResults = [
-    { id: 1, name: 'Sarah Johnson', submittedBy: 'Student', method: 'Photo', score: '18/20 (90%)', status: 'Pass' },
-    { id: 2, name: 'Mike Chen', submittedBy: 'Teacher (Print Scan)', method: 'Photo', score: '16/20 (80%)', status: 'Pass' },
-    { id: 3, name: 'Emma Davis', submittedBy: 'Student', method: 'Photo', score: '17/20 (85%)', status: 'Pass' },
-    { id: 4, name: 'James Wilson', submittedBy: 'Teacher (Print Scan)', method: 'Photo', score: '10/20 (50%)', status: 'Fail' },
-  ];
-
-  const filteredResults = activeFilter === 'all'
-    ? studentResults
-    : studentResults.filter(s =>
-        activeFilter === 'student'
-          ? s.submittedBy === 'Student'
-          : s.submittedBy.includes('Teacher')
-      );
-
-  const handleScanRecord = () => {
-    console.log('Student:', studentSearch);
-    console.log('Scan file:', scanFile);
-    setShowScanModal(false);
-    setStudentSearch('');
+  const startCamera = async () => {
+    setIsCameraOpen(true);
     setScanFile(null);
+    setCapturedImage(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Error accessing camera:", err);
+      alert("Could not access camera. Please check permissions.");
+      setIsCameraOpen(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+    }
+    setIsCameraOpen(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      canvas.toBlob((blob) => {
+        setCapturedImage(blob);
+        stopCamera();
+      }, 'image/jpeg');
+    }
+  };
+
+  const handleScanRecord = async () => {
+    if (!selectedStudentId || !selectedExamId) {
+      alert('Please select a student and an exam first.');
+      return;
+    }
+    if (!scanFile && !capturedImage) {
+      alert('Please capture a photo or upload an image.');
+      return;
+    }
+    
+    setIsScanning(true);
+    try {
+      const formData = new FormData();
+      formData.append('studentId', selectedStudentId);
+      formData.append('examId', selectedExamId);
+      
+      if (capturedImage) {
+        formData.append('studentPaper', capturedImage, 'captured_paper.jpg');
+      } else if (scanFile) {
+        formData.append('studentPaper', scanFile);
+      }
+
+      const response = await fetch('/api/upload-paper', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to grade paper');
+
+      const studentName = students.find(s => s.id === parseInt(selectedStudentId))?.name || 'Student';
+      const examTitle = exams.find(e => e.id === parseInt(selectedExamId))?.title || 'Exam';
+
+      // Calculate percentage from backend response result object
+      const totalScore = data.result.totalScore || 0;
+      const maxScore = data.result.maxScore || 1;
+      const percentage = ((totalScore / maxScore) * 100).toFixed(0);
+
+      const newResult = {
+        id: data.result.submission_id || Date.now(),
+        name: studentName,
+        exam: examTitle,
+        submittedBy: 'Teacher (Scan)',
+        method: 'AI Grading',
+        score: `${percentage}%`,
+        status: percentage >= 50 ? 'Pass' : 'Fail',
+        feedback: data.result.feedback || ''
+      };
+
+      // Remove existing result for this student/exam combo if any, then add new one
+      setStudentResults(prev => [newResult, ...prev.filter(r => !(r.name === studentName && r.exam === examTitle))]);
+      
+      setShowScanModal(false);
+      setScanFile(null);
+      setCapturedImage(null);
+      fetchSubmissions(); // Refresh to ensure IDs are synced with DB
+    } catch (error) {
+      console.error("Error grading:", error);
+      alert("Error during scanning: " + error.message);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleManualGrade = async () => {
+    if (!selectedStudentId || !selectedExamId) {
+      alert('Please select a student and an exam first.');
+      return;
+    }
+    if (!manualAnswers.trim()) {
+      alert('Please enter the student answers.');
+      return;
+    }
+    setIsScanning(true);
+    try {
+      const response = await fetch('/api/grade-manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: selectedStudentId,
+          examId: selectedExamId,
+          answers: manualAnswers
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to grade');
+      
+      const studentName = students.find(s => s.id === parseInt(selectedStudentId))?.name || 'Student';
+      const examTitle = exams.find(e => e.id === parseInt(selectedExamId))?.title || 'Exam';
+      const percentage = data.result.maxScore > 0
+        ? ((data.result.totalScore / data.result.maxScore) * 100).toFixed(0)
+        : 0;
+
+      setStudentResults(prev => [{
+        id: data.result.submission_id || Date.now(),
+        name: studentName, exam: examTitle,
+        submittedBy: 'Teacher (Manual)',
+        score: `${percentage}%`,
+        status: percentage >= 50 ? 'Pass' : 'Fail',
+        feedback: data.result.feedback || ''
+      }, ...prev.filter(r => !(r.name === studentName && r.exam === examTitle))]);
+      
+      setShowScanModal(false);
+      setManualAnswers('');
+      fetchSubmissions();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   const closeScanModal = () => {
     setShowScanModal(false);
-    setStudentSearch('');
     setScanFile(null);
+    setCapturedImage(null);
+    stopCamera();
   };
 
   return (
     <div className="page-layout">
       <Sidebar />
       <div className="grading-container">
-        {/* Header */}
         <header className="grading-header">
           <div>
             <h1>Auto-Grading Results</h1>
-            <p className="grading-subtitle">{examInfo.className} • {examInfo.title}</p>
+            <p className="grading-subtitle">{section?.name} • Class Results</p>
           </div>
           <button className="grading-edit-btn" onClick={() => navigate('/section-details')}>
-            ✏️
+            <Edit size={18} />
           </button>
         </header>
 
-        {/* Stats Cards */}
-        <div className="stats-row">
-          <div className="stat-card">
-            <span className="stat-label">Total Students</span>
-            <span className="stat-value">{stats.totalStudents}</span>
-          </div>
-          <div className="stat-card stat-highlight">
-            <span className="stat-label">Graded</span>
-            <span className="stat-value">{stats.graded}</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">Class Average</span>
-            <span className="stat-value stat-percent">{stats.classAverage}%</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">Exam Method</span>
-            <span className="stat-method">🤖 {stats.examMethod}</span>
-          </div>
-        </div>
-
-        {/* Results Table */}
         <section className="results-section">
           <h3 className="results-title">Student Results</h3>
           <div className="results-table-wrapper">
@@ -100,134 +294,227 @@ const AutoGradingResults = () => {
               <thead>
                 <tr>
                   <th>Student</th>
+                  <th>Exam</th>
                   <th>Submitted By</th>
-                  <th>Exam Method</th>
                   <th>Score</th>
                   <th>Status</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredResults.map((s) => (
+                {studentResults.map((s) => (
                   <tr key={s.id}>
                     <td className="student-name-cell">{s.name}</td>
+                    <td>{s.exam}</td>
                     <td>{s.submittedBy}</td>
-                    <td>
-                      <span className="method-badge">📷 {s.method}</span>
-                    </td>
                     <td className="score-cell">{s.score}</td>
                     <td>
                       <span className={`status-badge ${s.status.toLowerCase()}`}>
                         {s.status}
                       </span>
                     </td>
+                    <td>
+                      <button
+                        className="view-feedback-btn"
+                        onClick={() => setShowFeedback(s)}
+                        title="View answer breakdown"
+                      >
+                        <Eye size={16} />
+                        <span>View</span>
+                      </button>
+                      <button
+                        className="delete-sub-btn"
+                        onClick={() => handleDeleteSubmission(s.id)}
+                        title="Delete this result"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
+                {studentResults.length === 0 && (
+                  <tr>
+                    <td colSpan="5" style={{textAlign: 'center', padding: '20px'}}>No results scanned yet.</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         </section>
 
-        {/* Footer: Filter + Actions */}
         <div className="grading-footer">
-          <div className="filter-section">
-            <span className="filter-label">📊 Exam Method</span>
-            <div className="filter-tabs">
-              <button
-                className={`filter-tab ${activeFilter === 'student' ? 'active' : ''}`}
-                onClick={() => setActiveFilter(activeFilter === 'student' ? 'all' : 'student')}
-              >
-                Student
-              </button>
-              <button
-                className={`filter-tab ${activeFilter === 'teacher' ? 'active' : ''}`}
-                onClick={() => setActiveFilter(activeFilter === 'teacher' ? 'all' : 'teacher')}
-              >
-                Teacher
-              </button>
-            </div>
-          </div>
-
           <div className="action-buttons">
-            <button className="scan-btn" onClick={() => setShowScanModal(true)}>📷 Start Scanning</button>
-            <button className="export-btn">Export CSV</button>
+            <button className="scan-btn" onClick={() => setShowScanModal(true)}>
+              <Camera size={18} />
+              <span>Start Scanning</span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* ===== SCAN STUDENT PAPER MODAL ===== */}
+      {/* FEEDBACK MODAL */}
+      {showFeedback && (
+        <div className="scan-modal-overlay" onClick={() => setShowFeedback(null)}>
+          <div className="scan-modal-content" style={{maxHeight: '80vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
+            <div className="scan-title-banner">
+              <FileText size={20} />
+              <span>{showFeedback.name} — {showFeedback.exam}</span>
+              <button className="scan-close-btn" onClick={() => setShowFeedback(null)}><X size={20} /></button>
+            </div>
+            <div style={{padding: '20px'}}>
+              <div style={{display:'flex', justifyContent:'space-between', marginBottom:'16px'}}>
+                <span style={{fontSize:'1.5rem', fontWeight:'800'}}>{showFeedback.score}</span>
+                <span className={`status-badge ${showFeedback.status.toLowerCase()}`}>{showFeedback.status}</span>
+              </div>
+              {showFeedback.feedback ? showFeedback.feedback.split('\n').filter(Boolean).map((line, i) => {
+                const isCorrect = line.includes('Correct');
+                return (
+                  <div key={i} className={`feedback-row ${isCorrect ? 'correct' : 'wrong'}`}>
+                    {line}
+                  </div>
+                );
+              }) : <p style={{color:'#94a3b8'}}>No detailed feedback. Re-scan this student to generate feedback.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showScanModal && (
         <div className="scan-modal-overlay" onClick={closeScanModal}>
           <div className="scan-modal-content" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="scan-modal-header">
-              <span className="scan-prof-label">profesor</span>
-            </div>
-
             <div className="scan-title-banner">
-              <span>📷 Scan Student Paper</span>
-              <button className="scan-close-btn" onClick={closeScanModal}>×</button>
+              <Camera size={20} />
+              <span>Scan Student Paper</span>
+              <button className="scan-close-btn" onClick={closeScanModal}><X size={20} /></button>
             </div>
 
-            {/* Step 1 */}
             <div className="scan-step">
               <h4 className="scan-step-title">Step 1: Select Student</h4>
-              <div className="scan-search-row">
-                <input
-                  type="text"
-                  className="scan-search-input"
-                  placeholder="Search or select student..."
-                  value={studentSearch}
-                  onChange={(e) => setStudentSearch(e.target.value)}
-                />
-                <button className="scan-browse-btn">Browse</button>
-              </div>
+              <select 
+                className="scan-search-input" 
+                value={selectedStudentId} 
+                onChange={(e) => setSelectedStudentId(e.target.value)}
+              >
+                <option value="">-- Select Student --</option>
+                {students.map(s => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.email})</option>
+                ))}
+              </select>
             </div>
 
-            {/* Step 2 */}
             <div className="scan-step">
               <h4 className="scan-step-title">Step 2: Select Exam</h4>
-              <input
-                type="text"
-                className="scan-exam-input"
-                value="Algebra Midterm Exam"
-                readOnly
-              />
-            </div>
-
-            {/* Step 3 */}
-            <div className="scan-step">
-              <h4 className="scan-step-title">Step 3: Capture Answer Sheet</h4>
-              <div
-                className="scan-capture-zone"
-                onClick={() => scanFileRef.current.click()}
+              <select 
+                className="scan-search-input" 
+                value={selectedExamId} 
+                onChange={(e) => setSelectedExamId(e.target.value)}
               >
-                <input
-                  type="file"
-                  ref={scanFileRef}
-                  accept=".png,.jpg,.jpeg,.pdf"
-                  style={{ display: 'none' }}
-                  onChange={(e) => { if (e.target.files[0]) setScanFile(e.target.files[0]); }}
-                />
-                <div className="scan-camera-icon">📷</div>
-                <p className="scan-capture-title">
-                  {scanFile ? scanFile.name : "Take Photo of Student's Paper"}
-                </p>
-                <p className="scan-capture-sub">or 📁 Upload from device</p>
+                <option value="">-- Select Exam --</option>
+                {exams.map(e => (
+                  <option key={e.id} value={e.id}>{e.title}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="scan-step">
+              <h4 className="scan-step-title">Step 3: Enter Answers</h4>
+
+              {/* Mode Toggle */}
+              <div className="mode-toggle">
+                <button className={`mode-btn ${inputMode === 'scan' ? 'active' : ''}`} onClick={() => setInputMode('scan')}>
+                  <Camera size={16} />
+                  <span>Scan Photo</span>
+                </button>
+                <button className={`mode-btn ${inputMode === 'manual' ? 'active' : ''}`} onClick={() => setInputMode('manual')}>
+                  <Edit size={16} />
+                  <span>Type Manually</span>
+                </button>
               </div>
+
+              {inputMode === 'manual' && (
+                <div className="manual-grade-area">
+                  <p className="manual-hint-text">
+                    Type each answer separated by commas. Works for letters <strong>AND</strong> words.<br/>
+                    Example: <strong>C, B, Paris, Oxygen, Pacific Ocean</strong>
+                  </p>
+                  <input
+                    type="text"
+                    className="scan-search-input"
+                    placeholder="e.g. C, B, A, D or Paris, Oxygen, 7..."
+                    value={manualAnswers}
+                    onChange={(e) => setManualAnswers(e.target.value)}
+                    style={{marginBottom: '12px'}}
+                  />
+                  <button
+                    className="scan-record-btn"
+                    style={{width: '100%'}}
+                    onClick={handleManualGrade}
+                    disabled={isScanning}
+                  >
+                    {isScanning ? <><Clock size={16} /><span>Grading...</span></> : <><CheckCircle size={16} /><span>Grade Now</span></>}
+                  </button>
+                </div>
+              )}
+
+              {inputMode === 'scan' && (
+                <>
+                  {!isCameraOpen && !capturedImage && (
+                    <div className="scan-capture-options">
+                      <button className="scan-record-btn" style={{marginBottom: '10px', width: '100%'}} onClick={startCamera}>
+                        <Camera size={18} />
+                        <span>Open Camera</span>
+                      </button>
+                      <div className="scan-capture-zone" onClick={() => scanFileRef.current.click()}>
+                        <input
+                          type="file"
+                          ref={scanFileRef}
+                          style={{ display: 'none' }}
+                          onChange={(e) => { if (e.target.files[0]) { setScanFile(e.target.files[0]); setCapturedImage(null); } }}
+                        />
+                        <p className="scan-capture-title">{scanFile ? scanFile.name : 'Or Upload Image'}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {isCameraOpen && (
+                    <div className="camera-container" style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px'}}>
+                      <video ref={videoRef} autoPlay playsInline style={{width: '100%', maxHeight: '250px', backgroundColor: '#000', borderRadius: '8px'}} />
+                      <canvas ref={canvasRef} style={{display: 'none'}} />
+                      <div style={{display: 'flex', gap: '10px', width: '100%'}}>
+                        <button className="scan-record-btn" style={{flex: 1}} onClick={capturePhoto}>
+                          <Camera size={18} />
+                          <span>Capture</span>
+                        </button>
+                        <button className="browse-btn" style={{flex: 1}} onClick={stopCamera}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {capturedImage && (
+                    <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px'}}>
+                      <img src={URL.createObjectURL(capturedImage)} alt="Captured" style={{width: '100%', maxHeight: '250px', objectFit: 'contain'}} />
+                      <button className="scan-record-btn" onClick={() => setCapturedImage(null)} style={{background: '#ef4444', width: '100%'}}>
+                        <Trash2 size={18} />
+                        <span>Retake</span>
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
-            {/* Auto-detect info */}
-            <div className="scan-autodetect">
-              🔍 ScanMine will auto-detect:<br />
-              Student name • Answers • Score
-            </div>
-
-            {/* Scan Button */}
-            <div className="scan-modal-footer">
-              <button className="scan-record-btn" onClick={handleScanRecord}>
-                📎 Scan & Record Score
-              </button>
-            </div>
+            {inputMode === 'scan' && (
+              <div className="scan-modal-footer">
+                <button
+                  className="scan-record-btn"
+                  onClick={handleScanRecord}
+                  disabled={isScanning || !selectedStudentId || !selectedExamId || (!scanFile && !capturedImage)}
+                  style={{ opacity: (isScanning || !selectedStudentId || !selectedExamId || (!scanFile && !capturedImage)) ? 0.6 : 1 }}
+                >
+                  {isScanning ? <><Clock size={16} /><span>Scanning...</span></> : <><CheckCircle size={16} /><span>Scan & Record Score</span></>}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

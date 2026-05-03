@@ -1,7 +1,7 @@
 /* Sidebar.css */
 .sidebar {
   width: 260px;
-  background-color: #1a2233;
+  background-color: #1e293b;
   color: white;
   display: flex;
   flex-direction: column;
@@ -21,7 +21,7 @@
 }
 
 .brand-logo {
-  background-color: #4483f2;
+  background-color: #3b82f6;
   width: 35px;
   height: 35px;
   display: flex;
@@ -45,18 +45,23 @@
   display: flex;
   align-items: center;
   gap: 15px;
-  color: #a0aec0;
+  color: #94a3b8;
   transition: all 0.3s ease;
   margin-bottom: 10px;
 }
 
 .nav-item .icon {
-  font-size: 1.2rem;
+  color: #94a3b8;
 }
 
 .nav-item:hover, 
 .nav-item.active {
-  background-color: #4483f2;
+  background-color: #3b82f6;
+  color: white;
+}
+
+.nav-item:hover .icon,
+.nav-item.active .icon {
   color: white;
 }
 
@@ -65,10 +70,14 @@
 }
 
 .logout {
-  color: #ff6b6b;
+  color: #ef4444;
 }
 
 .logout:hover {
-  background-color: rgba(255, 107, 107, 0.1);
-  color: #ff6b6b;
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.logout:hover .icon {
+  color: #ef4444;
 }

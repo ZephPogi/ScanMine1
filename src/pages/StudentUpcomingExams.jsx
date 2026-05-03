@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Camera, Monitor } from 'lucide-react';
 import StudentSidebar from './StudentSidebar';
 import './StudentUpcomingExams.css';
 
@@ -88,8 +89,8 @@ const StudentUpcomingExams = () => {
                 {exam.submitted
                   ? <button className="sue-btn view-results">View Results</button>
                   : <>
-                      <button className="sue-btn take-exam">💻 Take Exam</button>
-                      <button className="sue-btn upload-paper">📷 Upload Paper</button>
+                      <button className="sue-btn take-exam"><Monitor size={16} /> Take Exam</button>
+                      <button className="sue-btn upload-paper"><Camera size={16} /> Upload Paper</button>
                     </>
                 }
               </div>

@@ -1,4 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { LayoutDashboard, BookOpen, User, LogOut } from 'lucide-react';
 import './Sidebar.css';
 
 const Sidebar = () => {
@@ -17,21 +18,24 @@ const Sidebar = () => {
           {/* Dashboard */}
           <Link to="/dashboard" style={{ textDecoration: 'none' }}>
             <li className={`nav-item ${location.pathname === '/dashboard' ? 'active' : ''}`}>
-              <span className="icon">&#8962;</span> Dashboard
+              <LayoutDashboard className="icon" size={20} />
+              <span>Dashboard</span>
             </li>
           </Link>
 
           {/* My Classes */}
           <Link to="/classes" style={{ textDecoration: 'none' }}>
             <li className={`nav-item ${location.pathname === '/classes' ? 'active' : ''}`}>
-              <span className="icon">&#128218;</span> My Classes
+              <BookOpen className="icon" size={20} />
+              <span>My Classes</span>
             </li>
           </Link>
 
           {/* Profile */}
           <Link to="/profile" style={{ textDecoration: 'none' }}>
             <li className={`nav-item ${location.pathname === '/profile' ? 'active' : ''}`}>
-              <span className="icon">&#128100;</span> Profile
+              <User className="icon" size={20} />
+              <span>Profile</span>
             </li>
           </Link>
         </ul>
@@ -39,7 +43,8 @@ const Sidebar = () => {
 
       <div className="sidebar-footer">
         <div className="nav-item logout" onClick={() => navigate('/login')}>
-          <span className="icon">&#128682;</span> Logout
+          <LogOut className="icon" size={20} />
+          <span>Logout</span>
         </div>
       </div>
     </aside>

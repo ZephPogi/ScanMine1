@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { UserPlus } from 'lucide-react';
 import logo from '../assets/Logo.png'; // Palitan base sa filename ng logo mo
 import './Signup.css';
 
@@ -23,7 +24,7 @@ const Signup = () => {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/register', {
+      const response = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password, role: activeRole }),
@@ -58,7 +59,7 @@ const Signup = () => {
           
           <div className="visual-box-signup">
              <div className="pulse-circle"></div>
-             <div className="user-plus-icon">👤+</div>
+             <div className="user-plus-icon"><UserPlus size={48} /></div>
           </div>
         </div>
       </div>

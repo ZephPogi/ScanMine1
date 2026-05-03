@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import Sidebar from './Sidebar';
+import { Lock, Camera, Edit, Users, BookOpen } from 'lucide-react';
 import './TeacherProfile.css';
 
 const TeacherProfile = () => {
-  const [profile, setProfile] = useState({
+  const [profile] = useState({
     firstName: "Maria",
     lastName: "Santos",
     email: "m.santos@university.edu.ph",
@@ -51,16 +52,29 @@ const TeacherProfile = () => {
           <section className="profile-card profile-sidebar">
             <div className="avatar-section">
               <div className="profile-avatar">MS</div>
-              <button className="change-photo-btn">Change Photo</button>
+              <button className="change-photo-btn">
+                <Camera size={16} />
+                <span>Change Photo</span>
+              </button>
             </div>
             <div className="quick-stats">
               <div className="stat-item">
-                <span className="stat-value">4</span>
-                <span className="stat-label">Active Classes</span>
+                <div className="stat-icon-wrapper">
+                  <BookOpen size={20} />
+                </div>
+                <div className="stat-info">
+                  <span className="stat-value">4</span>
+                  <span className="stat-label">Active Classes</span>
+                </div>
               </div>
               <div className="stat-item">
-                <span className="stat-value">165</span>
-                <span className="stat-label">Total Students</span>
+                <div className="stat-icon-wrapper">
+                  <Users size={20} />
+                </div>
+                <div className="stat-info">
+                  <span className="stat-value">165</span>
+                  <span className="stat-label">Total Students</span>
+                </div>
               </div>
             </div>
           </section>
@@ -100,8 +114,14 @@ const TeacherProfile = () => {
             </div>
 
             <div className="profile-actions">
-              <button className="btn-edit">Edit Profile</button>
-              <button className="btn-password" onClick={() => setShowPasswordModal(true)}>Change Password</button>
+              <button className="btn-edit">
+                <Edit size={16} />
+                <span>Edit Profile</span>
+              </button>
+              <button className="btn-password" onClick={() => setShowPasswordModal(true)}>
+                <Lock size={16} />
+                <span>Change Password</span>
+              </button>
             </div>
           </section>
         </div>
@@ -118,7 +138,8 @@ const TeacherProfile = () => {
             </div>
 
             <div className="pw-title-banner">
-              🔒 Change Password
+              <Lock size={20} />
+              <span>Change Password</span>
             </div>
 
             {/* Form */}
