@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Camera, UploadCloud } from 'lucide-react';
+import { Camera } from 'lucide-react';
 import StudentSidebar from './StudentSidebar';
 import './StudentDashboard.css';
 

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Eye, Trash2, Edit, BookOpen, X, CheckCircle, XCircle, Clock, FileText } from 'lucide-react';
+import { Camera, Eye, Trash2, Edit, X, CheckCircle, Clock, FileText } from 'lucide-react';
 import './AutoGradingResults.css';
 import Sidebar from './Sidebar';
 
