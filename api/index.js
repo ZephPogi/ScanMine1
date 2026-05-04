@@ -12,6 +12,9 @@ if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
 }
 
+// Fixed import for Vercel Linux compatibility
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
+
 const { extractText, generateQuizFromText } = require('./scripts/generateQuestions');
 const { gradeSubmission } = require('./scripts/autoGradeSubmission');
 const OCRSpaceService = require('./scripts/ocrSpaceService');
@@ -38,7 +41,7 @@ const upload = multer({
   }
 });
 
-// --- AUTHENTICATION ---[cite: 1]
+// --- AUTHENTICATION ---
 app.post('/api/register', async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
@@ -74,7 +77,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// --- CLASSES & STUDENTS ---[cite: 1]
+// --- CLASSES & STUDENTS ---
 app.get('/api/classes', async (req, res) => {
   try {
     const { teacherId } = req.query;
@@ -105,7 +108,6 @@ app.post('/api/students', async (req, res) => {
   try {
     const { email, classId } = req.body;
 
-    // 1. Find the user ID based on the email provided
     const userRes = await db.query('SELECT id FROM Users WHERE email = $1 AND role = $2', [email, 'student']);
     
     if (userRes.rows.length === 0) {
@@ -114,7 +116,6 @@ app.post('/api/students', async (req, res) => {
 
     const userId = userRes.rows[0].id;
 
-    // 2. Insert the student into the specific class
     const result = await db.query(
       'INSERT INTO Students (class_id, user_id) VALUES ($1, $2) RETURNING *',
       [classId, userId]
@@ -123,7 +124,7 @@ app.post('/api/students', async (req, res) => {
     res.json({ message: "Student added successfully", student: result.rows[0] });
   } catch (error) {
     console.error('ADD STUDENT ERROR:', error);
-    if (error.code === '23505') { // Unique violation error code in Postgres
+    if (error.code === '23505') { 
       return res.status(400).json({ error: "This student is already in this class." });
     }
     res.status(500).json({ error: 'Failed to add student to class' });
@@ -131,11 +132,8 @@ app.post('/api/students', async (req, res) => {
 });
 
 // --- ADDED ROUTES FOR DASHBOARD FUNCTIONALITY ---
-
-// 1. Get all students globally
 app.get('/api/all-students', async (req, res) => {
   try {
-    // Make sure 'student' is lowercase to match your Supabase data!
     const result = await db.query("SELECT id, name, email FROM Users WHERE role = 'student'");
     res.json(result.rows);
   } catch (error) {
@@ -144,7 +142,6 @@ app.get('/api/all-students', async (req, res) => {
   }
 });
 
-// 2. Get exams/quizzes for a specific class (Fixes SectionDetails.jsx:48)
 app.get('/api/exams', async (req, res) => {
   try {
     const { classId } = req.query;
@@ -155,7 +152,6 @@ app.get('/api/exams', async (req, res) => {
   }
 });
 
-// 3. Get students for a specific class
 app.get('/api/classes/:id/students', async (req, res) => {
   try {
     const query = `
@@ -170,11 +166,12 @@ app.get('/api/classes/:id/students', async (req, res) => {
   }
 });
 
-// --- TEACHER: GENERATE QUIZ ---[cite: 1]
+// --- TEACHER: GENERATE QUIZ ---
 app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => {
   try {
     const file = req.file;
-    const { title, teacherId, classId } = req.body;
+    // Keys match your frontend FormData
+    const { title, teacherId, classId } = req.body; 
     let text = '';
     let fileUrl = null;
 
@@ -199,7 +196,7 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
   }
 });
 
-// --- STUDENT: UPLOAD PAPER ---[cite: 1]
+// --- STUDENT: UPLOAD PAPER ---
 app.post('/api/upload-paper', upload.single('studentPaper'), async (req, res) => {
   try {
     const file = req.file;
