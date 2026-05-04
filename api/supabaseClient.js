@@ -1,6 +1,9 @@
 const { createClient } = require('@supabase/supabase-js');
-const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+
+// Only load dotenv in local development
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
@@ -21,7 +24,11 @@ const BUCKET_NAME = 'scanned-quizzes';
  * @returns {Promise<{publicUrl: string, path: string}>}
  */
 async function uploadFile(fileBuffer, fileName, mimeType) {
-  const filePath = `${Date.now()}-${fileName}`;
+  // Sanitize filename: remove leading slashes and special characters
+  const sanitizedFileName = fileName.replace(/^\/+/, '').replace(/[^a-zA-Z0-9._-]/g, '_');
+  const filePath = `${Date.now()}-${sanitizedFileName}`;
+
+  console.log('Uploading to Supabase:', { bucket: BUCKET_NAME, filePath, mimeType });
 
   const { data, error } = await supabase.storage
     .from(BUCKET_NAME)
