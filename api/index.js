@@ -117,6 +117,31 @@ app.post('/api/classes', async (req, res) => {
   }
 });
 
+// --- NEW ROUTE: GET ALL STUDENTS WITH JOIN ---
+app.get('/api/all-students', async (req, res) => {
+  try {
+    // This JOIN grabs the enrollment data from 'Students' AND the name/email from 'Users'
+    const query = `
+      SELECT 
+        Students.id AS enrollment_id,
+        Users.id AS user_id,
+        Users.name,
+        Users.email,
+        Classes.name AS class_name
+      FROM Students
+      JOIN Users ON Students.user_id = Users.id
+      JOIN Classes ON Students.class_id = Classes.id
+      WHERE Users.role = 'student';
+    `;
+    
+    const result = await db.query(query); 
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error("Error fetching students:", error);
+    res.status(500).json({ error: "Failed to fetch students from database" });
+  }
+});
+
 // --- TEACHER: GENERATE QUIZ ---
 
 app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => {
