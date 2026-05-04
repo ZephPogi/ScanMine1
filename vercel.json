@@ -19,7 +19,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 45,
-      "includeFiles": "node_modules/opencv-wasm/opencv.wasm"
+      "includeFiles": "**/opencv-wasm/**/*.wasm"
     }
   },
   "env": {
