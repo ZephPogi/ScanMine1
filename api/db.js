@@ -16,6 +16,19 @@ const pool = new Pool(connectionString
     }
 );
 
+// Handle connection errors
+pool.on('error', (err) => {
+  console.error('Unexpected database connection error:', err);
+  // Don't crash the process, just log the error
+});
+
 module.exports = {
-  query: (text, params) => pool.query(text, params),
+  query: async (text, params) => {
+    try {
+      return await pool.query(text, params);
+    } catch (err) {
+      console.error('Database query error:', err);
+      throw err;
+    }
+  },
 };
