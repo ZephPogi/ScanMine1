@@ -101,6 +101,35 @@ app.post('/api/classes', async (req, res) => {
   }
 });
 
+app.post('/api/students', async (req, res) => {
+  try {
+    const { email, classId } = req.body;
+
+    // 1. Find the user ID based on the email provided
+    const userRes = await db.query('SELECT id FROM Users WHERE email = $1 AND role = $2', [email, 'student']);
+    
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: "No student account found with that email." });
+    }
+
+    const userId = userRes.rows[0].id;
+
+    // 2. Insert the student into the specific class
+    const result = await db.query(
+      'INSERT INTO Students (class_id, user_id) VALUES ($1, $2) RETURNING *',
+      [classId, userId]
+    );
+
+    res.json({ message: "Student added successfully", student: result.rows[0] });
+  } catch (error) {
+    console.error('ADD STUDENT ERROR:', error);
+    if (error.code === '23505') { // Unique violation error code in Postgres
+      return res.status(400).json({ error: "This student is already in this class." });
+    }
+    res.status(500).json({ error: 'Failed to add student to class' });
+  }
+});
+
 // --- ADDED ROUTES FOR DASHBOARD FUNCTIONALITY ---
 
 // 1. Get all students globally
