@@ -104,21 +104,24 @@ const SectionDetails = ({ section, onBack }) => {
     }
   };
 
-  const handleAddStudentToClass = async (studentId) => {
-    try {
-      const response = await fetch(`/api/classes/${section.id}/students`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId }),
-      });
-      if (response.ok) {
-        fetchStudents();
-        setShowAddStudentModal(false);
-      }
-    } catch (error) {
-      console.error('Error adding student:', error);
+  const handleAddStudentToClass = async (student) => { // Pass the whole student object
+  try {
+    const response = await fetch(`/api/students`, { // Use the base student endpoint
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        email: student.email, // Send email for lookup
+        classId: section.id   // The current class ID
+      }),
+    });
+    if (response.ok) {
+      fetchStudents(); // Refresh the class roster
+      setShowAddStudentModal(false);
     }
-  };
+  } catch (error) {
+    console.error('Error adding student:', error);
+  }
+};
 
   const handleExamFileChange = (e) => {
     if (e.target.files[0]) setExamFile(e.target.files[0]);
@@ -310,7 +313,7 @@ const SectionDetails = ({ section, onBack }) => {
               {allStudents.map(s => (
                 <div key={s.id} className="student-select-item">
                   <span>{s.name} ({s.email})</span>
-                  <button onClick={() => handleAddStudentToClass(s.id)}>Add</button>
+                  <button onClick={() => handleAddStudentToClass(s)}>Add</button>
                 </div>
               ))}
             </div>
