@@ -104,19 +104,25 @@ const SectionDetails = ({ section, onBack }) => {
     }
   };
 
-  const handleAddStudentToClass = async (student) => { // Pass the whole student object
+  const handleAddStudentToClass = async (student) => {
   try {
-    const response = await fetch(`/api/students`, { // Use the base student endpoint
+    // We must send the email so the backend can find the User ID
+    const response = await fetch(`/api/students`, { 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        email: student.email, // Send email for lookup
-        classId: section.id   // The current class ID
+        email: student.email, // This is the fix!
+        classId: section.id 
       }),
     });
+
     if (response.ok) {
-      fetchStudents(); // Refresh the class roster
+      // Re-fetch the roster so the new student appears immediately
+      fetchStudents(); 
       setShowAddStudentModal(false);
+    } else {
+      const errorData = await response.json();
+      alert("Error: " + errorData.error);
     }
   } catch (error) {
     console.error('Error adding student:', error);
