@@ -106,19 +106,18 @@ const SectionDetails = ({ section, onBack }) => {
 
   const handleAddStudentToClass = async (student) => {
   try {
-    // We must send the email so the backend can find the User ID
+    // We send the email so the backend can find the corresponding User ID
     const response = await fetch(`/api/students`, { 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        email: student.email, // This is the fix!
+        email: student.email, // Send the email string, not the ID
         classId: section.id 
       }),
     });
 
     if (response.ok) {
-      // Re-fetch the roster so the new student appears immediately
-      fetchStudents(); 
+      fetchStudents(); // Refresh the class roster table
       setShowAddStudentModal(false);
     } else {
       const errorData = await response.json();
