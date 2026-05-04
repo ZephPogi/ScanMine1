@@ -135,16 +135,12 @@ app.post('/api/students', async (req, res) => {
 // 1. Get all students globally
 app.get('/api/all-students', async (req, res) => {
   try {
-    const query = `
-      SELECT Students.id AS enrollment_id, Users.id AS user_id, Users.name, Users.email, Classes.name AS class_name
-      FROM Students
-      JOIN Users ON Students.user_id = Users.id
-      JOIN Classes ON Students.class_id = Classes.id
-      WHERE Users.role = 'student';`;
-    const result = await db.query(query); 
-    res.status(200).json(result.rows);
+    // Make sure 'student' is lowercase to match your Supabase data!
+    const result = await db.query("SELECT id, name, email FROM Users WHERE role = 'student'");
+    res.json(result.rows);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch students" });
+    console.error(error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
