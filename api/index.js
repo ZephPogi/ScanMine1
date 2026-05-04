@@ -8,7 +8,6 @@ const nodemailer = require('nodemailer');
 const db = require('./db');
 
 // Only load dotenv in local development. 
-// Vercel injects environment variables directly into process.env.
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
 }
@@ -26,30 +25,20 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Use memory storage for Supabase uploads
 const storage = multer.memoryStorage();
-
-// Limit file size to 5MB and only accept images/PDFs
 const upload = multer({
   storage: storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
-  },
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|bmp|tiff|webp|pdf/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
-
-    if (extname && mimetype) {
-      return cb(null, true);
-    } else {
-      cb(new Error('Only image files (JPEG, PNG, GIF, BMP, TIFF, WebP) and PDFs are allowed'));
-    }
+    if (extname && mimetype) return cb(null, true);
+    cb(new Error('Only image files and PDFs are allowed'));
   }
 });
 
-// --- AUTHENTICATION ---
-
+// --- AUTHENTICATION ---[cite: 1]
 app.post('/api/register', async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
@@ -75,11 +64,9 @@ app.post('/api/login', async (req, res) => {
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) return res.status(401).json({ error: 'Invalid password' });
     
-    // Validate role match
     if (user.role !== req.body.role) {
        return res.status(401).json({ error: `Account registered as ${user.role}, not ${req.body.role}` });
     }
-
     res.json({ id: user.id, name: user.name, role: user.role });
   } catch (error) {
     console.error('LOGIN ERROR:', error);
@@ -87,14 +74,11 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// --- CLASSES & STUDENTS ---
-
+// --- CLASSES & STUDENTS ---[cite: 1]
 app.get('/api/classes', async (req, res) => {
   try {
     const { teacherId } = req.query;
-    if (!teacherId || teacherId === 'undefined' || teacherId === 'null') {
-      return res.json([]);
-    }
+    if (!teacherId || teacherId === 'undefined' || teacherId === 'null') return res.json([]);
     const result = await db.query('SELECT * FROM Classes WHERE teacher_id = $1', [teacherId]);
     res.json(result.rows);
   } catch (error) {
@@ -117,38 +101,55 @@ app.post('/api/classes', async (req, res) => {
   }
 });
 
-// --- NEW ROUTE: GET ALL STUDENTS WITH JOIN ---
+// --- ADDED ROUTES FOR DASHBOARD FUNCTIONALITY ---
+
+// 1. Get all students globally
 app.get('/api/all-students', async (req, res) => {
   try {
-    // This JOIN grabs the enrollment data from 'Students' AND the name/email from 'Users'
     const query = `
-      SELECT 
-        Students.id AS enrollment_id,
-        Users.id AS user_id,
-        Users.name,
-        Users.email,
-        Classes.name AS class_name
+      SELECT Students.id AS enrollment_id, Users.id AS user_id, Users.name, Users.email, Classes.name AS class_name
       FROM Students
       JOIN Users ON Students.user_id = Users.id
       JOIN Classes ON Students.class_id = Classes.id
-      WHERE Users.role = 'student';
-    `;
-    
+      WHERE Users.role = 'student';`;
     const result = await db.query(query); 
     res.status(200).json(result.rows);
   } catch (error) {
-    console.error("Error fetching students:", error);
-    res.status(500).json({ error: "Failed to fetch students from database" });
+    res.status(500).json({ error: "Failed to fetch students" });
   }
 });
 
-// --- TEACHER: GENERATE QUIZ ---
+// 2. Get exams/quizzes for a specific class (Fixes SectionDetails.jsx:48)
+app.get('/api/exams', async (req, res) => {
+  try {
+    const { classId } = req.query;
+    const result = await db.query('SELECT * FROM Exams WHERE class_id = $1', [classId]);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch exams" });
+  }
+});
 
+// 3. Get students for a specific class
+app.get('/api/classes/:id/students', async (req, res) => {
+  try {
+    const query = `
+      SELECT Students.id AS enrollment_id, Users.id AS user_id, Users.name, Users.email
+      FROM Students
+      JOIN Users ON Students.user_id = Users.id
+      WHERE Students.class_id = $1;`;
+    const result = await db.query(query, [req.params.id]);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch class students" });
+  }
+});
+
+// --- TEACHER: GENERATE QUIZ ---[cite: 1]
 app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => {
   try {
     const file = req.file;
     const { title, teacherId, classId } = req.body;
-
     let text = '';
     let fileUrl = null;
 
@@ -165,10 +166,7 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
     const examId = examRes.rows[0].id;
 
     let questions = [];
-    if (text) {
-      questions = await generateQuizFromText(text, examId);
-    }
-
+    if (text) questions = await generateQuizFromText(text, examId);
     res.json({ message: 'Exam created successfully', examId, questions });
   } catch (error) {
     console.error('QUIZ GENERATION ERROR:', error);
@@ -176,34 +174,23 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
   }
 });
 
-// --- STUDENT: UPLOAD PAPER (AUTO-GRADE) ---
-
+// --- STUDENT: UPLOAD PAPER ---[cite: 1]
 app.post('/api/upload-paper', upload.single('studentPaper'), async (req, res) => {
   try {
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'No image uploaded' });
-
     const { studentId, examId } = req.body;
-
-    // Upload to Supabase storage
     const { publicUrl } = await uploadFile(file.buffer, file.originalname, file.mimetype);
-
-    // Grade using image processing engine
     const result = await gradeSubmission(examId, studentId, file.buffer, publicUrl);
-
     res.json({ message: 'Paper graded successfully', result });
   } catch (error) {
     console.error('GRADING ERROR:', error);
-    res.status(500).json({ error: 'Failed to process and grade paper' });
+    res.status(500).json({ error: 'Failed to process paper' });
   }
 });
 
-// Export for Vercel serverless environment
 module.exports = app;
 
-// Listen only in local development
 if (require.main === module) {
-  app.listen(port, () => {
-    console.log(`ScanMine backend running on port ${port}`);
-  });
+  app.listen(port, () => console.log(`ScanMine running on ${port}`));
 }
