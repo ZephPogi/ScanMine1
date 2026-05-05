@@ -19,7 +19,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 45,
-      "includeFiles": "**/opencv-wasm/**/*.wasm"
+      "includeFiles": "{**/opencv-wasm/**/*.wasm,**/pdf-parse/**/*.mjs}"
     }
   },
   "env": {
