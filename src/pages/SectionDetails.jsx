@@ -157,6 +157,7 @@ const SectionDetails = ({ section, onBack }) => {
       if (response.ok) {
         alert(`OCR processed successfully! Extracted ${data.answersCount} answers.`);
         setExtractedOCRText(data.text);
+        setManualAnswers(data.text);
         setAnswerKeyImage(null);
         // Re-fetch exam questions to update the UI
         if (showExamDetails) {

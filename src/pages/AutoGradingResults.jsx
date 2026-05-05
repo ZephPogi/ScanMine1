@@ -60,12 +60,20 @@ const AutoGradingResults = () => {
     }
   }, [section?.id]);
 
-  const fetchStudents = useCallback(async () => {
+const fetchStudents = useCallback(async () => {
     try {
       const response = await fetch(`/api/classes/${section.id}/students`);
       if (response.ok) {
         const data = await response.json();
-        setStudents(Array.isArray(data) ? data : []);
+        
+        // --- THE FIX IS HERE ---
+        // We force the frontend 'id' to equal the database 'user_id'
+        const mappedStudents = data.map(student => ({
+          ...student,
+          id: student.user_id 
+        }));
+        
+        setStudents(Array.isArray(mappedStudents) ? mappedStudents : []);
       }
     } catch (error) {
       console.error('Error fetching students:', error);
