@@ -214,6 +214,27 @@ const handleScanRecord = async () => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to grade paper');
 
+      // Optimistic UI Update
+      const studentName = students.find(s => s.id === parseInt(selectedStudentId))?.name || 'Student';
+      const examTitle = exams.find(e => e.id === parseInt(selectedExamId))?.title || 'Exam';
+
+      const totalScore = data.result.totalScore || 0;
+      const maxScore = data.result.maxScore || 1;
+      const percentage = ((totalScore / maxScore) * 100).toFixed(0);
+
+      const newResult = {
+        id: data.result.submission_id || Date.now(),
+        name: studentName,
+        exam: examTitle,
+        submittedBy: 'Teacher (Scan)',
+        method: 'AI Grading',
+        score: `${percentage}%`,
+        status: percentage >= 50 ? 'Pass' : 'Fail',
+        feedback: data.result.feedback || ''
+      };
+
+      setStudentResults(prev => [newResult, ...prev.filter(r => !(r.name === studentName && r.exam === examTitle))]);
+
       alert("Score recorded successfully!");
       
       setShowScanModal(false);
