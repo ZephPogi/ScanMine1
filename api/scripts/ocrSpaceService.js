@@ -40,33 +40,29 @@ class OCRSpaceService {
     try {
       const formData = new FormData();
 
-      // SMART DETECTION: Check the "magic bytes" of the buffer to see if it's a PDF.
-      // All PDF files start with the hex bytes: 25 50 44 46 ('%PDF')
+      // Check the "magic bytes" to see if it's a PDF
       const isPdfBuffer = imageBuffer.length > 4 && 
                           imageBuffer[0] === 0x25 && 
                           imageBuffer[1] === 0x50 && 
                           imageBuffer[2] === 0x44 && 
                           imageBuffer[3] === 0x46;
 
-      const uploadFilename = isPdfBuffer ? 'document.pdf' : 'image.png';
       const uploadContentType = isPdfBuffer ? 'application/pdf' : 'image/png';
-
-      formData.append('file', imageBuffer, {
-        filename: uploadFilename,
-        contentType: uploadContentType
-      });
-
+      
+      // THE FIX: Convert the binary Buffer into a Base64 String.
+      // This stops Axios from hanging up while trying to stream raw bytes.
+      const base64Data = imageBuffer.toString('base64');
+      const base64String = `data:${uploadContentType};base64,${base64Data}`;
+      
+      formData.append('base64Image', base64String);
       formData.append('apikey', this.apiKey);
       formData.append('language', 'eng');
       formData.append('detectOrientation', 'true');
       formData.append('scale', 'true');
-      
-      // CRITICAL FIX: Use Engine 2 first. Engine 3 is too slow and causes Vercel timeouts.
-      formData.append('OCREngine', '2');
+      formData.append('OCREngine', '2'); // Fast handwriting engine
       formData.append('isTable', 'false');
 
-      console.log(`Sending to OCR.space API (File: ${uploadFilename}, Engine: 2)...`);
-      console.log(`Buffer size: ${imageBuffer.length} bytes`);
+      console.log(`Sending to OCR.space API via Base64 (Engine: 2)...`);
 
       const response = await axios.post(this.apiUrl, formData, {
         headers: {
@@ -74,12 +70,12 @@ class OCRSpaceService {
         },
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
-        timeout: 40000 // Cut off slightly before Vercel kills it
+        timeout: 25000 // Fails fast so it doesn't lock up Vercel
       });
 
       if (response.data.IsErroredOnProcessing) {
-        console.error('OCR.space Error (Engine 2):', response.data.ErrorMessage);
-        return await this.recognizeHandwritingBufferUploadEngine1(imageBuffer, uploadFilename, uploadContentType);
+        console.error('OCR.space Error:', response.data.ErrorMessage);
+        throw new Error(response.data.ErrorMessage || 'OCR API Error');
       }
 
       const parsedResults = response.data.ParsedResults || [];
@@ -90,14 +86,14 @@ class OCRSpaceService {
       }
 
       if (!extractedText.trim()) {
-        console.log('Engine 2 returned empty text, trying Engine 1 fallback...');
-        return await this.recognizeHandwritingBufferUploadEngine1(imageBuffer, uploadFilename, uploadContentType);
+        console.log('OCR returned empty text.');
       }
 
       return extractedText;
     } catch (error) {
-      console.error('OCR.space Buffer Upload Error:', error.message);
-      throw error;
+      console.error('OCR.space Base64 Upload Error:', error.message);
+      // We throw the error so the router knows it failed, avoiding the weird Buffer crash
+      throw new Error("OCR.space processing failed."); 
     }
   }
 
