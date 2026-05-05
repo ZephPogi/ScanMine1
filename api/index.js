@@ -325,13 +325,14 @@ app.post('/api/upload-answer-key', async (req, res) => {
     } 
     // 3. FALLBACK: If the frontend sent a raw string (OCR or Manual definition)
     else if (typeof answers === 'string') {
+      console.log("================\nRAW OCR TEXT:\n", answers, "\n================");
       const lines = answers.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
       for (const line of lines) {
         // REGEX: Match "ANSWER NUMBER. QUESTION TEXT" format (bulletproof)
-        // Examples: "B 1. Which of the following..." or "ScanMine 5. The name of..."
-        // Extremely forgiving: captures anything before the number as answer
-        const match = line.match(/^\s*(.*?)\s+(\d+)\.\s*(.*)$/);
+        // Examples: "B 1. Which of the following..." or "ScanMine 5. The name of..." or "C2. ..."
+        // Extremely forgiving: captures anything before the number as answer, space is optional
+        const match = line.match(/^\s*(.*?)\s*(\d+)\.\s*(.*)$/);
 
         if (match) {
           questionCount++;
