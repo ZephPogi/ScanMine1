@@ -141,7 +141,7 @@ const SectionDetails = ({ section, onBack }) => {
   // eslint-disable-next-line no-unused-vars
   const handleProcessOCR = async (examId) => {
     if (!answerKeyImage) return alert('Please select an answer key image first');
-    
+
     setIsProcessingOCR(true);
     try {
       const formData = new FormData();
@@ -175,6 +175,38 @@ const SectionDetails = ({ section, onBack }) => {
       alert('Error processing OCR: ' + error.message);
     } finally {
       setIsProcessingOCR(false);
+    }
+  };
+
+  const handleSaveOCRToDatabase = async () => {
+    if (!extractedOCRText || !showExamDetails?.id) return alert('No OCR text or exam ID available');
+
+    try {
+      const response = await fetch('/api/upload-answer-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          examId: showExamDetails.id,
+          answers: extractedOCRText
+        })
+      });
+
+      if (response.ok) {
+        alert('Answer key saved successfully!');
+        // Re-fetch exam questions to update the UI
+        const questionsResponse = await fetch(`/api/exams/${showExamDetails.id}/questions`);
+        if (questionsResponse.ok) {
+          const questionsData = await questionsResponse.json();
+          setExamQuestions(questionsData);
+        }
+        setExtractedOCRText('');
+      } else {
+        const errorData = await response.json();
+        alert('Failed to save answer key: ' + errorData.error);
+      }
+    } catch (error) {
+      console.error('Error saving OCR to database:', error);
+      alert('Error saving answer key: ' + error.message);
     }
   };
 
@@ -490,9 +522,24 @@ const SectionDetails = ({ section, onBack }) => {
                 {extractedOCRText && (
                   <div style={{ marginTop: '15px', padding: '15px', background: '#f8f9fa', border: '1px solid #ddd', borderRadius: '8px' }}>
                     <h5 style={{ margin: '0 0 10px 0', color: '#333' }}>Raw OCR Extraction Result:</h5>
-                    <pre style={{ whiteSpace: 'pre-wrap', fontSize: '13px', margin: 0, color: '#555', fontFamily: 'monospace' }}>
+                    <pre style={{ whiteSpace: 'pre-wrap', fontSize: '13px', margin: '0 0 15px 0', color: '#555', fontFamily: 'monospace' }}>
                       {extractedOCRText}
                     </pre>
+                    <button
+                      onClick={handleSaveOCRToDatabase}
+                      style={{
+                        padding: '8px 16px',
+                        background: '#3b82f6',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Save as Official Answer Key
+                    </button>
                   </div>
                 )}
               </div>
