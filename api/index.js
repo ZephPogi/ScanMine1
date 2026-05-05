@@ -217,8 +217,19 @@ app.post('/api/upload-paper', upload.single('studentPaper'), async (req, res) =>
 app.get('/api/exams/:id/questions', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await db.query('SELECT * FROM generated_questions WHERE exam_id = $1 ORDER BY id ASC', [id]);
-    res.json(result.rows);
+    
+    // This query now looks in BOTH tables and combines the results
+    const query = `
+      SELECT id, question_text, correct_answer FROM generated_questions WHERE exam_id = $1
+      UNION ALL
+      SELECT id, question_text, answer_text as correct_answer FROM answer_keys WHERE exam_id = $1
+      ORDER BY id ASC;
+    `;
+    
+    const result = await db.query(query, [id]);
+    
+    // We format it so the frontend thinks they are all 'manual' answers for now
+    res.json({ manual: result.rows, generated: [] });
   } catch (error) {
     console.error("Fetch questions error:", error);
     res.status(500).json({ error: "Failed to fetch questions" });
@@ -293,6 +304,33 @@ app.post('/api/upload-answer-key', async (req, res) => {
   } catch (error) {
     console.error("Error saving answer key:", error);
     res.status(500).json({ error: "Failed to save answer key to the database." });
+  }
+});
+
+app.delete('/api/exams/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1. Delete associated answer keys first (Foreign Key constraint)
+    await db.query('DELETE FROM answer_keys WHERE exam_id = $1', [id]);
+
+    // 2. Delete associated generated questions
+    await db.query('DELETE FROM generated_questions WHERE exam_id = $1', [id]);
+
+    // 3. Delete associated student submissions
+    await db.query('DELETE FROM student_submissions WHERE exam_id = $1', [id]);
+
+    // 4. Finally, delete the exam record itself
+    const result = await db.query('DELETE FROM Exams WHERE id = $1 RETURNING *', [id]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Exam not found" });
+    }
+
+    res.json({ message: "Exam and all related data deleted successfully" });
+  } catch (error) {
+    console.error("DELETE EXAM ERROR:", error);
+    res.status(500).json({ error: "Failed to delete exam and related records" });
   }
 });
 
