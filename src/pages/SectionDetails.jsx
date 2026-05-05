@@ -96,13 +96,14 @@ const SectionDetails = ({ section, onBack }) => {
   if (!section) return null;
 
   const handleViewExam = async (exam) => {
+    if (!exam) return;
     setShowExamDetails(exam);
     setParsedOCRData(null);
     try {
       const response = await fetch(`/api/exams/${exam.id}/questions`);
       if (response.ok) {
         const data = await response.json();
-        setExamQuestions(data);
+        setExamQuestions(data || { manual: [], generated: [] });
       }
     } catch (error) {
       console.error('Error fetching exam questions:', error);
@@ -117,6 +118,7 @@ const SectionDetails = ({ section, onBack }) => {
       const response = await fetch(`/api/exams/${examId}`, { method: 'DELETE' });
       if (response.ok) {
         fetchExams();
+        if (showExamDetails?.id === examId) setShowExamDetails(null);
       }
     } catch (error) {
       console.error('Error deleting exam:', error);
@@ -137,6 +139,7 @@ const SectionDetails = ({ section, onBack }) => {
   };
 
   const handleAddStudentToClass = async (student) => {
+    if (!student?.email) return;
     try {
       const response = await fetch(`/api/students`, { 
         method: 'POST',
@@ -152,7 +155,7 @@ const SectionDetails = ({ section, onBack }) => {
         setShowAddStudentModal(false);
       } else {
         const errorData = await response.json();
-        alert("Error: " + errorData.error);
+        alert("Error: " + (errorData?.error || 'Unknown error'));
       }
     } catch (error) {
       console.error('Error adding student:', error);
@@ -160,11 +163,11 @@ const SectionDetails = ({ section, onBack }) => {
   };
 
   const handleExamFileChange = (e) => {
-    if (e.target.files[0]) setExamFile(e.target.files[0]);
+    if (e.target.files && e.target.files[0]) setExamFile(e.target.files[0]);
   };
 
   const handleAnswerKeyImageChange = (e) => {
-    if (e.target.files[0]) setAnswerKeyImage(e.target.files[0]);
+    if (e.target.files && e.target.files[0]) setAnswerKeyImage(e.target.files[0]);
   };
 
   const handleProcessOCR = async (examId) => {
@@ -182,22 +185,22 @@ const SectionDetails = ({ section, onBack }) => {
       });
 
       const data = await response.json();
-      if (response.ok) {
+      if (response.ok && data?.text) {
         alert('OCR processed successfully!');
         
         const structuredData = parseScanMineText(data.text);
         setParsedOCRData(structuredData);
         
-        const finalAnswersString = structuredData.map(q => q.correctAnswer).join(', ');
+        const finalAnswersString = structuredData.map(q => q?.correctAnswer || '').join(', ');
         setFormattedAnswersToSave(finalAnswersString);
         
         setAnswerKeyImage(null);
       } else {
-        alert('OCR processing failed: ' + data.error);
+        alert('OCR processing failed: ' + (data?.error || 'No text extracted.'));
       }
     } catch (error) {
       console.error('OCR error:', error);
-      alert('Error processing OCR: ' + error.message);
+      alert('Error processing OCR: ' + (error?.message || 'Unknown error'));
     } finally {
       setIsProcessingOCR(false);
     }
@@ -221,16 +224,16 @@ const SectionDetails = ({ section, onBack }) => {
         const questionsResponse = await fetch(`/api/exams/${showExamDetails.id}/questions`);
         if (questionsResponse.ok) {
           const questionsData = await questionsResponse.json();
-          setExamQuestions(questionsData);
+          setExamQuestions(questionsData || { manual: [], generated: [] });
         }
         setParsedOCRData(null);
       } else {
         const errorData = await response.json();
-        alert('Failed to save answer key: ' + errorData.error);
+        alert('Failed to save answer key: ' + (errorData?.error || 'Unknown error'));
       }
     } catch (error) {
       console.error('Error saving OCR to database:', error);
-      alert('Error saving answer key: ' + error.message);
+      alert('Error saving answer key: ' + (error?.message || 'Unknown error'));
     }
   };
 
@@ -240,8 +243,8 @@ const SectionDetails = ({ section, onBack }) => {
     setIsSaving(true);
     try {
       const formData = new FormData();
-      formData.append('teacherId', user.id);
-      formData.append('classId', section?.id);
+      formData.append('teacherId', user?.id || '');
+      formData.append('classId', section?.id || '');
       formData.append('title', examTitle);
       if (examFile) formData.append('lessonFile', examFile); 
       
@@ -253,10 +256,10 @@ const SectionDetails = ({ section, onBack }) => {
       const examData = await examResponse.json();
       
       if (!examResponse.ok) {
-        throw new Error(examData.error || 'Failed to save exam');
+        throw new Error(examData?.error || 'Failed to save exam');
       }
 
-      if (examData.examId && manualAnswers) {
+      if (examData?.examId && manualAnswers) {
         await fetch('/api/upload-answer-key', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -272,7 +275,7 @@ const SectionDetails = ({ section, onBack }) => {
       closeModal();
     } catch (error) {
       console.error('Error saving exam/key:', error);
-      alert('Save failed: ' + error.message);
+      alert('Save failed: ' + (error?.message || 'Unknown error'));
     } finally {
       setIsSaving(false);
     }
@@ -293,8 +296,8 @@ const SectionDetails = ({ section, onBack }) => {
         <header className="minimal-header">
           <button className="back-btn" onClick={onBack}>← Back to Classes</button>
           <div className="subject-title">
-            <h1>{section?.name}</h1>
-            <p>{section?.subject}</p>
+            <h1>{section?.name || 'Class Details'}</h1>
+            <p>{section?.subject || ''}</p>
           </div>
         </header>
 
@@ -314,13 +317,17 @@ const SectionDetails = ({ section, onBack }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {students.map((s) => (
-                    <tr key={s.id}>
-                      <td>{s.id}</td>
-                      <td className="student-name">{s.name}</td>
-                      <td>{s.email}</td>
-                    </tr>
-                  ))}
+                  {students && students.length > 0 ? (
+                    students.map((s, idx) => s ? (
+                      <tr key={s.id || `student-${idx}`}>
+                        <td>{s.id || 'N/A'}</td>
+                        <td className="student-name">{s.name || 'Unknown'}</td>
+                        <td>{s.email || 'N/A'}</td>
+                      </tr>
+                    ) : null)
+                  ) : (
+                    <tr><td colSpan="3">No students found.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -338,39 +345,45 @@ const SectionDetails = ({ section, onBack }) => {
             <div className="action-card">
               <h4>Exams In Class</h4>
               <div className="exam-list">
-                {exams.map((exam) => (
-                  <div key={exam.id} className="exam-card" onClick={() => handleViewExam(exam)}>
-                    <div className="exam-icon">📄</div>
-                    <div className="exam-info">
-                      <h4>{exam.title}</h4>
-                      <p>{new Date(exam.created_at).toLocaleDateString()}</p>
+                {exams && exams.length > 0 ? (
+                  exams.map((exam, idx) => exam ? (
+                    <div key={exam.id || `exam-${idx}`} className="exam-card" onClick={() => handleViewExam(exam)}>
+                      <div className="exam-icon">📄</div>
+                      <div className="exam-info">
+                        <h4>{exam.title || 'Untitled Exam'}</h4>
+                        <p>{exam.created_at ? new Date(exam.created_at).toLocaleDateString() : 'No date'}</p>
+                      </div>
+                      <button
+                        className="delete-exam-btn"
+                        onClick={(e) => handleDeleteExam(e, exam.id)}
+                        title="Delete Exam"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
-                    <button
-                      className="delete-exam-btn"
-                      onClick={(e) => handleDeleteExam(e, exam.id)}
-                      title="Delete Exam"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))}
+                  ) : null)
+                ) : (
+                  <p style={{fontSize: '14px', color: '#666'}}>No exams posted yet.</p>
+                )}
               </div>
             </div>
           </aside>
         </div>
       </div>
 
+      {/* MODALS BELOW */}
+      
       {showAddStudentModal && (
         <div className="modal-overlay" onClick={() => setShowAddStudentModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Add Student to Class</h3>
             <div className="student-select-list">
-              {allStudents.map(s => (
-                <div key={s.id} className="student-select-item">
-                  <span>{s.name} ({s.email})</span>
+              {allStudents && allStudents.map((s, idx) => s ? (
+                <div key={s.id || `allstudent-${idx}`} className="student-select-item">
+                  <span>{s.name || 'Unknown'} ({s.email || 'No email'})</span>
                   <button onClick={() => handleAddStudentToClass(s)}>Add</button>
                 </div>
-              ))}
+              ) : null)}
             </div>
           </div>
         </div>
@@ -399,9 +412,9 @@ const SectionDetails = ({ section, onBack }) => {
 
             <div className="upload-section">
               <label className="upload-label">📄 Exam Questions File (Optional)</label>
-              <div className="upload-row" onClick={() => examInputRef.current.click()}>
+              <div className="upload-row" onClick={() => examInputRef.current && examInputRef.current.click()}>
                 <span className="upload-placeholder">
-                  {examFile ? examFile.name : 'Upload PDF / Word / Image'}
+                  {examFile?.name ? examFile.name : 'Upload PDF / Word / Image'}
                 </span>
                 <input
                   type="file"
@@ -440,7 +453,7 @@ const SectionDetails = ({ section, onBack }) => {
         <div className="modal-overlay" onClick={() => setShowExamDetails(null)}>
           <div className="modal-content details-modal" style={{ pointerEvents: 'auto', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Exam Details: {showExamDetails.title}</h2>
+              <h2>Exam Details: {showExamDetails?.title || 'Untitled'}</h2>
               <div style={{display: 'flex', gap: '10px'}}>
                 <button className="close-btn" onClick={() => setShowExamDetails(null)}>×</button>
               </div>
@@ -450,21 +463,24 @@ const SectionDetails = ({ section, onBack }) => {
               <div className="details-section">
                 <h4>Manual Answer Key ({examQuestions?.manual?.length || 0})</h4>
                 <div className="questions-list">
-                  {examQuestions?.manual?.map((a, idx) => (
-                    <div key={a.id} className="question-item">
-                      <p><strong>{idx + 1}. {a.question_text || `Question ${idx + 1}`}</strong></p>
-                      <p className="ans-text" style={{ color: '#059669', fontWeight: 'bold' }}>Answer: {a.correct_answer}</p>
-                    </div>
-                  ))}
-                  {!examQuestions?.manual?.length && <p>No manual answers defined.</p>}
+                  {examQuestions?.manual && examQuestions.manual.length > 0 ? (
+                    examQuestions.manual.map((a, idx) => a ? (
+                      <div key={a.id || `manual-${idx}`} className="question-item">
+                        <p><strong>{idx + 1}. {a.question_text || `Question ${idx + 1}`}</strong></p>
+                        <p className="ans-text" style={{ color: '#059669', fontWeight: 'bold' }}>Answer: {a.correct_answer || 'N/A'}</p>
+                      </div>
+                    ) : null)
+                  ) : (
+                    <p>No manual answers defined.</p>
+                  )}
                 </div>
               </div>
 
               <div className="details-section" style={{ background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                 <h4 style={{ margin: '0 0 10px 0' }}>OCR Answer Key Extraction</h4>
-                <div className="upload-row" onClick={() => answerKeyInputRef.current.click()} style={{ marginBottom: '10px' }}>
+                <div className="upload-row" onClick={() => answerKeyInputRef.current && answerKeyInputRef.current.click()} style={{ marginBottom: '10px' }}>
                   <span className="upload-placeholder">
-                    {answerKeyImage ? answerKeyImage.name : 'Upload Official Answer Key PDF/Image'}
+                    {answerKeyImage?.name ? answerKeyImage.name : 'Upload Official Answer Key PDF/Image'}
                   </span>
                   <input
                     type="file"
@@ -489,12 +505,12 @@ const SectionDetails = ({ section, onBack }) => {
                   <div style={{ marginTop: '15px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '15px' }}>
                     <h5 style={{ margin: '0 0 10px 0', color: '#334155' }}>Preview: {parsedOCRData.length} Answers Detected</h5>
                     <div style={{ maxHeight: '200px', overflowY: 'auto', marginBottom: '15px', padding: '10px', background: '#f1f5f9', borderRadius: '6px' }}>
-                      {parsedOCRData.map((item, i) => (
-                        <div key={i} style={{ marginBottom: '8px', fontSize: '13px', display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: '#475569' }}>{item.questionText.substring(0, 30)}...</span>
-                          <strong style={{ color: '#16a34a' }}>{item.correctAnswer}</strong>
+                      {parsedOCRData.map((item, i) => item ? (
+                        <div key={`parsed-${i}`} style={{ marginBottom: '8px', fontSize: '13px', display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#475569' }}>{item?.questionText ? item.questionText.substring(0, 30) : 'Question'}...</span>
+                          <strong style={{ color: '#16a34a' }}>{item?.correctAnswer || '?'}</strong>
                         </div>
-                      ))}
+                      ) : null)}
                     </div>
                     
                     <button
