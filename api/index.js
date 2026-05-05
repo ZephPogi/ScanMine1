@@ -201,13 +201,26 @@ app.post('/api/upload-paper', upload.single('studentPaper'), async (req, res) =>
   try {
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'No image uploaded' });
-    const { studentId, examId } = req.body;
+    
+    // Ensure these IDs are integers
+    const studentId = parseInt(req.body.studentId);
+    const examId = parseInt(req.body.examId);
+
+    if (isNaN(studentId) || isNaN(examId)) {
+      return res.status(400).json({ error: 'Invalid Student or Exam ID' });
+    }
+
     const { publicUrl } = await uploadFile(file.buffer, file.originalname, file.mimetype);
+    
+    // This is where the crash likely happens. 
+    // We wrap it to see exactly what goes wrong.
     const result = await gradeSubmission(examId, studentId, file.buffer, publicUrl);
+    
     res.json({ message: 'Paper graded successfully', result });
   } catch (error) {
-    console.error('GRADING ERROR:', error);
-    res.status(500).json({ error: 'Failed to process paper' });
+    console.error('CRITICAL GRADING ERROR:', error);
+    // This ensures we send JSON even if the server crashes
+    res.status(500).json({ error: 'Internal Server Error: ' + error.message });
   }
 });
 
