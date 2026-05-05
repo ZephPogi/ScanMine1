@@ -328,22 +328,45 @@ app.post('/api/upload-answer-key', async (req, res) => {
       console.log("================\nRAW OCR TEXT:\n", answers, "\n================");
       const lines = answers.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
+      // Stateful Parser: Track candidate answer across lines
+      let currentCandidateAnswer = null;
+
       for (const line of lines) {
-        // REGEX: Match "ANSWER NUMBER. QUESTION TEXT" format (bulletproof)
-        // Examples: "B 1. Which of the following..." or "ScanMine 5. The name of..." or "C2. ..."
-        // Extremely forgiving: captures anything before the number as answer, space is optional
-        const match = line.match(/^\s*(.*?)\s*(\d+)\.\s*(.*)$/);
+        // Filter noise: skip lines that start with noise patterns
+        if (line.startsWith('A)') || line.startsWith('PART') || line.length === 0) {
+          continue;
+        }
 
-        if (match) {
+        // Check if line is a short answer candidate (no number, just letter/word)
+        const isShortAnswer = !line.match(/\d/) && line.length < 20 && line.length > 0;
+
+        if (isShortAnswer) {
+          // Save as candidate answer
+          currentCandidateAnswer = line.trim();
+          console.log(`Candidate answer found: "${currentCandidateAnswer}"`);
+          continue;
+        }
+
+        // Check if line matches question format (e.g., "1. What is...")
+        const questionMatch = line.match(/^\s*(\d+)\.\s*(.*)$/);
+
+        if (questionMatch) {
+          const qNum = questionMatch[1];
+          const questionText = questionMatch[2].trim() || `Question ${qNum}`;
+
+          // Pair with candidate answer if we have one
+          const answer = currentCandidateAnswer || '?';
+
+          console.log(`Pairing Q${qNum} with answer: "${answer}"`);
+
           questionCount++;
-          const answer = match[1].trim(); // Anything before the number (trimmed)
-          const qNum = match[2]; // The question number (e.g., "1" or "5")
-          const questionText = match[3].trim() || `Question ${qNum}`; // The rest after the number
-
           await db.query(
             'INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ($1, $2, $3)',
             [examId, answer, questionText]
           );
+
+          // Clear state after pairing
+          currentCandidateAnswer = null;
         }
       }
     }
