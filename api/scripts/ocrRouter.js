@@ -2,8 +2,25 @@ const Tesseract = require('tesseract.js');
 const OCRSpaceService = require('./ocrSpaceService');
 const fs = require('fs');
 const path = require('path');
-// Fixed Import for Vercel bundling
-const pdf = require('pdf-parse/lib/pdf-parse.js'); 
+
+/**
+ * VERCEL-SAFE PDF IMPORT
+ * We check multiple export patterns to ensure pdf-parse loads as a function
+ * regardless of whether Vercel uses CommonJS or ESM bundling.
+ */
+let pdf;
+try {
+  const pdfLib = require('pdf-parse');
+  pdf = typeof pdfLib === 'function' ? pdfLib : (pdfLib.default || pdfLib);
+} catch (e) {
+  console.error("Initial PDF load failed, trying internal path...");
+  try {
+    // Fallback for older Node environments
+    pdf = require('pdf-parse/lib/pdf-parse');
+  } catch (err) {
+    console.error("PDF-Parse could not be initialized.");
+  }
+}
 
 class OCRRouter {
   constructor() {
@@ -20,9 +37,12 @@ class OCRRouter {
       try {
         console.log('--- Attempting PDF Parse ---');
         const dataBuffer = Buffer.isBuffer(source) ? source : fs.readFileSync(source);
-        // Explicitly calling the library
+        
+        if (typeof pdf !== 'function') throw new Error('PDF library not loaded');
+
         const data = await pdf(dataBuffer);
         
+        // If PDF is scanned (no text layer), use Tesseract
         if (!data.text || data.text.trim().length === 0) {
           return await this.processWithTesseract(dataBuffer);
         }
@@ -33,7 +53,7 @@ class OCRRouter {
       }
     }
 
-    // Image/Handwriting Logic
+    // Default to Handwriting/OCR Space for images
     if (forceEngine === 'ocrspace' || !isPDF) {
       try {
         return await this.ocrSpaceService.recognizeHandwritingFromBuffer(source);
@@ -45,14 +65,16 @@ class OCRRouter {
 
   async processWithTesseract(imageSource) {
     console.log('--- Running External CDN Tesseract ---');
-    const { createWorker } = Tesseract;
     
-    // We create the worker with EXPLICIT CDN paths to bypass node_modules
-    const worker = await createWorker('eng', 1, {
+    /**
+     * VERCEL-SAFE TESSERACT
+     * We bypass local node_modules to avoid ENOENT errors by 
+     * pointing directly to official CDNs for the WASM 'brain'.
+     */
+    const worker = await Tesseract.createWorker('eng', 1, {
       workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@v5.0.0/dist/worker.min.js',
       langPath: 'https://tessdata.projectnaptha.com/4.0.0',
-      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@v5.0.0/tesseract-core.wasm.js',
-      logger: m => console.log(m.status)
+      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@v5.0.0/tesseract-core.wasm.js'
     });
 
     try {
@@ -62,7 +84,7 @@ class OCRRouter {
     } catch (err) {
       if (worker) await worker.terminate();
       console.error('Tesseract failed:', err.message);
-      return "OCR_FALLBACK_FAILED";
+      return "";
     }
   }
 
