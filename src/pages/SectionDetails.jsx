@@ -192,14 +192,17 @@ const SectionDetails = ({ section, onBack }) => {
       });
 
       if (response.ok) {
-        alert('Answer key saved successfully!');
+        alert('Answer key saved successfully to the database!');
+        
         // Re-fetch exam questions to update the UI
         const questionsResponse = await fetch(`/api/exams/${showExamDetails.id}/questions`);
         if (questionsResponse.ok) {
           const questionsData = await questionsResponse.json();
           setExamQuestions(questionsData);
         }
-        setExtractedOCRText('');
+        
+        // Notice I removed the line that hides the box so it stays on screen!
+        
       } else {
         const errorData = await response.json();
         alert('Failed to save answer key: ' + errorData.error);
@@ -209,7 +212,7 @@ const SectionDetails = ({ section, onBack }) => {
       alert('Error saving answer key: ' + error.message);
     }
   };
-
+  
   const handleSaveAndAssign = async () => {
     if (!examTitle) return alert('Please enter an exam title');
     
