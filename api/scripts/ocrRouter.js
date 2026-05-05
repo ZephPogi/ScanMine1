@@ -3,8 +3,8 @@ const OCRSpaceService = require('./ocrSpaceService');
 const fs = require('fs');
 const path = require('path');
 
-// THE VERCEL FIX: Use a more direct require that avoids the "exports" error
-const pdf = require('pdf-parse/lib/pdf-parse.js');
+// VERCEL FIX: Standardize the PDF import to avoid the "exports" error
+const pdf = require('pdf-parse');
 
 class OCRRouter {
   constructor() {
@@ -20,14 +20,15 @@ class OCRRouter {
     if (isPDF) {
       try {
         console.log('--- Attempting PDF Parse ---');
-        // Convert source to Buffer if it isn't one already
+        // Convert to Buffer to avoid "path must be a string" errors
         const dataBuffer = Buffer.isBuffer(source) ? source : fs.readFileSync(source);
         
-        // Call the PDF library directly
-        const data = await pdf(dataBuffer);
+        // Handle case where pdf-parse might be nested under .default
+        const parse = typeof pdf === 'function' ? pdf : pdf.default;
+        const data = await parse(dataBuffer);
         
         if (!data.text || data.text.trim().length === 0) {
-          console.log('PDF is likely a scan, using Tesseract fallback...');
+          console.log('PDF has no text layer, falling back to Tesseract...');
           return await this.processWithTesseract(dataBuffer);
         }
         return data.text;
@@ -37,7 +38,7 @@ class OCRRouter {
       }
     }
 
-    // Default to Handwriting/OCR Space for images[cite: 2]
+    // Default to OCR.space for handwriting[cite: 2]
     if (forceEngine === 'ocrspace' || !isPDF) {
       try {
         return await this.ocrSpaceService.recognizeHandwritingFromBuffer(source);
@@ -51,8 +52,7 @@ class OCRRouter {
   async processWithTesseract(imageSource) {
     console.log('--- Running Standard Tesseract recognize ---');
     try {
-      // For Vercel, the simplest call is often the most stable
-      // We pass the Buffer directly here.
+      // Simplest call is best for Vercel to avoid WASM pathing issues
       const { data: { text } } = await Tesseract.recognize(
         imageSource,
         'eng',
