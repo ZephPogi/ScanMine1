@@ -4,13 +4,48 @@ import { Trash2, Eye } from 'lucide-react';
 import './SectionDetails.css';
 import Sidebar from './Sidebar';
 
+// --- THE SMART PARSER ---
+// This reads the raw OCR text and structures it based on your ScanMine layout
+const parseScanMineText = (rawText) => {
+  if (!rawText) return [];
+  
+  const lines = rawText.split('\n').map(line => line.trim()).filter(line => line !== '');
+  const parsedQuestions = [];
+  let pendingAnswer = '';
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Detect Questions (Starts with a number and a dot, e.g., "1. ")
+    if (/^\d+\./.test(line)) {
+      parsedQuestions.push({
+        questionText: line,
+        correctAnswer: pendingAnswer || '?'
+      });
+      pendingAnswer = ''; // Reset for the next question
+    }
+    // Detect Answers (Ignore multiple choice options like A) and Headers)
+    else if (
+      !/^[A-D]\)/i.test(line) && 
+      !line.toLowerCase().includes('part') &&
+      !line.toLowerCase().includes('note:') &&
+      !line.toLowerCase().includes('scanmine answer') &&
+      !line.toLowerCase().includes('verification') &&
+      !line.toLowerCase().includes('testing')
+    ) {
+      pendingAnswer = line;
+    }
+  }
+
+  return parsedQuestions;
+};
+
 const SectionDetails = ({ section, onBack }) => {
   const navigate = useNavigate();
   const [students, setStudents] = useState([]);
   const [exams, setExams] = useState([]);
   const [allStudents, setAllStudents] = useState([]);
   
-  // Attach Exam modal state
   const [showAttachModal, setShowAttachModal] = useState(false);
   const [showExamDetails, setShowExamDetails] = useState(null);
   const [examQuestions, setExamQuestions] = useState({ manual: [], generated: [] });
@@ -18,17 +53,16 @@ const SectionDetails = ({ section, onBack }) => {
   const [manualAnswers, setManualAnswers] = useState('');
   const [examTitle, setExamTitle] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  // eslint-disable-next-line no-unused-vars
   const [answerKeyImage, setAnswerKeyImage] = useState(null);
-  // eslint-disable-next-line no-unused-vars
   const [isProcessingOCR, setIsProcessingOCR] = useState(false);
-  const examInputRef = useRef(null);
+  
+  // NEW STATES FOR PARSER
   const [extractedOCRText, setExtractedOCRText] = useState('');
-  // eslint-disable-next-line no-unused-vars
-  const answerKeyInputRef = useRef(null);
+  const [parsedOCRData, setParsedOCRData] = useState(null);
+  const [formattedAnswersToSave, setFormattedAnswersToSave] = useState('');
 
-  // Add Student modal state
-  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const examInputRef = useRef(null);
+  const answerKeyInputRef = useRef(null);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -67,6 +101,9 @@ const SectionDetails = ({ section, onBack }) => {
 
   const handleViewExam = async (exam) => {
     setShowExamDetails(exam);
+    // Reset states when opening a new exam
+    setExtractedOCRText('');
+    setParsedOCRData(null);
     try {
       const response = await fetch(`/api/exams/${exam.id}/questions`);
       if (response.ok) {
@@ -79,7 +116,7 @@ const SectionDetails = ({ section, onBack }) => {
   };
 
   const handleDeleteExam = async (e, examId) => {
-    e.stopPropagation(); // prevent opening details
+    e.stopPropagation();
     if (!window.confirm('Are you sure you want to delete this exam? All student results for this exam will also be deleted.')) return;
     
     try {
@@ -106,39 +143,36 @@ const SectionDetails = ({ section, onBack }) => {
   };
 
   const handleAddStudentToClass = async (student) => {
-  try {
-    // We send the email so the backend can find the corresponding User ID
-    const response = await fetch(`/api/students`, { 
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        email: student.email, // Send the email string, not the ID
-        classId: section.id 
-      }),
-    });
+    try {
+      const response = await fetch(`/api/students`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: student.email,
+          classId: section.id 
+        }),
+      });
 
-    if (response.ok) {
-      fetchStudents(); // Refresh the class roster table
-      setShowAddStudentModal(false);
-    } else {
-      const errorData = await response.json();
-      alert("Error: " + errorData.error);
+      if (response.ok) {
+        fetchStudents();
+        setShowAddStudentModal(false);
+      } else {
+        const errorData = await response.json();
+        alert("Error: " + errorData.error);
+      }
+    } catch (error) {
+      console.error('Error adding student:', error);
     }
-  } catch (error) {
-    console.error('Error adding student:', error);
-  }
-};
+  };
 
   const handleExamFileChange = (e) => {
     if (e.target.files[0]) setExamFile(e.target.files[0]);
   };
 
-  // eslint-disable-next-line no-unused-vars
   const handleAnswerKeyImageChange = (e) => {
     if (e.target.files[0]) setAnswerKeyImage(e.target.files[0]);
   };
 
-  // eslint-disable-next-line no-unused-vars
   const handleProcessOCR = async (examId) => {
     if (!answerKeyImage) return alert('Please select an answer key image first');
 
@@ -155,18 +189,18 @@ const SectionDetails = ({ section, onBack }) => {
 
       const data = await response.json();
       if (response.ok) {
-        alert(`OCR processed successfully! Extracted ${data.answersCount} answers.`);
+        alert('OCR processed successfully!');
         setExtractedOCRText(data.text);
-        setManualAnswers(data.text);
+        
+        // PARSE THE TEXT
+        const structuredData = parseScanMineText(data.text);
+        setParsedOCRData(structuredData);
+        
+        // Convert to Comma-Separated for the Backend (e.g., "B, C, ScanMine, Agile")
+        const finalAnswersString = structuredData.map(q => q.correctAnswer).join(', ');
+        setFormattedAnswersToSave(finalAnswersString);
+        
         setAnswerKeyImage(null);
-        // Re-fetch exam questions to update the UI
-        if (showExamDetails) {
-          const questionsResponse = await fetch(`/api/exams/${showExamDetails.id}/questions`);
-          if (questionsResponse.ok) {
-            const questionsData = await questionsResponse.json();
-            setExamQuestions(questionsData);
-          }
-        }
       } else {
         alert('OCR processing failed: ' + data.error);
       }
@@ -179,7 +213,7 @@ const SectionDetails = ({ section, onBack }) => {
   };
 
   const handleSaveOCRToDatabase = async () => {
-    if (!extractedOCRText || !showExamDetails?.id) return alert('No OCR text or exam ID available');
+    if (!formattedAnswersToSave || !showExamDetails?.id) return alert('No valid OCR data to save');
 
     try {
       const response = await fetch('/api/upload-answer-key', {
@@ -187,22 +221,21 @@ const SectionDetails = ({ section, onBack }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           examId: showExamDetails.id,
-          answers: extractedOCRText
+          answers: formattedAnswersToSave // Sending the clean, comma-separated string!
         })
       });
 
       if (response.ok) {
         alert('Answer key saved successfully to the database!');
-        
-        // Re-fetch exam questions to update the UI
+        // Refresh UI
         const questionsResponse = await fetch(`/api/exams/${showExamDetails.id}/questions`);
         if (questionsResponse.ok) {
           const questionsData = await questionsResponse.json();
           setExamQuestions(questionsData);
         }
-        
-        // Notice I removed the line that hides the box so it stays on screen!
-        
+        // Clear the box so it looks clean
+        setParsedOCRData(null);
+        setExtractedOCRText('');
       } else {
         const errorData = await response.json();
         alert('Failed to save answer key: ' + errorData.error);
@@ -212,13 +245,12 @@ const SectionDetails = ({ section, onBack }) => {
       alert('Error saving answer key: ' + error.message);
     }
   };
-  
+
   const handleSaveAndAssign = async () => {
     if (!examTitle) return alert('Please enter an exam title');
     
     setIsSaving(true);
     try {
-      // 1. Save Exam first
       const formData = new FormData();
       formData.append('teacherId', user.id);
       formData.append('classId', section?.id);
@@ -236,15 +268,12 @@ const SectionDetails = ({ section, onBack }) => {
         throw new Error(examData.error || 'Failed to save exam');
       }
 
-      const examId = examData.examId;
-
-      // 2. Save Answer Key
-      if (examId && manualAnswers) {
+      if (examData.examId && manualAnswers) {
         await fetch('/api/upload-answer-key', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            examId: examId,
+            examId: examData.examId,
             answers: manualAnswers 
           })
         });
@@ -252,10 +281,7 @@ const SectionDetails = ({ section, onBack }) => {
       
       alert('Exam and Key saved successfully!');
       fetchExams();
-      setShowAttachModal(false);
-      setExamTitle('');
-      setManualAnswers('');
-      setExamFile(null);
+      closeModal();
     } catch (error) {
       console.error('Error saving exam/key:', error);
       alert('Save failed: ' + error.message);
@@ -277,9 +303,7 @@ const SectionDetails = ({ section, onBack }) => {
       <Sidebar />
       <div className="section-container">
         <header className="minimal-header">
-          <button className="back-btn" onClick={onBack}>
-            ← Back to Classes
-          </button>
+          <button className="back-btn" onClick={onBack}>← Back to Classes</button>
           <div className="subject-title">
             <h1>{section?.name}</h1>
             <p>{section?.subject}</p>
@@ -372,9 +396,7 @@ const SectionDetails = ({ section, onBack }) => {
               <button className="modal-close-btn" onClick={closeModal}>×</button>
             </div>
 
-            <div className="modal-title-banner">
-              Attach Exam with Answer Key
-            </div>
+            <div className="modal-title-banner">Attach Exam with Answer Key</div>
 
             <div className="upload-section">
               <label className="upload-label">Exam Title</label>
@@ -399,9 +421,7 @@ const SectionDetails = ({ section, onBack }) => {
                   style={{ display: 'none' }}
                   onChange={handleExamFileChange}
                 />
-                <button className="browse-btn exam-browse">
-                  Browse
-                </button>
+                <button className="browse-btn exam-browse">Browse</button>
               </div>
             </div>
 
@@ -413,27 +433,6 @@ const SectionDetails = ({ section, onBack }) => {
                 value={manualAnswers}
                 onChange={(e) => setManualAnswers(e.target.value)}
               />
-              <p className="manual-hint">The system will use this sequence to grade student submissions.</p>
-            </div>
-
-            <div className="manual-section">
-              <p className="manual-divider">Or Upload Answer Key Image for OCR Extraction</p>
-              <div className="upload-row" onClick={() => answerKeyInputRef.current.click()}>
-                <span className="upload-placeholder">
-                  {answerKeyImage ? answerKeyImage.name : 'Upload Answer Key Image'}
-                </span>
-                <input
-                  type="file"
-                  ref={answerKeyInputRef}
-                  style={{ display: 'none' }}
-                  accept=".jpg,.jpeg,.png,.pdf"
-                  onChange={handleAnswerKeyImageChange}
-                />
-                <button className="browse-btn exam-browse">
-                  Browse
-                </button>
-              </div>
-              <p className="manual-hint">Upload an image with answers marked (e.g., "A 1.", "B 2.", etc.)</p>
             </div>
 
             <div className="modal-footer">
@@ -448,57 +447,37 @@ const SectionDetails = ({ section, onBack }) => {
           </div>
         </div>
       )}
-      {/* Exam Details Modal */}
+
       {showExamDetails && (
         <div className="modal-overlay" onClick={() => setShowExamDetails(null)}>
-          <div className="modal-content details-modal" onClick={e => e.stopPropagation()}>
+          {/* Ensure pointer-events works normally */}
+          <div className="modal-content details-modal" style={{ pointerEvents: 'auto', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Exam Details: {showExamDetails.title}</h2>
               <div style={{display: 'flex', gap: '10px'}}>
-                {showExamDetails.file_path && (
-                  <a
-                    href={showExamDetails.file_path}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="view-pdf-link"
-                  >
-                    <Eye size={16} />
-                    <span>View Original PDF</span>
-                  </a>
-                )}
                 <button className="close-btn" onClick={() => setShowExamDetails(null)}>×</button>
               </div>
             </div>
+            
             <div className="modal-body">
-  <div className="details-section">
-    <h4>AI Generated Questions ({examQuestions?.generated?.length || 0})</h4>
-    <div className="questions-list">
-      {examQuestions?.generated?.map((q, idx) => (
-        <div key={q.id} className="question-item">
-          <p><strong>{idx + 1}. {q.question_text}</strong></p>
-          <p className="ans-text">Answer: {q.correct_answer}</p>
-        </div>
-      ))}
-      {!examQuestions?.generated?.length && <p>No questions generated by AI.</p>}
-    </div>
-  </div>
-  <div className="details-section">
-    <h4>Manual Answer Key ({examQuestions?.manual?.length || 0})</h4>
-    <div className="questions-list">
-      {examQuestions?.manual?.map((a, idx) => (
-        <div key={a.id} className="question-item">
-          <p><strong>{idx + 1}. {a.question_text || 'Question text not available'}</strong></p>
-          <p className="ans-text">Answer: {a.correct_answer}</p>
-        </div>
-      ))}
-      {!examQuestions?.manual?.length && <p>No manual answers defined.</p>}
-    </div>
-  </div>
               <div className="details-section">
-                <h4>OCR Answer Key Extraction</h4>
-                <div className="upload-row" onClick={() => answerKeyInputRef.current.click()}>
+                <h4>Manual Answer Key ({examQuestions?.manual?.length || 0})</h4>
+                <div className="questions-list">
+                  {examQuestions?.manual?.map((a, idx) => (
+                    <div key={a.id} className="question-item">
+                      <p><strong>{idx + 1}. {a.question_text || `Question ${idx + 1}`}</strong></p>
+                      <p className="ans-text" style={{ color: '#059669', fontWeight: 'bold' }}>Answer: {a.correct_answer}</p>
+                    </div>
+                  ))}
+                  {!examQuestions?.manual?.length && <p>No manual answers defined.</p>}
+                </div>
+              </div>
+
+              <div className="details-section" style={{ background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <h4 style={{ margin: '0 0 10px 0' }}>OCR Answer Key Extraction</h4>
+                <div className="upload-row" onClick={() => answerKeyInputRef.current.click()} style={{ marginBottom: '10px' }}>
                   <span className="upload-placeholder">
-                    {answerKeyImage ? answerKeyImage.name : 'Upload Answer Key Image'}
+                    {answerKeyImage ? answerKeyImage.name : 'Upload Official Answer Key PDF/Image'}
                   </span>
                   <input
                     type="file"
@@ -507,41 +486,47 @@ const SectionDetails = ({ section, onBack }) => {
                     accept=".jpg,.jpeg,.png,.pdf"
                     onChange={handleAnswerKeyImageChange}
                   />
-                  <button className="browse-btn exam-browse">
-                    Browse
-                  </button>
+                  <button className="browse-btn exam-browse">Browse</button>
                 </div>
+                
                 <button 
                   className="save-assign-btn" 
                   onClick={() => handleProcessOCR(showExamDetails.id)}
                   disabled={isProcessingOCR || !answerKeyImage}
-                  style={{ marginTop: '10px', width: '100%' }}
+                  style={{ width: '100%', marginBottom: '10px' }}
                 >
-                  {isProcessingOCR ? 'Processing OCR...' : 'Extract Answers via OCR'}
+                  {isProcessingOCR ? 'Scanning Document...' : 'Extract Answers via OCR'}
                 </button>
-                <p className="manual-hint">Upload an image with answers marked (e.g., "A 1.", "B 2.", etc.)</p>
 
-                {/* --- ADD THIS NEW DISPLAY BOX --- */}
-                {extractedOCRText && (
-                  <div style={{ marginTop: '15px', padding: '15px', background: '#f8f9fa', border: '1px solid #ddd', borderRadius: '8px' }}>
-                    <h5 style={{ margin: '0 0 10px 0', color: '#333' }}>Raw OCR Extraction Result:</h5>
-                    <pre style={{ whiteSpace: 'pre-wrap', fontSize: '13px', margin: '0 0 15px 0', color: '#555', fontFamily: 'monospace' }}>
-                      {extractedOCRText}
-                    </pre>
+                {/* --- STRUCTURED PREVIEW BOX --- */}
+                {parsedOCRData && parsedOCRData.length > 0 && (
+                  <div style={{ marginTop: '15px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '15px' }}>
+                    <h5 style={{ margin: '0 0 10px 0', color: '#334155' }}>Preview: {parsedOCRData.length} Answers Detected</h5>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', marginBottom: '15px', padding: '10px', background: '#f1f5f9', borderRadius: '6px' }}>
+                      {parsedOCRData.map((item, i) => (
+                        <div key={i} style={{ marginBottom: '8px', fontSize: '13px', display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#475569' }}>{item.questionText.substring(0, 30)}...</span>
+                          <strong style={{ color: '#16a34a' }}>{item.correctAnswer}</strong>
+                        </div>
+                      ))}
+                    </div>
+                    
                     <button
                       onClick={handleSaveOCRToDatabase}
                       style={{
-                        padding: '8px 16px',
-                        background: '#3b82f6',
+                        width: '100%',
+                        padding: '10px 16px',
+                        background: '#2563eb',
                         color: 'white',
                         border: 'none',
                         borderRadius: '6px',
                         cursor: 'pointer',
                         fontSize: '14px',
-                        fontWeight: '500'
+                        fontWeight: '600',
+                        boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)'
                       }}
                     >
-                      Save as Official Answer Key
+                      Save to Database
                     </button>
                   </div>
                 )}
