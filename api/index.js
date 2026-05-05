@@ -217,7 +217,7 @@ app.post('/api/upload-paper', upload.single('studentPaper'), async (req, res) =>
 app.get('/api/exams/:id/questions', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await db.query('SELECT * FROM Questions WHERE exam_id = $1 ORDER BY id ASC', [id]);
+    const result = await db.query('SELECT * FROM generated_questions WHERE exam_id = $1 ORDER BY id ASC', [id]);
     res.json(result.rows);
   } catch (error) {
     console.error("Fetch questions error:", error);

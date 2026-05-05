@@ -27,6 +27,11 @@ class OCRRouter {
       if (mimetype.startsWith('image/')) return 'image';
     }
 
+    // Safety check if filePath is a Buffer on Vercel instead of a string
+    if (Buffer.isBuffer(filePath)) {
+      return mimetype === 'application/pdf' ? 'pdf' : 'image';
+    }
+
     const ext = path.extname(filePath).toLowerCase();
     if (ext === '.pdf') return 'pdf';
     if (['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.webp'].includes(ext)) {
@@ -39,7 +44,7 @@ class OCRRouter {
   /**
    * Determines if the content is likely handwritten
    * This is a heuristic - in production, you might use ML classification
-   * @param {string} filePath - Path to the image file
+   * @param {string|Buffer} filePath - Path to the image file or Buffer
    * @returns {Promise<boolean>} - True if likely handwritten
    */
   static async isLikelyHandwritten(filePath) {
@@ -71,7 +76,7 @@ class OCRRouter {
 
   /**
    * Routes the OCR request to the appropriate engine
-   * @param {string} filePath - Path to the file
+   * @param {string|Buffer} filePath - Path to the file or Buffer
    * @param {object} options - Options for routing
    * @returns {Promise<string>} - Extracted text
    */
@@ -88,7 +93,7 @@ class OCRRouter {
 
     console.log(`--- OCR Routing ---`);
     console.log(`File type: ${fileType}`);
-    console.log(`Path: ${filePath}`);
+    console.log(`Path is Buffer: ${Buffer.isBuffer(filePath)}`);
     console.log(`Image buffer provided: ${!!imageBuffer}`);
 
     // Force specific engine if requested
@@ -130,7 +135,7 @@ class OCRRouter {
 
   /**
    * Processes image with OCR.space (handwriting engine)
-   * @param {string} filePath - Path to the image file
+   * @param {string|Buffer} filePath - Path to the image file or Buffer
    * @param {object} options - Processing options
    * @returns {Promise<string>} - Extracted text
    */
@@ -138,12 +143,17 @@ class OCRRouter {
     const { preprocess = false, imageBuffer = null } = options;
 
     try {
-      // Send original image without any preprocessing
-      // OCR.space handles preprocessing internally
-      console.log('Running OCR.space on original image:', filePath);
-      const text = imageBuffer
-        ? await this.ocrSpaceService.recognizeHandwritingFromBuffer(imageBuffer)
-        : await this.ocrSpaceService.recognizeHandwriting(filePath);
+      console.log('Running OCR.space...');
+      
+      let text;
+      // Safely check if we are dealing with a Vercel memory buffer or a local file path
+      if (imageBuffer) {
+        text = await this.ocrSpaceService.recognizeHandwritingFromBuffer(imageBuffer);
+      } else if (Buffer.isBuffer(filePath)) {
+        text = await this.ocrSpaceService.recognizeHandwritingFromBuffer(filePath);
+      } else {
+        text = await this.ocrSpaceService.recognizeHandwriting(filePath);
+      }
 
       return text;
 
@@ -157,7 +167,7 @@ class OCRRouter {
 
   /**
    * Processes file with Tesseract.js (LSTM engine)
-   * @param {string} filePath - Path to the file
+   * @param {string|Buffer} filePath - Path to the file or Buffer
    * @param {object} options - Processing options
    * @returns {Promise<string>} - Extracted text
    */
@@ -169,7 +179,17 @@ class OCRRouter {
       if (fileType === 'pdf') {
         console.log('Extracting text from PDF using pdf-parse...');
         const { PDFParse } = require('pdf-parse');
-        const dataBuffer = imageBuffer || fs.readFileSync(filePath);
+        
+        // SAFE BUFFER CHECK FOR VERCEL
+        let dataBuffer;
+        if (imageBuffer) {
+          dataBuffer = imageBuffer;
+        } else if (Buffer.isBuffer(filePath)) {
+          dataBuffer = filePath;
+        } else {
+          dataBuffer = fs.readFileSync(filePath);
+        }
+
         const parser = new PDFParse({ data: dataBuffer });
         const result = await parser.getText();
         await parser.destroy();
@@ -184,10 +204,17 @@ class OCRRouter {
       // For images, use Tesseract with LSTM
       console.log('Processing image with Tesseract.js (LSTM)...');
 
-      let imageSource = imageBuffer || filePath;
+      let imageSource;
+      if (imageBuffer) {
+        imageSource = imageBuffer;
+      } else if (Buffer.isBuffer(filePath)) {
+        imageSource = filePath;
+      } else {
+        imageSource = filePath;
+      }
 
-      // Preprocess image if enabled
-      if (preprocess && !imageBuffer) {
+      // Preprocess image if enabled (Only run if it's a local file path, skip if Vercel Buffer to avoid string errors)
+      if (preprocess && !imageBuffer && !Buffer.isBuffer(filePath)) {
         console.log('Preprocessing image for Tesseract...');
         const preprocessedBuffer = await ImagePreprocessor.preprocess(filePath, {
           grayscale: true,
@@ -227,7 +254,7 @@ class OCRRouter {
 
   /**
    * Convenience method for student paper OCR (handwritten)
-   * @param {string} imagePath - Path to student paper image
+   * @param {string|Buffer} imagePath - Path to student paper image
    * @param {Buffer} imageBuffer - Optional buffer of the image
    * @returns {Promise<string>} - Extracted text
    */
@@ -241,7 +268,7 @@ class OCRRouter {
 
   /**
    * Convenience method for answer key OCR (PDF/printed)
-   * @param {string} filePath - Path to answer key file
+   * @param {string|Buffer} filePath - Path to answer key file
    * @param {string} mimetype - MIME type
    * @param {Buffer} fileBuffer - Optional buffer of the file
    * @returns {Promise<string>} - Extracted text
