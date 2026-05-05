@@ -211,10 +211,11 @@ app.post('/api/upload-paper', upload.single('studentPaper'), async (req, res) =>
     }
 
     const { publicUrl } = await uploadFile(file.buffer, file.originalname, file.mimetype);
-    
-    // This is where the crash likely happens. 
+
+    // This is where the crash likely happens.
     // We wrap it to see exactly what goes wrong.
-    const result = await gradeSubmission(examId, studentId, file.buffer, publicUrl);
+    // FIX: Pass file.buffer as imageBuffer (4th param), not as imagePath (3rd param)
+    const result = await gradeSubmission(examId, studentId, null, file.buffer, publicUrl);
     
     res.json({ message: 'Paper graded successfully', result });
   } catch (error) {

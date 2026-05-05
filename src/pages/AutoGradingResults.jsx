@@ -167,7 +167,6 @@ const handleScanRecord = async () => {
     }
     
     // Get whichever file the user provided
-    // Get whichever file the user provided
     let imageToUpload = scanFile;
 
     // THE FIX: If using the webcam, convert the raw Blob into a true File object
@@ -179,7 +178,7 @@ const handleScanRecord = async () => {
       alert('Please capture a photo or upload an image.');
       return;
     }
-    
+
     setIsScanning(true);
     try {
       // --- AUTOMATIC COMPRESSION LOGIC START ---
