@@ -8,33 +8,27 @@ import Sidebar from './Sidebar';
 // --- THE SMART PARSER ---
 const parseScanMineText = (rawText) => {
   if (!rawText) return [];
-  
   const lines = rawText.split('\n').map(line => line.trim()).filter(line => line !== '');
   const parsedQuestions = [];
-  let pendingAnswer = '';
+  let currentAnswer = '?';
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
+    // If it's a question (e.g. "1. ...")
     if (/^\d+\./.test(line)) {
       parsedQuestions.push({
         questionText: line,
-        correctAnswer: pendingAnswer || '?'
+        correctAnswer: currentAnswer // Use the last answer we found
       });
-      pendingAnswer = ''; 
-    }
-    else if (
-      !/^[A-D]\)/i.test(line) && 
-      !line.toLowerCase().includes('part') &&
-      !line.toLowerCase().includes('note:') &&
-      !line.toLowerCase().includes('scanmine answer') &&
-      !line.toLowerCase().includes('verification') &&
-      !line.toLowerCase().includes('testing')
-    ) {
-      pendingAnswer = line;
+      currentAnswer = '?'; // Reset ONLY after assigning
+    } 
+    // If it's an answer (Not a question, not a header)
+    else if (!/^[A-D]\)/i.test(line) && !line.toLowerCase().includes('part')) {
+       // Only update if it looks like a real answer
+       if (line.length > 0 && line.length < 50) currentAnswer = line;
     }
   }
-
   return parsedQuestions;
 };
 
@@ -206,8 +200,11 @@ const SectionDetails = ({ section, onBack }) => {
     }
   };
 
-  const handleSaveOCRToDatabase = async () => {
-    if (!formattedAnswersToSave || !showExamDetails?.id) return alert('No valid OCR data to save');
+ const handleSaveOCRToDatabase = async () => {
+    // CHANGE: Check for parsedOCRData instead of formattedAnswersToSave
+    if (!parsedOCRData || parsedOCRData.length === 0 || !showExamDetails?.id) {
+        return alert('No valid OCR data to save');
+    }
 
     try {
       const response = await fetch('/api/upload-answer-key', {
@@ -215,12 +212,16 @@ const SectionDetails = ({ section, onBack }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           examId: showExamDetails.id,
-          answers: formattedAnswersToSave
+          // CHANGE: Send the structured array directly!
+          answers: parsedOCRData 
         })
       });
 
       if (response.ok) {
-        alert('Answer key saved successfully to the database!');
+        const result = await response.json();
+        alert(result.message); // Will now say "Successfully saved X answers!"
+        
+        // Refresh UI
         const questionsResponse = await fetch(`/api/exams/${showExamDetails.id}/questions`);
         if (questionsResponse.ok) {
           const questionsData = await questionsResponse.json();
@@ -229,7 +230,7 @@ const SectionDetails = ({ section, onBack }) => {
         setParsedOCRData(null);
       } else {
         const errorData = await response.json();
-        alert('Failed to save answer key: ' + (errorData?.error || 'Unknown error'));
+        alert('Failed to save: ' + (errorData?.error || 'Unknown error'));
       }
     } catch (error) {
       console.error('Error saving OCR to database:', error);

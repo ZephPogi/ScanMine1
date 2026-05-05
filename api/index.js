@@ -297,40 +297,46 @@ app.get('/api/submissions/:examId', async (req, res) => {
 });
 
 // --- UPLOAD MANUAL OR OCR ANSWER KEY ---
+// --- UPLOAD MANUAL OR OCR ANSWER KEY ---
 app.post('/api/upload-answer-key', async (req, res) => {
   try {
     const { examId, answers } = req.body;
     if (!examId || !answers) return res.status(400).json({ error: 'Missing data' });
 
+    // 1. Clear old keys for this exam
     await db.query('DELETE FROM answer_keys WHERE exam_id = $1', [examId]);
 
-    // Split text into lines
-    const lines = answers.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    
     let questionCount = 0;
 
-    for (const line of lines) {
-      // REGEX EXPLANATION:
-      // This looks for a word or letter at the start, followed by a number and a dot
-      // Example match: "B 1." or "ScanMine 5."
-      const match = line.match(/^([A-Za-z.\s]+)\s+(\d+)\./);
-
-      if (match) {
+    // 2. CHECK: If the frontend sent a structured array (OCR Data)
+    if (Array.isArray(answers)) {
+      console.log(`Processing array of ${answers.length} answers...`);
+      for (const item of answers) {
+        if (item.correctAnswer && item.correctAnswer !== '?') {
+          questionCount++;
+          await db.query(
+            'INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ($1, $2, $3)',
+            [examId, item.correctAnswer, item.questionText || `Question ${questionCount}`]
+          );
+        }
+      }
+    } 
+    // 3. FALLBACK: If the frontend sent a raw string (Manual definition)
+    else if (typeof answers === 'string') {
+      const lines = answers.split(',').map(a => a.trim()).filter(a => a.length > 0);
+      for (let i = 0; i < lines.length; i++) {
         questionCount++;
-        const answer = match[1].trim(); // This grabs "B" or "ScanMine"
-        const qNum = match[2];         // This grabs "1" or "5"
-
         await db.query(
           'INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ($1, $2, $3)',
-          [examId, answer, `Question ${qNum}`]
+          [examId, lines[i], `Question ${i + 1}`]
         );
       }
     }
 
-    res.json({ success: true, message: `Saved ${questionCount} valid answers!` });
+    res.json({ success: true, message: `Successfully saved ${questionCount} answers to database!` });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to save key" });
+    console.error("DATABASE SAVE ERROR:", error);
+    res.status(500).json({ error: "Failed to save key to database" });
   }
 });
 
