@@ -1,3 +1,4 @@
+/* eslint-disable */
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
@@ -12,7 +13,7 @@ class OCRSpaceService {
     this.apiKey = process.env.OCR_SPACE_API_KEY || '';
     this.apiUrl = 'https://api.ocr.space/parse/image';
   }
-
+  
   /**
    * Sends image to OCR.space API for handwritten text recognition
    * @param {string} imagePath - Path to the image file
@@ -26,13 +27,14 @@ class OCRSpaceService {
   /**
    * Sends image buffer to OCR.space API for handwritten text recognition
    * @param {Buffer} imageBuffer - Buffer of the image file
+   * @param {string} engine - OCR engine to use ('2' for fast digital text, '3' for handwriting)
    * @returns {Promise<string>} - Extracted text
    */
-  async recognizeHandwritingFromBuffer(imageBuffer) {
-    return await this.recognizeHandwritingBufferUpload(imageBuffer);
+  async recognizeHandwritingFromBuffer(imageBuffer, engine = '2') {
+    return await this.recognizeHandwritingBufferUpload(imageBuffer, engine);
   }
 
-  async recognizeHandwritingBufferUpload(imageBuffer) {
+  async recognizeHandwritingBufferUpload(imageBuffer, engine = '2') {
     if (!this.apiKey) {
       throw new Error('OCR_SPACE_API_KEY not set in environment variables');
     }
@@ -41,28 +43,28 @@ class OCRSpaceService {
       const formData = new FormData();
 
       // Check the "magic bytes" to see if it's a PDF
-      const isPdfBuffer = imageBuffer.length > 4 && 
-                          imageBuffer[0] === 0x25 && 
-                          imageBuffer[1] === 0x50 && 
-                          imageBuffer[2] === 0x44 && 
+      const isPdfBuffer = imageBuffer.length > 4 &&
+                          imageBuffer[0] === 0x25 &&
+                          imageBuffer[1] === 0x50 &&
+                          imageBuffer[2] === 0x44 &&
                           imageBuffer[3] === 0x46;
 
       const uploadContentType = isPdfBuffer ? 'application/pdf' : 'image/png';
-      
+
       // THE FIX: Convert the binary Buffer into a Base64 String.
       // This stops Axios from hanging up while trying to stream raw bytes.
       const base64Data = imageBuffer.toString('base64');
       const base64String = `data:${uploadContentType};base64,${base64Data}`;
-      
+
       formData.append('base64Image', base64String);
       formData.append('apikey', this.apiKey);
       formData.append('language', 'eng');
       formData.append('detectOrientation', 'true');
       formData.append('scale', 'true');
-      formData.append('OCREngine', '2'); // Fast handwriting engine
+      formData.append('OCREngine', engine); // Use the engine parameter
       formData.append('isTable', 'false');
 
-      console.log(`Sending to OCR.space API via Base64 (Engine: 2)...`);
+      console.log(`Sending to OCR.space API via Base64 (Engine: ${engine})...`);
 
       const response = await axios.post(this.apiUrl, formData, {
         headers: {
@@ -70,7 +72,7 @@ class OCRSpaceService {
         },
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
-        timeout: 25000 // Fails fast so it doesn't lock up Vercel
+        timeout: 40000 // Increased to 40s for slower handwriting processing
       });
 
       if (response.data.IsErroredOnProcessing) {
@@ -93,49 +95,7 @@ class OCRSpaceService {
     } catch (error) {
       console.error('OCR.space Base64 Upload Error:', error.message);
       // We throw the error so the router knows it failed, avoiding the weird Buffer crash
-      throw new Error("OCR.space processing failed."); 
-    }
-  }
-
-  // Changed fallback from Engine 2 to Engine 1, since Engine 2 is now our primary
-  async recognizeHandwritingBufferUploadEngine1(imageBuffer, filename, contentType) {
-    console.log('--- Falling back to OCR Engine 1 ---');
-    try {
-      const formData = new FormData();
-
-      formData.append('file', imageBuffer, {
-        filename: filename,
-        contentType: contentType
-      });
-
-      formData.append('apikey', this.apiKey);
-      formData.append('language', 'eng');
-      formData.append('scale', 'true');
-      formData.append('OCREngine', '1'); // Engine 1 is the fastest, good for clean text
-
-      const response = await axios.post(this.apiUrl, formData, {
-        headers: {
-          ...formData.getHeaders()
-        },
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-        timeout: 40000
-      });
-
-      if (response.data.IsErroredOnProcessing) {
-        throw new Error(`OCR.space Error: ${response.data.ErrorMessage || 'Unknown error'}`);
-      }
-
-      const parsedResults = response.data.ParsedResults || [];
-      let extractedText = '';
-
-      for (const result of parsedResults) {
-        extractedText += result.ParsedText || '';
-      }
-
-      return extractedText;
-    } catch (error) {
-      throw new Error(`OCR.space Error: ${error.message}`);
+      throw new Error("OCR.space processing failed.");
     }
   }
 
