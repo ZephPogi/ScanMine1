@@ -239,20 +239,27 @@ app.get('/api/exams/:id/questions', async (req, res) => {
 // 2. OCR Extraction Endpoint
 app.post('/api/test-ocr', upload.any(), async (req, res) => {
   try {
-    // upload.any() catches the file safely no matter what your frontend named it
     const file = req.files && req.files.length > 0 ? req.files[0] : null;
     if (!file) return res.status(400).json({ error: 'No file uploaded' });
     
-    // Uses the extractText function we already have imported at the top!
-    const text = await extractText(file.buffer, file.mimetype);
+    const rawText = await extractText(file.buffer, file.mimetype);
     
-    // Returns clean JSON so your frontend stops throwing the '<' error
-    res.json({ text: text, message: "OCR Extracted Successfully" });
+    // --- USE YOUR PARSER HERE ---
+    // This function should be designed to separate questions from answers
+    const parsedData = parseFullQuestions(rawText); 
+    
+    // Return the cleaned version to the frontend
+    res.json({ 
+      text: rawText, 
+      parsedQuestions: parsedData, 
+      message: "OCR Extracted and Parsed" 
+    });
   } catch (error) {
     console.error('OCR ERROR:', error);
     res.status(500).json({ error: 'Failed to extract text' });
   }
 });
+
 // --- GET AUTO-GRADING RESULTS ---
 app.get('/api/submissions/:examId', async (req, res) => {
   try {
