@@ -43,7 +43,7 @@ const SectionDetails = ({ section, onBack }) => {
   const [students, setStudents] = useState([]);
   const [exams, setExams] = useState([]);
   const [allStudents, setAllStudents] = useState([]);
-  
+  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
   const [showAttachModal, setShowAttachModal] = useState(false);
   const [showExamDetails, setShowExamDetails] = useState(null);
   const [examQuestions, setExamQuestions] = useState({ manual: [], generated: [] });
