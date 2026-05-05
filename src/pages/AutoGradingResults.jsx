@@ -167,7 +167,13 @@ const handleScanRecord = async () => {
     }
     
     // Get whichever file the user provided
-    let imageToUpload = capturedImage || scanFile;
+    // Get whichever file the user provided
+    let imageToUpload = scanFile;
+
+    // THE FIX: If using the webcam, convert the raw Blob into a true File object
+    if (capturedImage) {
+      imageToUpload = new File([capturedImage], 'captured_paper.jpg', { type: 'image/jpeg' });
+    }
     
     if (!imageToUpload) {
       alert('Please capture a photo or upload an image.');
