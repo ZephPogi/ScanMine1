@@ -1,17 +1,9 @@
 const Tesseract = require('tesseract.js');
 const OCRSpaceService = require('./ocrSpaceService');
 const fs = require('fs');
-const path = require('path');
 
-// SAFE-REQUIRE BLOCK: Prevents the "pdf is not a function" and "Exports" errors
-// that are currently breaking your login.
-let pdf;
-try {
-  pdf = require('pdf-parse');
-} catch (e) {
-  console.error("PDF library load error, attempting fallback...");
-  pdf = null;
-}
+// VERCEL FIX: Standard require so Vercel bundles it properly. No try/catch.
+const pdf = require('pdf-parse');
 
 class OCRRouter {
   constructor() {
@@ -24,42 +16,46 @@ class OCRRouter {
     const isPDF = mimetype === 'application/pdf' || 
                  (typeof filePath === 'string' && filePath.toLowerCase().endsWith('.pdf'));
 
+    // --- 1. DIGITAL PDF PATH (Professors) ---
     if (isPDF) {
       try {
-        console.log('--- Attempting PDF Parse ---');
+        console.log('--- Attempting digital PDF Parse ---');
         const dataBuffer = Buffer.isBuffer(source) ? source : fs.readFileSync(source);
+        const data = await pdf(dataBuffer);
         
-        // Use the resolved function or its default export
-        const parseFunc = typeof pdf === 'function' ? pdf : (pdf?.default || null);
-        
-        if (!parseFunc) throw new Error('PDF_LIB_MISSING');
-
-        const data = await parseFunc(dataBuffer);
-        
-        if (!data.text || data.text.trim().length === 0) {
-          return await this.processWithTesseract(dataBuffer);
+        if (data.text && data.text.trim().length > 0) {
+          return data.text; // Success! Digital text extracted.
         }
-        return data.text;
+        
+        // --- 2. SCANNED PDF FALLBACK (Professors) ---
+        // If it's a scanned PDF (no text layer), send to OCR.space. 
+        // NEVER send PDFs to Tesseract.
+        console.log('PDF has no text layer. Routing to OCR.space...');
+        return await this.ocrSpaceService.recognizeHandwritingFromBuffer(source);
+        
       } catch (err) {
-        console.error('PDF Parse failed, falling back to Tesseract:', err.message);
-        return await this.processWithTesseract(source);
+        console.error('PDF Parse failed:', err.message);
+        return await this.ocrSpaceService.recognizeHandwritingFromBuffer(source);
       }
     }
 
-    // Default handwriting logic for ScanMine
+    // --- 3. IMAGE PATH (Students Hand-written Answers) ---
     if (forceEngine === 'ocrspace' || !isPDF) {
+      console.log('--- Image Detected: Sending to OCR.space ---');
       try {
         return await this.ocrSpaceService.recognizeHandwritingFromBuffer(source);
       } catch (err) {
+        // --- 4. ULTIMATE IMAGE FALLBACK ---
+        console.log('OCR.space failed, using local Tesseract fallback...');
         return await this.processWithTesseract(source);
       }
     }
   }
 
   async processWithTesseract(imageSource) {
-    console.log('--- Running Vercel-Stable Tesseract ---');
+    console.log('--- Running Local Vercel Tesseract ---');
     try {
-      // Direct recognize call is the most stable for Serverless environments
+      // Tesseract will only ever receive Images now, never PDFs.
       const { data: { text } } = await Tesseract.recognize(
         imageSource,
         'eng',
