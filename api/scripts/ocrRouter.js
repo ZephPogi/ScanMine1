@@ -4,6 +4,7 @@ const fs = require('fs');
 
 // VERCEL FIX: Standard require so Vercel bundles it properly. No try/catch.
 const pdf = require('pdf-parse');
+const pdfLib = require('pdf-parse');
 
 class OCRRouter {
   constructor() {
@@ -21,15 +22,20 @@ class OCRRouter {
       try {
         console.log('--- Attempting digital PDF Parse ---');
         const dataBuffer = Buffer.isBuffer(source) ? source : fs.readFileSync(source);
-        const data = await pdf(dataBuffer);
+        
+        // THE FIX: Intelligently find the actual function, regardless of how Vercel bundled it.
+        const parseFunc = typeof pdfLib === 'function' ? pdfLib : (pdfLib.default || pdfLib);
+        
+        if (typeof parseFunc !== 'function') {
+           throw new Error("pdf-parse failed to export a valid function in Vercel.");
+        }
+
+        const data = await parseFunc(dataBuffer);
         
         if (data.text && data.text.trim().length > 0) {
-          return data.text; // Success! Digital text extracted.
+          return data.text; // Success!
         }
         
-        // --- 2. SCANNED PDF FALLBACK (Professors) ---
-        // If it's a scanned PDF (no text layer), send to OCR.space. 
-        // NEVER send PDFs to Tesseract.
         console.log('PDF has no text layer. Routing to OCR.space...');
         return await this.ocrSpaceService.recognizeHandwritingFromBuffer(source);
         

@@ -40,19 +40,32 @@ class OCRSpaceService {
     try {
       const formData = new FormData();
 
+      // SMART DETECTION: Check the "magic bytes" of the buffer to see if it's a PDF.
+      // All PDF files start with the hex bytes: 25 50 44 46 ('%PDF')
+      const isPdfBuffer = imageBuffer.length > 4 && 
+                          imageBuffer[0] === 0x25 && 
+                          imageBuffer[1] === 0x50 && 
+                          imageBuffer[2] === 0x44 && 
+                          imageBuffer[3] === 0x46;
+
+      const uploadFilename = isPdfBuffer ? 'document.pdf' : 'image.png';
+      const uploadContentType = isPdfBuffer ? 'application/pdf' : 'image/png';
+
       formData.append('file', imageBuffer, {
-        filename: 'image.png',
-        contentType: 'image/png'
+        filename: uploadFilename,
+        contentType: uploadContentType
       });
 
       formData.append('apikey', this.apiKey);
       formData.append('language', 'eng');
       formData.append('detectOrientation', 'true');
       formData.append('scale', 'true');
-      formData.append('OCREngine', '3');
+      
+      // CRITICAL FIX: Use Engine 2 first. Engine 3 is too slow and causes Vercel timeouts.
+      formData.append('OCREngine', '2');
       formData.append('isTable', 'false');
 
-      console.log('Sending to OCR.space API (Buffer Upload with OCREngine=3)...');
+      console.log(`Sending to OCR.space API (File: ${uploadFilename}, Engine: 2)...`);
       console.log(`Buffer size: ${imageBuffer.length} bytes`);
 
       const response = await axios.post(this.apiUrl, formData, {
@@ -61,12 +74,12 @@ class OCRSpaceService {
         },
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
-        timeout: 45000
+        timeout: 40000 // Cut off slightly before Vercel kills it
       });
 
       if (response.data.IsErroredOnProcessing) {
-        console.error('OCR.space Error:', response.data.ErrorMessage);
-        return await this.recognizeHandwritingBufferUploadEngine2(imageBuffer);
+        console.error('OCR.space Error (Engine 2):', response.data.ErrorMessage);
+        return await this.recognizeHandwritingBufferUploadEngine1(imageBuffer, uploadFilename, uploadContentType);
       }
 
       const parsedResults = response.data.ParsedResults || [];
@@ -77,36 +90,32 @@ class OCRSpaceService {
       }
 
       if (!extractedText.trim()) {
-        console.log('Engine 3 returned empty text, trying Engine 2...');
-        return await this.recognizeHandwritingBufferUploadEngine2(imageBuffer);
+        console.log('Engine 2 returned empty text, trying Engine 1 fallback...');
+        return await this.recognizeHandwritingBufferUploadEngine1(imageBuffer, uploadFilename, uploadContentType);
       }
 
       return extractedText;
     } catch (error) {
       console.error('OCR.space Buffer Upload Error:', error.message);
-      return await this.recognizeHandwritingBufferUploadEngine2(imageBuffer);
+      throw error;
     }
   }
 
-  async recognizeHandwritingBufferUploadEngine2(imageBuffer) {
-    if (!this.apiKey) {
-      throw new Error('OCR_SPACE_API_KEY not set in environment variables');
-    }
-
+  // Changed fallback from Engine 2 to Engine 1, since Engine 2 is now our primary
+  async recognizeHandwritingBufferUploadEngine1(imageBuffer, filename, contentType) {
+    console.log('--- Falling back to OCR Engine 1 ---');
     try {
       const formData = new FormData();
 
       formData.append('file', imageBuffer, {
-        filename: 'image.png',
-        contentType: 'image/png'
+        filename: filename,
+        contentType: contentType
       });
 
       formData.append('apikey', this.apiKey);
       formData.append('language', 'eng');
-      formData.append('detectOrientation', 'true');
       formData.append('scale', 'true');
-      formData.append('OCREngine', '2');
-      formData.append('isTable', 'false');
+      formData.append('OCREngine', '1'); // Engine 1 is the fastest, good for clean text
 
       const response = await axios.post(this.apiUrl, formData, {
         headers: {
@@ -114,7 +123,7 @@ class OCRSpaceService {
         },
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
-        timeout: 45000
+        timeout: 40000
       });
 
       if (response.data.IsErroredOnProcessing) {
