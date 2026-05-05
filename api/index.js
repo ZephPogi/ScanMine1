@@ -274,17 +274,17 @@ app.post('/api/upload-answer-key', async (req, res) => {
       return res.status(400).json({ error: 'Missing examId or answers' });
     }
 
-    // 1. Delete old answers for this exam so we don't get duplicates
+    // 1. Delete old answers for this exam
     await db.query('DELETE FROM answer_keys WHERE exam_id = $1', [examId]);
 
-    // 2. Parse the answers. This handles BOTH comma-separated and multiline OCR text!
+    // 2. Split the OCR text into individual lines
     const answerArray = answers.split(/[\n,]+/).map(a => a.trim()).filter(a => a.length > 0);
 
-    // 3. Insert each answer into the PostgreSQL database
+    // 3. Insert using your exact column names: exam_id, answer_text, and question_text
     for (let i = 0; i < answerArray.length; i++) {
       await db.query(
-        'INSERT INTO answer_keys (exam_id, question_number, correct_answer) VALUES ($1, $2, $3)',
-        [examId, i + 1, answerArray[i]]
+        'INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ($1, $2, $3)',
+        [examId, answerArray[i], `Question ${i + 1}`] 
       );
     }
 
