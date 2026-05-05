@@ -159,7 +159,7 @@ const fetchStudents = useCallback(async () => {
     }
   };
 
-  const handleScanRecord = async () => {
+ const handleScanRecord = async () => {
     if (!selectedStudentId || !selectedExamId) {
       alert('Please select a student and an exam first.');
       return;
@@ -175,6 +175,7 @@ const fetchStudents = useCallback(async () => {
       formData.append('studentId', selectedStudentId);
       formData.append('examId', selectedExamId);
       
+      // FIX: Ensure the file is sent as a Blob if it's a captured image
       if (capturedImage) {
         formData.append('studentPaper', capturedImage, 'captured_paper.jpg');
       } else if (scanFile) {
@@ -189,32 +190,20 @@ const fetchStudents = useCallback(async () => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to grade paper');
 
-      const studentName = students.find(s => s.id === parseInt(selectedStudentId))?.name || 'Student';
-      const examTitle = exams.find(e => e.id === parseInt(selectedExamId))?.title || 'Exam';
-
-      // Calculate percentage from backend response result object
-      const totalScore = data.result.totalScore || 0;
-      const maxScore = data.result.maxScore || 1;
-      const percentage = ((totalScore / maxScore) * 100).toFixed(0);
-
-      const newResult = {
-        id: data.result.submission_id || Date.now(),
-        name: studentName,
-        exam: examTitle,
-        submittedBy: 'Teacher (Scan)',
-        method: 'AI Grading',
-        score: `${percentage}%`,
-        status: percentage >= 50 ? 'Pass' : 'Fail',
-        feedback: data.result.feedback || ''
-      };
-
-      // Remove existing result for this student/exam combo if any, then add new one
-      setStudentResults(prev => [newResult, ...prev.filter(r => !(r.name === studentName && r.exam === examTitle))]);
+      // SUCCESS LOGIC
+      alert("Score recorded successfully!");
       
+      // RESET FORM
       setShowScanModal(false);
       setScanFile(null);
       setCapturedImage(null);
-      fetchSubmissions(); // Refresh to ensure IDs are synced with DB
+
+      // THE FIX: Wait for the fetch to finish before ending the scanning state
+      // This ensures the new record from the DB is loaded into the UI.
+      if (typeof fetchSubmissions === 'function') {
+        await fetchSubmissions(selectedExamId); 
+      }
+
     } catch (error) {
       console.error("Error grading:", error);
       alert("Error during scanning: " + error.message);
@@ -222,7 +211,7 @@ const fetchStudents = useCallback(async () => {
       setIsScanning(false);
     }
   };
-
+  
   const handleManualGrade = async () => {
     if (!selectedStudentId || !selectedExamId) {
       alert('Please select a student and an exam first.');
