@@ -42,59 +42,41 @@ class OCRSpaceService {
     try {
       const formData = new FormData();
 
-      // Check the "magic bytes" to see if it's a PDF
-      const isPdfBuffer = imageBuffer.length > 4 &&
-                          imageBuffer[0] === 0x25 &&
-                          imageBuffer[1] === 0x50 &&
-                          imageBuffer[2] === 0x44 &&
-                          imageBuffer[3] === 0x46;
+      // 1. Detect File Type
+      const isPdfBuffer = imageBuffer.length > 4 && 
+                          imageBuffer[0] === 0x25 && 
+                          imageBuffer[1] === 0x50;
 
-      const uploadContentType = isPdfBuffer ? 'application/pdf' : 'image/png';
+      // 2. THE CRITICAL CHANGE: Use 'file' instead of 'base64Image'
+      // This sends raw bytes, which Engine 3 handles much more reliably
+      formData.append('file', imageBuffer, {
+        filename: isPdfBuffer ? 'document.pdf' : 'captured_paper.jpg',
+        contentType: isPdfBuffer ? 'application/pdf' : 'image/jpeg',
+      });
 
-      // THE FIX: Convert the binary Buffer into a Base64 String.
-      // This stops Axios from hanging up while trying to stream raw bytes.
-      const base64Data = imageBuffer.toString('base64');
-      const base64String = `data:${uploadContentType};base64,${base64Data}`;
-
-      formData.append('base64Image', base64String);
       formData.append('apikey', this.apiKey);
       formData.append('language', 'eng');
       formData.append('detectOrientation', 'true');
       formData.append('scale', 'true');
-      formData.append('OCREngine', engine); // Use the engine parameter
+      formData.append('OCREngine', engine); // This will be '3' for student papers
       formData.append('isTable', 'false');
 
-      console.log(`Sending to OCR.space API via Base64 (Engine: ${engine})...`);
+      console.log(`Uploading Binary to OCR.space (Engine: ${engine})...`);
 
       const response = await axios.post(this.apiUrl, formData, {
         headers: {
-          ...formData.getHeaders()
+          ...formData.getHeaders() // Necessary for multi-part binary data
         },
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-        timeout: 40000 // Increased to 40s for slower handwriting processing
+        timeout: 45000 // Give Engine 3 more time to "think"
       });
 
       if (response.data.IsErroredOnProcessing) {
-        console.error('OCR.space Error:', response.data.ErrorMessage);
         throw new Error(response.data.ErrorMessage || 'OCR API Error');
       }
 
-      const parsedResults = response.data.ParsedResults || [];
-      let extractedText = '';
-
-      for (const result of parsedResults) {
-        extractedText += result.ParsedText || '';
-      }
-
-      if (!extractedText.trim()) {
-        console.log('OCR returned empty text.');
-      }
-
-      return extractedText;
+      return response.data.ParsedResults?.map(r => r.ParsedText).join('\n') || "";
     } catch (error) {
-      console.error('OCR.space Base64 Upload Error:', error.message);
-      // We throw the error so the router knows it failed, avoiding the weird Buffer crash
+      console.error('OCR.space Upload Error:', error.message);
       throw new Error("OCR.space processing failed.");
     }
   }
