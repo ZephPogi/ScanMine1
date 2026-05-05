@@ -61,24 +61,21 @@ const AutoGradingResults = () => {
   }, [section?.id]);
 
 const fetchStudents = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/classes/${section.id}/students`);
-      if (response.ok) {
-        const data = await response.json();
-        
-        // --- THE FIX IS HERE ---
-        // We force the frontend 'id' to equal the database 'user_id'
-        const mappedStudents = data.map(student => ({
-          ...student,
-          id: student.user_id 
-        }));
-        
-        setStudents(Array.isArray(mappedStudents) ? mappedStudents : []);
-      }
-    } catch (error) {
-      console.error('Error fetching students:', error);
+  try {
+    const response = await fetch(`/api/classes/${section.id}/students`);
+    if (response.ok) {
+      const data = await response.json();
+      // Force the student ID to be the user_id (6 or 7)
+      const mapped = data.map(s => ({
+        ...s,
+        id: s.user_id 
+      }));
+      setStudents(Array.isArray(mapped) ? mapped : []);
     }
-  }, [section?.id]);
+  } catch (error) {
+    console.error('Error fetching students:', error);
+  }
+}, [section?.id]);
 
   const fetchExams = useCallback(async () => {
     try {
