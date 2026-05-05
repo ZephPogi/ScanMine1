@@ -2,55 +2,40 @@ const Tesseract = require('tesseract.js');
 const OCRSpaceService = require('./ocrSpaceService');
 const fs = require('fs');
 const path = require('path');
-
-// Standardize PDF import to match package.json
-const pdf = require('pdf-parse');
+// Fixed Import for Vercel bundling
+const pdf = require('pdf-parse/lib/pdf-parse.js'); 
 
 class OCRRouter {
   constructor() {
     this.ocrSpaceService = new OCRSpaceService();
   }
 
-  getFileType(filePath, mimetype = null) {
-    if (mimetype === 'application/pdf') return 'pdf';
-    if (mimetype?.startsWith('image/')) return 'image';
-    const ext = path.extname(filePath || '').toLowerCase();
-    return ext === '.pdf' ? 'pdf' : 'image';
-  }
-
   async route(filePath, options = {}) {
     const { mimetype = null, forceEngine = null, imageBuffer = null } = options;
-    const fileType = this.getFileType(filePath, mimetype);
     const source = imageBuffer || filePath;
+    const isPDF = mimetype === 'application/pdf' || 
+                 (typeof filePath === 'string' && filePath.toLowerCase().endsWith('.pdf'));
 
-    if (fileType === 'pdf') {
+    if (isPDF) {
       try {
         console.log('--- Attempting PDF Parse ---');
-        // Ensure source is a Buffer before passing to pdf-parse
         const dataBuffer = Buffer.isBuffer(source) ? source : fs.readFileSync(source);
-
-        const data = await pdf(dataBuffer).catch(err => {
-          console.error('pdf-parse internal error:', err);
-          return { text: "INTERNAL_PARSE_ERROR" };
-        });
-
-        if (data.text === "INTERNAL_PARSE_ERROR" || !data.text) {
-          console.log('Falling back to Tesseract for PDF image...');
+        // Explicitly calling the library
+        const data = await pdf(dataBuffer);
+        
+        if (!data.text || data.text.trim().length === 0) {
           return await this.processWithTesseract(dataBuffer);
         }
-
         return data.text;
       } catch (err) {
-        console.error('PDF Extraction Route failed:', err.message);
+        console.error('PDF Parse failed, falling back to Tesseract:', err.message);
         return await this.processWithTesseract(source);
       }
     }
 
-    if (forceEngine === 'ocrspace' || fileType === 'image') {
+    // Image/Handwriting Logic
+    if (forceEngine === 'ocrspace' || !isPDF) {
       try {
-        if (Buffer.isBuffer(source) && source.length < 500) {
-          throw new Error("Empty buffer.");
-        }
         return await this.ocrSpaceService.recognizeHandwritingFromBuffer(source);
       } catch (err) {
         return await this.processWithTesseract(source);
@@ -59,25 +44,26 @@ class OCRRouter {
   }
 
   async processWithTesseract(imageSource) {
-    // Use createWorker with explicit CDN URLs to prevent ENOENT errors on Vercel
-    const worker = await Tesseract.createWorker({
-      logger: m => console.log(m),
-      // Explicitly set CDN paths for Vercel compatibility
-      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
-      langPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/',
-      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract-core.wasm.js',
+    console.log('--- Running External CDN Tesseract ---');
+    const { createWorker } = Tesseract;
+    
+    // We create the worker with EXPLICIT CDN paths to bypass node_modules
+    const worker = await createWorker('eng', 1, {
+      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@v5.0.0/dist/worker.min.js',
+      langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@v5.0.0/tesseract-core.wasm.js',
+      logger: m => console.log(m.status)
     });
 
-    await worker.loadLanguage('eng');
-    await worker.initialize('eng');
-
-    // Ensure imageSource is a Buffer
-    const imageBuffer = Buffer.isBuffer(imageSource) ? imageSource : fs.readFileSync(imageSource);
-
-    const { data: { text } } = await worker.recognize(imageBuffer);
-    await worker.terminate();
-
-    return text;
+    try {
+      const { data: { text } } = await worker.recognize(imageSource);
+      await worker.terminate();
+      return text;
+    } catch (err) {
+      if (worker) await worker.terminate();
+      console.error('Tesseract failed:', err.message);
+      return "OCR_FALLBACK_FAILED";
+    }
   }
 
   async processStudentPaper(imagePath, imageBuffer = null) {
