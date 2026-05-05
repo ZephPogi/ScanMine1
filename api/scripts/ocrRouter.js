@@ -17,9 +17,6 @@ class OCRRouter {
 
   /**
    * Determines the file type
-   * @param {string} filePath - Path to the file
-   * @param {string} mimetype - MIME type if available
-   * @returns {string} - 'pdf', 'image', or 'unknown'
    */
   getFileType(filePath, mimetype = null) {
     if (mimetype) {
@@ -27,7 +24,6 @@ class OCRRouter {
       if (mimetype.startsWith('image/')) return 'image';
     }
 
-    // Safety check if filePath is a Buffer on Vercel instead of a string
     if (Buffer.isBuffer(filePath)) {
       return mimetype === 'application/pdf' ? 'pdf' : 'image';
     }
@@ -43,50 +39,33 @@ class OCRRouter {
 
   /**
    * Determines if the content is likely handwritten
-   * This is a heuristic - in production, you might use ML classification
-   * @param {string|Buffer} filePath - Path to the image file or Buffer
-   * @returns {Promise<boolean>} - True if likely handwritten
    */
   static async isLikelyHandwritten(filePath) {
     try {
-      // Heuristic: Check image dimensions and quality
-      // Handwritten papers are often photos with lower DPI
       const { createCanvas, loadImage } = require('canvas');
       const img = await loadImage(filePath);
-      
-      // If image is very large (> 3000px), it's likely a scan (printed)
-      // If it's moderate size (500-2000px), it's likely a photo (handwritten)
       const maxDimension = Math.max(img.width, img.height);
       
-      if (maxDimension > 3000) {
-        return false; // Likely scanned/printed
-      }
+      if (maxDimension > 3000) return false; 
+      if (maxDimension < 500) return false; 
       
-      if (maxDimension < 500) {
-        return false; // Too small, unclear
-      }
-      
-      // Default to assuming handwritten for student submissions
       return true;
     } catch (error) {
       console.error('Error detecting handwriting:', error);
-      return true; // Default to handwritten on error
+      return true; 
     }
   }
 
   /**
    * Routes the OCR request to the appropriate engine
-   * @param {string|Buffer} filePath - Path to the file or Buffer
-   * @param {object} options - Options for routing
-   * @returns {Promise<string>} - Extracted text
    */
   async route(filePath, options = {}) {
     const {
       mimetype = null,
-      forceEngine = null, // 'ocrspace' or 'tesseract' to force specific engine
+      forceEngine = null,
       preprocess = true,
-      isHandwritten = null, // Override handwriting detection
-      imageBuffer = null // Optional buffer for in-memory processing
+      isHandwritten = null,
+      imageBuffer = null 
     } = options;
 
     const fileType = this.getFileType(filePath, mimetype);
@@ -94,9 +73,7 @@ class OCRRouter {
     console.log(`--- OCR Routing ---`);
     console.log(`File type: ${fileType}`);
     console.log(`Path is Buffer: ${Buffer.isBuffer(filePath)}`);
-    console.log(`Image buffer provided: ${!!imageBuffer}`);
 
-    // Force specific engine if requested
     if (forceEngine === 'ocrspace') {
       console.log('Forced engine: OCR.space (handwriting)');
       return await this.processWithOCRSpace(filePath, { preprocess, imageBuffer });
@@ -107,14 +84,12 @@ class OCRRouter {
       return await this.processWithTesseract(filePath, { preprocess, fileType, imageBuffer });
     }
 
-    // Smart routing based on file type
     if (fileType === 'pdf') {
       console.log('Routing to Tesseract (PDF file)');
       return await this.processWithTesseract(filePath, { preprocess, fileType, imageBuffer });
     }
 
     if (fileType === 'image') {
-      // Determine if handwritten or printed
       const handwritten = isHandwritten !== null
         ? isHandwritten
         : !imageBuffer && await OCRRouter.isLikelyHandwritten(filePath);
@@ -128,16 +103,12 @@ class OCRRouter {
       }
     }
 
-    // Fallback to Tesseract for unknown types
     console.log('Unknown file type, routing to Tesseract (fallback)');
     return await this.processWithTesseract(filePath, { preprocess, fileType, imageBuffer });
   }
 
   /**
    * Processes image with OCR.space (handwriting engine)
-   * @param {string|Buffer} filePath - Path to the image file or Buffer
-   * @param {object} options - Processing options
-   * @returns {Promise<string>} - Extracted text
    */
   async processWithOCRSpace(filePath, options = {}) {
     const { preprocess = false, imageBuffer = null } = options;
@@ -146,105 +117,68 @@ class OCRRouter {
       console.log('Running OCR.space...');
       
       let text;
-      // Safely check if we are dealing with a Vercel memory buffer or a local file path
-      if (imageBuffer) {
-        text = await this.ocrSpaceService.recognizeHandwritingFromBuffer(imageBuffer);
-      } else if (Buffer.isBuffer(filePath)) {
-        text = await this.ocrSpaceService.recognizeHandwritingFromBuffer(filePath);
+      const source = imageBuffer || filePath;
+
+      if (Buffer.isBuffer(source)) {
+        // Safety check: Don't send tiny/corrupted buffers to the API
+        if (source.length < 500) {
+           throw new Error(`Buffer too small (${source.length} bytes). Image capture likely failed.`);
+        }
+        text = await this.ocrSpaceService.recognizeHandwritingFromBuffer(source);
       } else {
-        text = await this.ocrSpaceService.recognizeHandwriting(filePath);
+        text = await this.ocrSpaceService.recognizeHandwriting(source);
       }
 
       return text;
 
     } catch (error) {
       console.error('OCR.space processing failed:', error);
-      // Fallback to Tesseract if OCR.space fails
       console.log('Falling back to Tesseract...');
       return await this.processWithTesseract(filePath, { preprocess: false, imageBuffer });
     }
   }
 
   /**
-   * Processes file with Tesseract.js (LSTM engine)
-   * @param {string|Buffer} filePath - Path to the file or Buffer
-   * @param {object} options - Processing options
-   * @returns {Promise<string>} - Extracted text
+   * Processes file with Tesseract.js using CDN to avoid Vercel WASM errors
    */
   async processWithTesseract(filePath, options = {}) {
     const { preprocess = true, fileType = 'image', imageBuffer = null } = options;
 
     try {
-      // For PDFs, use pdf-parse first (more reliable for text extraction)
       if (fileType === 'pdf') {
         console.log('Extracting text from PDF using pdf-parse...');
-        const { PDFParse } = require('pdf-parse');
-        
-        // SAFE BUFFER CHECK FOR VERCEL
-        let dataBuffer;
-        if (imageBuffer) {
-          dataBuffer = imageBuffer;
-        } else if (Buffer.isBuffer(filePath)) {
-          dataBuffer = filePath;
-        } else {
-          dataBuffer = fs.readFileSync(filePath);
-        }
-
-        const parser = new PDFParse({ data: dataBuffer });
-        const result = await parser.getText();
-        await parser.destroy();
-
-        console.log('--- PDF Text Extracted ---');
-        console.log(result.text);
-        console.log('-------------------------');
-
+        const PDF = require('pdf-parse');
+        const dataBuffer = imageBuffer || (Buffer.isBuffer(filePath) ? filePath : fs.readFileSync(filePath));
+        const result = await PDF(dataBuffer);
         return result.text || '';
       }
 
-      // For images, use Tesseract with LSTM
-      console.log('Processing image with Tesseract.js (LSTM)...');
+      console.log('Processing image with Tesseract.js (CDN/WASM Fix)...');
 
-      let imageSource;
-      if (imageBuffer) {
-        imageSource = imageBuffer;
-      } else if (Buffer.isBuffer(filePath)) {
-        imageSource = filePath;
-      } else {
-        imageSource = filePath;
-      }
+      let imageSource = imageBuffer || filePath;
 
-      // Preprocess image if enabled (Only run if it's a local file path, skip if Vercel Buffer to avoid string errors)
-      if (preprocess && !imageBuffer && !Buffer.isBuffer(filePath)) {
-        console.log('Preprocessing image for Tesseract...');
-        const preprocessedBuffer = await ImagePreprocessor.preprocess(filePath, {
-          grayscale: true,
-          binarize: true,
-          upscale: true,
-          scaleFactor: 2,
-          threshold: 140
-        });
-
-        // Use buffer directly with Tesseract
-        imageSource = preprocessedBuffer;
-      }
-
-      // Configure Tesseract with LSTM (OEM 1)
-      const result = await Tesseract.recognize(imageSource, 'eng', {
-        // OEM 1 = LSTM only (best accuracy)
-        tessedit_ocr_engine_mode: '1',
-        // PSM 6 = Assume a single uniform block of text
-        tessedit_pageseg_mode: '6',
-        // Enable LSTM
-        lstm: true,
+      // START OF VERCEL WASM FIX
+      const { createWorker } = require('tesseract.js');
+      const worker = await createWorker('eng', 1, {
+        workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@v5.0.0/dist/worker.min.js',
+        langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+        corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@v5.0.0/tesseract-core.wasm.js',
       });
 
-      const text = result.data.text || '';
+      await worker.setParameters({
+        tessedit_ocr_engine_mode: '1', 
+        tessedit_pageseg_mode: '6',    
+      });
+
+      const { data: { text } } = await worker.recognize(imageSource);
+      await worker.terminate(); 
+      // END OF FIX
 
       console.log('--- Tesseract Result ---');
       console.log(text);
       console.log('-----------------------');
 
-      return text;
+      return text || '';
 
     } catch (error) {
       console.error('Tesseract processing failed:', error);
@@ -252,12 +186,6 @@ class OCRRouter {
     }
   }
 
-  /**
-   * Convenience method for student paper OCR (handwritten)
-   * @param {string|Buffer} imagePath - Path to student paper image
-   * @param {Buffer} imageBuffer - Optional buffer of the image
-   * @returns {Promise<string>} - Extracted text
-   */
   async processStudentPaper(imagePath, imageBuffer = null) {
     return await this.route(imagePath, {
       forceEngine: 'ocrspace',
@@ -266,13 +194,6 @@ class OCRRouter {
     });
   }
 
-  /**
-   * Convenience method for answer key OCR (PDF/printed)
-   * @param {string|Buffer} filePath - Path to answer key file
-   * @param {string} mimetype - MIME type
-   * @param {Buffer} fileBuffer - Optional buffer of the file
-   * @returns {Promise<string>} - Extracted text
-   */
   async processAnswerKey(filePath, mimetype = null, fileBuffer = null) {
     return await this.route(filePath, {
       forceEngine: 'tesseract',
