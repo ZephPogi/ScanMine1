@@ -2,6 +2,7 @@ const Tesseract = require('tesseract.js');
 const OCRSpaceService = require('./ocrSpaceService');
 const fs = require('fs');
 const path = require('path');
+const pdf = require('pdf-parse'); // Change: standard import for pdf-parse
 
 class OCRRouter {
   constructor() {
@@ -21,16 +22,24 @@ class OCRRouter {
     const fileType = this.getFileType(filePath, mimetype);
     const source = imageBuffer || filePath;
 
-    // 1. PDF LOGIC (For Answer Keys)
+    // 1. FIXED PDF LOGIC
     if (fileType === 'pdf') {
-      console.log('Extracting Answer Key from PDF...');
-      const PDFParse = require('pdf-parse'); // Ensure this is installed
-      const dataBuffer = Buffer.isBuffer(source) ? source : fs.readFileSync(source);
-      const data = await PDFParse(dataBuffer);
-      return data.text;
+      try {
+        console.log('Extracting Answer Key from PDF...');
+        const dataBuffer = Buffer.isBuffer(source) ? source : fs.readFileSync(source);
+        
+        // Change: Call the imported 'pdf' function directly
+        const data = await pdf(dataBuffer);
+        
+        console.log('--- PDF Text Extracted ---');
+        return data.text;
+      } catch (err) {
+        console.error('PDF Extraction failed:', err.message);
+        throw new Error('Could not parse PDF file.');
+      }
     }
 
-    // 2. HANDWRITING LOGIC (For Student Papers)
+    // 2. HANDWRITING LOGIC
     if (forceEngine === 'ocrspace' || fileType === 'image') {
       try {
         console.log('Running OCR.space for handwriting...');
@@ -46,7 +55,6 @@ class OCRRouter {
   }
 
   async processWithTesseract(imageSource) {
-    // This is the "Vercel-safe" version that won't crash your server
     const { createWorker } = require('tesseract.js');
     const worker = await createWorker('eng', 1, {
       workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@v5.0.0/dist/worker.min.js',
