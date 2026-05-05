@@ -240,11 +240,11 @@ const handleScanRecord = async () => {
       setShowScanModal(false);
       setScanFile(null);
       setCapturedImage(null);
-
+      /*
       if (typeof fetchSubmissions === 'function') {
         await fetchSubmissions(selectedExamId); 
       }
-
+      */
     } catch (error) {
       console.error("Error grading:", error);
       alert("Error during scanning: " + error.message);
