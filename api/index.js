@@ -304,8 +304,9 @@ app.post('/api/upload-answer-key', async (req, res) => {
     const { examId, answers } = req.body;
     if (!examId || !answers) return res.status(400).json({ error: 'Missing data' });
 
-    // 1. Clear old keys for this exam
+    // 1. Clear old keys for this exam (prevent duplicates)
     await db.query('DELETE FROM answer_keys WHERE exam_id = $1', [examId]);
+    await db.query('DELETE FROM generated_questions WHERE exam_id = $1', [examId]);
 
     let questionCount = 0;
 
@@ -327,13 +328,14 @@ app.post('/api/upload-answer-key', async (req, res) => {
       const lines = answers.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
       for (const line of lines) {
-        // REGEX: Match "ANSWER NUMBER. QUESTION TEXT" format
+        // REGEX: Match "ANSWER NUMBER. QUESTION TEXT" format (bulletproof)
         // Examples: "B 1. Which of the following..." or "ScanMine 5. The name of..."
-        const match = line.match(/^([A-Za-z.\s]+)\s+(\d+)\.\s*(.*)$/);
+        // Extremely forgiving: captures anything before the number as answer
+        const match = line.match(/^\s*(.*?)\s+(\d+)\.\s*(.*)$/);
 
         if (match) {
           questionCount++;
-          const answer = match[1].trim(); // The letter/word before the number (e.g., "B" or "ScanMine")
+          const answer = match[1].trim(); // Anything before the number (trimmed)
           const qNum = match[2]; // The question number (e.g., "1" or "5")
           const questionText = match[3].trim() || `Question ${qNum}`; // The rest after the number
 
