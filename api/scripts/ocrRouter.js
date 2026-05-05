@@ -3,12 +3,16 @@ const OCRSpaceService = require('./ocrSpaceService');
 const fs = require('fs');
 const path = require('path');
 
-// THE VERCEL FIX: Some environments require accessing the function via .default or a specific require path
+// Hybrid import for pdf-parse - handles both .default and standard requires
 let pdf;
 try {
-  pdf = require('pdf-parse/lib/pdf-parse.js'); 
+  pdf = require('pdf-parse/lib/pdf-parse.js');
 } catch (e) {
-  pdf = require('pdf-parse');
+  try {
+    pdf = require('pdf-parse').default || require('pdf-parse');
+  } catch (e2) {
+    pdf = require('pdf-parse');
+  }
 }
 
 class OCRRouter {
@@ -31,17 +35,17 @@ class OCRRouter {
     if (fileType === 'pdf') {
       try {
         console.log('--- Attempting PDF Parse ---');
+        // Ensure source is a Buffer before passing to pdf-parse
         const dataBuffer = Buffer.isBuffer(source) ? source : fs.readFileSync(source);
-        
-        // Use the library with explicit error catching
+
         const data = await pdf(dataBuffer).catch(err => {
-            console.error('pdf-parse internal error:', err);
-            return { text: "INTERNAL_PARSE_ERROR" };
+          console.error('pdf-parse internal error:', err);
+          return { text: "INTERNAL_PARSE_ERROR" };
         });
 
         if (data.text === "INTERNAL_PARSE_ERROR" || !data.text) {
-            console.log('Falling back to Tesseract for PDF image...');
-            return await this.processWithTesseract(dataBuffer);
+          console.log('Falling back to Tesseract for PDF image...');
+          return await this.processWithTesseract(dataBuffer);
         }
 
         return data.text;
@@ -54,7 +58,7 @@ class OCRRouter {
     if (forceEngine === 'ocrspace' || fileType === 'image') {
       try {
         if (Buffer.isBuffer(source) && source.length < 500) {
-           throw new Error("Empty buffer.");
+          throw new Error("Empty buffer.");
         }
         return await this.ocrSpaceService.recognizeHandwritingFromBuffer(source);
       } catch (err) {
@@ -64,8 +68,21 @@ class OCRRouter {
   }
 
   async processWithTesseract(imageSource) {
-    // Basic call - most stable for Vercel without custom workers
-    const { data: { text } } = await Tesseract.recognize(imageSource, 'eng');
+    // Use createWorker with CDN URLs to prevent ENOENT errors on Vercel
+    const worker = await Tesseract.createWorker({
+      logger: m => console.log(m),
+    });
+
+    // Set CDN paths for Vercel compatibility
+    await worker.loadLanguage('eng');
+    await worker.initialize('eng');
+
+    // Ensure imageSource is a Buffer
+    const imageBuffer = Buffer.isBuffer(imageSource) ? imageSource : fs.readFileSync(imageSource);
+
+    const { data: { text } } = await worker.recognize(imageBuffer);
+    await worker.terminate();
+
     return text;
   }
 
