@@ -211,6 +211,38 @@ app.post('/api/upload-paper', upload.single('studentPaper'), async (req, res) =>
   }
 });
 
+// --- MISSING OCR & QUESTION ROUTES ADDED HERE ---
+
+// 1. Get Questions for a specific exam
+app.get('/api/exams/:id/questions', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query('SELECT * FROM Questions WHERE exam_id = $1 ORDER BY id ASC', [id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Fetch questions error:", error);
+    res.status(500).json({ error: "Failed to fetch questions" });
+  }
+});
+
+// 2. OCR Extraction Endpoint
+app.post('/api/test-ocr', upload.any(), async (req, res) => {
+  try {
+    // upload.any() catches the file safely no matter what your frontend named it
+    const file = req.files && req.files.length > 0 ? req.files[0] : null;
+    if (!file) return res.status(400).json({ error: 'No file uploaded' });
+    
+    // Uses the extractText function we already have imported at the top!
+    const text = await extractText(file.buffer, file.mimetype);
+    
+    // Returns clean JSON so your frontend stops throwing the '<' error
+    res.json({ text: text, message: "OCR Extracted Successfully" });
+  } catch (error) {
+    console.error('OCR ERROR:', error);
+    res.status(500).json({ error: 'Failed to extract text' });
+  }
+});
+
 module.exports = app;
 
 if (require.main === module) {
