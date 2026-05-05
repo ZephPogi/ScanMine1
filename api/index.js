@@ -322,15 +322,26 @@ app.post('/api/upload-answer-key', async (req, res) => {
         }
       }
     } 
-    // 3. FALLBACK: If the frontend sent a raw string (Manual definition)
+    // 3. FALLBACK: If the frontend sent a raw string (OCR or Manual definition)
     else if (typeof answers === 'string') {
-      const lines = answers.split(',').map(a => a.trim()).filter(a => a.length > 0);
-      for (let i = 0; i < lines.length; i++) {
-        questionCount++;
-        await db.query(
-          'INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ($1, $2, $3)',
-          [examId, lines[i], `Question ${i + 1}`]
-        );
+      const lines = answers.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+      for (const line of lines) {
+        // REGEX: Match "ANSWER NUMBER. QUESTION TEXT" format
+        // Examples: "B 1. Which of the following..." or "ScanMine 5. The name of..."
+        const match = line.match(/^([A-Za-z.\s]+)\s+(\d+)\.\s*(.*)$/);
+
+        if (match) {
+          questionCount++;
+          const answer = match[1].trim(); // The letter/word before the number (e.g., "B" or "ScanMine")
+          const qNum = match[2]; // The question number (e.g., "1" or "5")
+          const questionText = match[3].trim() || `Question ${qNum}`; // The rest after the number
+
+          await db.query(
+            'INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ($1, $2, $3)',
+            [examId, answer, questionText]
+          );
+        }
       }
     }
 
