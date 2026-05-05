@@ -23,6 +23,7 @@ const SectionDetails = ({ section, onBack }) => {
   // eslint-disable-next-line no-unused-vars
   const [isProcessingOCR, setIsProcessingOCR] = useState(false);
   const examInputRef = useRef(null);
+  const [extractedOCRText, setExtractedOCRText] = useState('');
   // eslint-disable-next-line no-unused-vars
   const answerKeyInputRef = useRef(null);
 
@@ -155,6 +156,7 @@ const SectionDetails = ({ section, onBack }) => {
       const data = await response.json();
       if (response.ok) {
         alert(`OCR processed successfully! Extracted ${data.answersCount} answers.`);
+        setExtractedOCRText(data.text);
         setAnswerKeyImage(null);
         // Re-fetch exam questions to update the UI
         if (showExamDetails) {
@@ -482,6 +484,16 @@ const SectionDetails = ({ section, onBack }) => {
                   {isProcessingOCR ? 'Processing OCR...' : 'Extract Answers via OCR'}
                 </button>
                 <p className="manual-hint">Upload an image with answers marked (e.g., "A 1.", "B 2.", etc.)</p>
+
+                {/* --- ADD THIS NEW DISPLAY BOX --- */}
+                {extractedOCRText && (
+                  <div style={{ marginTop: '15px', padding: '15px', background: '#f8f9fa', border: '1px solid #ddd', borderRadius: '8px' }}>
+                    <h5 style={{ margin: '0 0 10px 0', color: '#333' }}>Raw OCR Extraction Result:</h5>
+                    <pre style={{ whiteSpace: 'pre-wrap', fontSize: '13px', margin: 0, color: '#555', fontFamily: 'monospace' }}>
+                      {extractedOCRText}
+                    </pre>
+                  </div>
+                )}
               </div>
             </div>
           </div>
