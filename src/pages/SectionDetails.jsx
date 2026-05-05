@@ -1,11 +1,10 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Eye } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import './SectionDetails.css';
 import Sidebar from './Sidebar';
 
 // --- THE SMART PARSER ---
-// This reads the raw OCR text and structures it based on your ScanMine layout
 const parseScanMineText = (rawText) => {
   if (!rawText) return [];
   
@@ -16,15 +15,13 @@ const parseScanMineText = (rawText) => {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Detect Questions (Starts with a number and a dot, e.g., "1. ")
     if (/^\d+\./.test(line)) {
       parsedQuestions.push({
         questionText: line,
         correctAnswer: pendingAnswer || '?'
       });
-      pendingAnswer = ''; // Reset for the next question
+      pendingAnswer = ''; 
     }
-    // Detect Answers (Ignore multiple choice options like A) and Headers)
     else if (
       !/^[A-D]\)/i.test(line) && 
       !line.toLowerCase().includes('part') &&
@@ -56,8 +53,6 @@ const SectionDetails = ({ section, onBack }) => {
   const [answerKeyImage, setAnswerKeyImage] = useState(null);
   const [isProcessingOCR, setIsProcessingOCR] = useState(false);
   
-  // NEW STATES FOR PARSER
-  const [extractedOCRText, setExtractedOCRText] = useState('');
   const [parsedOCRData, setParsedOCRData] = useState(null);
   const [formattedAnswersToSave, setFormattedAnswersToSave] = useState('');
 
@@ -101,8 +96,6 @@ const SectionDetails = ({ section, onBack }) => {
 
   const handleViewExam = async (exam) => {
     setShowExamDetails(exam);
-    // Reset states when opening a new exam
-    setExtractedOCRText('');
     setParsedOCRData(null);
     try {
       const response = await fetch(`/api/exams/${exam.id}/questions`);
@@ -190,13 +183,10 @@ const SectionDetails = ({ section, onBack }) => {
       const data = await response.json();
       if (response.ok) {
         alert('OCR processed successfully!');
-        setExtractedOCRText(data.text);
         
-        // PARSE THE TEXT
         const structuredData = parseScanMineText(data.text);
         setParsedOCRData(structuredData);
         
-        // Convert to Comma-Separated for the Backend (e.g., "B, C, ScanMine, Agile")
         const finalAnswersString = structuredData.map(q => q.correctAnswer).join(', ');
         setFormattedAnswersToSave(finalAnswersString);
         
@@ -221,21 +211,18 @@ const SectionDetails = ({ section, onBack }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           examId: showExamDetails.id,
-          answers: formattedAnswersToSave // Sending the clean, comma-separated string!
+          answers: formattedAnswersToSave
         })
       });
 
       if (response.ok) {
         alert('Answer key saved successfully to the database!');
-        // Refresh UI
         const questionsResponse = await fetch(`/api/exams/${showExamDetails.id}/questions`);
         if (questionsResponse.ok) {
           const questionsData = await questionsResponse.json();
           setExamQuestions(questionsData);
         }
-        // Clear the box so it looks clean
         setParsedOCRData(null);
-        setExtractedOCRText('');
       } else {
         const errorData = await response.json();
         alert('Failed to save answer key: ' + errorData.error);
@@ -450,7 +437,6 @@ const SectionDetails = ({ section, onBack }) => {
 
       {showExamDetails && (
         <div className="modal-overlay" onClick={() => setShowExamDetails(null)}>
-          {/* Ensure pointer-events works normally */}
           <div className="modal-content details-modal" style={{ pointerEvents: 'auto', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Exam Details: {showExamDetails.title}</h2>
@@ -498,7 +484,6 @@ const SectionDetails = ({ section, onBack }) => {
                   {isProcessingOCR ? 'Scanning Document...' : 'Extract Answers via OCR'}
                 </button>
 
-                {/* --- STRUCTURED PREVIEW BOX --- */}
                 {parsedOCRData && parsedOCRData.length > 0 && (
                   <div style={{ marginTop: '15px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '15px' }}>
                     <h5 style={{ margin: '0 0 10px 0', color: '#334155' }}>Preview: {parsedOCRData.length} Answers Detected</h5>
