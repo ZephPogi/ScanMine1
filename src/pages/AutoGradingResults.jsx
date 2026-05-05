@@ -1,3 +1,4 @@
+import imageCompression from 'browser-image-compression';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Camera, Eye, Trash2, Edit, X, CheckCircle, Clock, FileText } from 'lucide-react';
@@ -159,28 +160,46 @@ const fetchStudents = useCallback(async () => {
     }
   };
 
- const handleScanRecord = async () => {
+const handleScanRecord = async () => {
     if (!selectedStudentId || !selectedExamId) {
       alert('Please select a student and an exam first.');
       return;
     }
-    if (!scanFile && !capturedImage) {
+    
+    // Get whichever file the user provided
+    let imageToUpload = capturedImage || scanFile;
+    
+    if (!imageToUpload) {
       alert('Please capture a photo or upload an image.');
       return;
     }
     
     setIsScanning(true);
     try {
+      // --- AUTOMATIC COMPRESSION LOGIC START ---
+      console.log(`Original file size: ${(imageToUpload.size / 1024 / 1024).toFixed(2)} MB`);
+      
+      const compressionOptions = {
+        maxSizeMB: 4.5, // Safely under OCR.space's 5MB limit
+        maxWidthOrHeight: 1920, // Keeps enough resolution for Engine 3 to read handwriting
+        useWebWorker: true // Keeps the UI from freezing while compressing
+      };
+
+      try {
+        imageToUpload = await imageCompression(imageToUpload, compressionOptions);
+        console.log(`Compressed file size: ${(imageToUpload.size / 1024 / 1024).toFixed(2)} MB`);
+      } catch (compressionError) {
+        console.error("Compression failed:", compressionError);
+        throw new Error("Failed to compress the image before uploading.");
+      }
+      // --- AUTOMATIC COMPRESSION LOGIC END ---
+
       const formData = new FormData();
       formData.append('studentId', selectedStudentId);
       formData.append('examId', selectedExamId);
       
-      // FIX: Ensure the file is sent as a Blob if it's a captured image
-      if (capturedImage) {
-        formData.append('studentPaper', capturedImage, 'captured_paper.jpg');
-      } else if (scanFile) {
-        formData.append('studentPaper', scanFile);
-      }
+      // Append the newly compressed image!
+      formData.append('studentPaper', imageToUpload, 'captured_paper.jpg');
 
       const response = await fetch('/api/upload-paper', {
         method: 'POST',
@@ -190,16 +209,12 @@ const fetchStudents = useCallback(async () => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to grade paper');
 
-      // SUCCESS LOGIC
       alert("Score recorded successfully!");
       
-      // RESET FORM
       setShowScanModal(false);
       setScanFile(null);
       setCapturedImage(null);
 
-      // THE FIX: Wait for the fetch to finish before ending the scanning state
-      // This ensures the new record from the DB is loaded into the UI.
       if (typeof fetchSubmissions === 'function') {
         await fetchSubmissions(selectedExamId); 
       }
@@ -211,7 +226,7 @@ const fetchStudents = useCallback(async () => {
       setIsScanning(false);
     }
   };
-  
+
   const handleManualGrade = async () => {
     if (!selectedStudentId || !selectedExamId) {
       alert('Please select a student and an exam first.');

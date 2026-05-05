@@ -76,9 +76,15 @@ class OCRSpaceService {
 
       return response.data.ParsedResults?.map(r => r.ParsedText).join('\n') || "";
     } catch (error) {
-      console.error('OCR.space Upload Error:', error.message);
+      // THIS IS THE MAGIC DEBUG LOG
+      if (error.response) {
+        console.error('OCR.space Detailed Error:', JSON.stringify(error.response.data, null, 2));
+      } else {
+        console.error('OCR.space Network Error:', error.message);
+      }
       throw new Error("OCR.space processing failed.");
     }
+    
   }
 
   async recognizeHandwritingFileUpload(imagePath) {
