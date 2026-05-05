@@ -265,6 +265,37 @@ app.get('/api/submissions/:examId', async (req, res) => {
   }
 });
 
+// --- UPLOAD MANUAL OR OCR ANSWER KEY ---
+app.post('/api/upload-answer-key', async (req, res) => {
+  try {
+    const { examId, answers } = req.body;
+    
+    if (!examId || !answers) {
+      return res.status(400).json({ error: 'Missing examId or answers' });
+    }
+
+    // 1. Delete old answers for this exam so we don't get duplicates
+    await db.query('DELETE FROM answer_keys WHERE exam_id = $1', [examId]);
+
+    // 2. Parse the answers. This handles BOTH comma-separated and multiline OCR text!
+    const answerArray = answers.split(/[\n,]+/).map(a => a.trim()).filter(a => a.length > 0);
+
+    // 3. Insert each answer into the PostgreSQL database
+    for (let i = 0; i < answerArray.length; i++) {
+      await db.query(
+        'INSERT INTO answer_keys (exam_id, question_number, correct_answer) VALUES ($1, $2, $3)',
+        [examId, i + 1, answerArray[i]]
+      );
+    }
+
+    res.json({ success: true, message: "Answer key saved successfully!" });
+    
+  } catch (error) {
+    console.error("Error saving answer key:", error);
+    res.status(500).json({ error: "Failed to save answer key to the database." });
+  }
+});
+
 module.exports = app;
 
 if (require.main === module) {
