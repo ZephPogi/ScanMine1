@@ -3,17 +3,8 @@ const OCRSpaceService = require('./ocrSpaceService');
 const fs = require('fs');
 const path = require('path');
 
-// Hybrid import for pdf-parse - handles both .default and standard requires
-let pdf;
-try {
-  pdf = require('pdf-parse/lib/pdf-parse.js');
-} catch (e) {
-  try {
-    pdf = require('pdf-parse').default || require('pdf-parse');
-  } catch (e2) {
-    pdf = require('pdf-parse');
-  }
-}
+// Standardize PDF import to match package.json
+const pdf = require('pdf-parse');
 
 class OCRRouter {
   constructor() {
@@ -68,12 +59,15 @@ class OCRRouter {
   }
 
   async processWithTesseract(imageSource) {
-    // Use createWorker with CDN URLs to prevent ENOENT errors on Vercel
+    // Use createWorker with explicit CDN URLs to prevent ENOENT errors on Vercel
     const worker = await Tesseract.createWorker({
       logger: m => console.log(m),
+      // Explicitly set CDN paths for Vercel compatibility
+      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
+      langPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/',
+      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract-core.wasm.js',
     });
 
-    // Set CDN paths for Vercel compatibility
     await worker.loadLanguage('eng');
     await worker.initialize('eng');
 
