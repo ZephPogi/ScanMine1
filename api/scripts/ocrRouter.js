@@ -2,8 +2,14 @@ const Tesseract = require('tesseract.js');
 const OCRSpaceService = require('./ocrSpaceService');
 const fs = require('fs');
 const path = require('path');
-// CHANGE: Some versions of pdf-parse require this specific import style
-const pdf = require('pdf-parse'); 
+
+// THE VERCEL FIX: Some environments require accessing the function via .default or a specific require path
+let pdf;
+try {
+  pdf = require('pdf-parse/lib/pdf-parse.js'); 
+} catch (e) {
+  pdf = require('pdf-parse');
+}
 
 class OCRRouter {
   constructor() {
@@ -13,7 +19,6 @@ class OCRRouter {
   getFileType(filePath, mimetype = null) {
     if (mimetype === 'application/pdf') return 'pdf';
     if (mimetype?.startsWith('image/')) return 'image';
-    if (Buffer.isBuffer(filePath)) return mimetype === 'application/pdf' ? 'pdf' : 'image';
     const ext = path.extname(filePath || '').toLowerCase();
     return ext === '.pdf' ? 'pdf' : 'image';
   }
@@ -23,58 +28,44 @@ class OCRRouter {
     const fileType = this.getFileType(filePath, mimetype);
     const source = imageBuffer || filePath;
 
-    // 1. FIXED PDF LOGIC FOR VERCEL
     if (fileType === 'pdf') {
       try {
-        console.log('Extracting Answer Key from PDF...');
-        
-        // Ensure we are working with a Buffer
+        console.log('--- Attempting PDF Parse ---');
         const dataBuffer = Buffer.isBuffer(source) ? source : fs.readFileSync(source);
         
-        // Use the library function
-        const data = await pdf(dataBuffer);
-        
-        console.log('--- PDF Text Extracted ---');
+        // Use the library with explicit error catching
+        const data = await pdf(dataBuffer).catch(err => {
+            console.error('pdf-parse internal error:', err);
+            return { text: "INTERNAL_PARSE_ERROR" };
+        });
+
+        if (data.text === "INTERNAL_PARSE_ERROR" || !data.text) {
+            console.log('Falling back to Tesseract for PDF image...');
+            return await this.processWithTesseract(dataBuffer);
+        }
+
         return data.text;
       } catch (err) {
-        console.error('PDF Extraction failed:', err.message);
-        // Fallback: If pdf-parse failed, the file might be an image-based PDF
-        console.log('Attempting Tesseract fallback for PDF...');
+        console.error('PDF Extraction Route failed:', err.message);
         return await this.processWithTesseract(source);
       }
     }
 
-    // 2. HANDWRITING LOGIC (Student Papers)
     if (forceEngine === 'ocrspace' || fileType === 'image') {
       try {
-        console.log('Running OCR.space for handwriting...');
         if (Buffer.isBuffer(source) && source.length < 500) {
-           throw new Error("Captured image is too small/empty.");
+           throw new Error("Empty buffer.");
         }
         return await this.ocrSpaceService.recognizeHandwritingFromBuffer(source);
       } catch (err) {
-        console.log('OCR.space failed, falling back to Tesseract...');
         return await this.processWithTesseract(source);
       }
     }
   }
 
   async processWithTesseract(imageSource) {
-    // Vercel-safe Tesseract with CDN WASM loading
-    const { createWorker } = require('tesseract.js');
-    const worker = await createWorker('eng', 1, {
-      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@v5.0.0/dist/worker.min.js',
-      langPath: 'https://tessdata.projectnaptha.com/4.0.0',
-      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@v5.0.0/tesseract-core.wasm.js',
-    });
-    
-    await worker.setParameters({
-      tessedit_ocr_engine_mode: '1',
-      tessedit_pageseg_mode: '6',
-    });
-
-    const { data: { text } } = await worker.recognize(imageSource);
-    await worker.terminate();
+    // Basic call - most stable for Vercel without custom workers
+    const { data: { text } } = await Tesseract.recognize(imageSource, 'eng');
     return text;
   }
 
