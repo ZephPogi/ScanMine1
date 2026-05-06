@@ -329,35 +329,22 @@ app.post('/api/upload-answer-key', async (req, res) => {
       const lines = answers.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
       // Stateful Parser: Track candidate answer across lines
-      let currentCandidateAnswer = null;
+      let currentCandidate = null;
 
       for (const line of lines) {
-        // Filter noise: skip lines that start with noise patterns
-        if (line.startsWith('A)') || line.startsWith('PART') || line.length === 0) {
+        // 1. Skip noise lines entirely
+        if (line.startsWith('PART') || line.startsWith('Note:') || line.match(/^[A-D]\)/)) {
           continue;
         }
 
-        // Check if line is a short answer candidate (no number, just letter/word)
-        const isShortAnswer = !line.match(/\d/) && line.length < 20 && line.length > 0;
+        // 2. Check for Same-Line (e.g., "B 1. Question" or "ScanMine 5. Question")
+        const sameLineMatch = line.match(/^([A-Za-z0-9.\-]+)\s+(\d+)\.\s*(.*)$/);
+        if (sameLineMatch) {
+          const answer = sameLineMatch[1].trim();
+          const qNum = sameLineMatch[2];
+          const questionText = sameLineMatch[3].trim() || `Question ${qNum}`;
 
-        if (isShortAnswer) {
-          // Save as candidate answer
-          currentCandidateAnswer = line.trim();
-          console.log(`Candidate answer found: "${currentCandidateAnswer}"`);
-          continue;
-        }
-
-        // Check if line matches question format (e.g., "1. What is...")
-        const questionMatch = line.match(/^\s*(\d+)\.\s*(.*)$/);
-
-        if (questionMatch) {
-          const qNum = questionMatch[1];
-          const questionText = questionMatch[2].trim() || `Question ${qNum}`;
-
-          // Pair with candidate answer if we have one
-          const answer = currentCandidateAnswer || '?';
-
-          console.log(`Pairing Q${qNum} with answer: "${answer}"`);
+          console.log(`Same-line Q${qNum}: answer="${answer}"`);
 
           questionCount++;
           await db.query(
@@ -365,9 +352,31 @@ app.post('/api/upload-answer-key', async (req, res) => {
             [examId, answer, questionText]
           );
 
-          // Clear state after pairing
-          currentCandidateAnswer = null;
+          currentCandidate = null; // reset state
+          continue;
         }
+
+        // 3. Check for Split-Line (e.g., "6. Question")
+        const splitLineMatch = line.match(/^(\d+)\.\s*(.*)$/);
+        if (splitLineMatch) {
+          const qNum = splitLineMatch[1];
+          const questionText = splitLineMatch[2].trim() || `Question ${qNum}`;
+          const answer = currentCandidate || '?';
+
+          console.log(`Split-line Q${qNum}: answer="${answer}"`);
+
+          questionCount++;
+          await db.query(
+            'INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ($1, $2, $3)',
+            [examId, answer, questionText]
+          );
+
+          currentCandidate = null; // reset state
+          continue;
+        }
+
+        // 4. If it's not a question and not noise, it must be an answer string waiting for a number
+        currentCandidate = line.trim();
       }
     }
 
