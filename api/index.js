@@ -343,44 +343,38 @@ app.post('/api/upload-answer-key', async (req, res) => {
 
       let currentCandidate = null;
       const parsedQuestions = [];
-
       const lines = answers.split('\n');
+
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
 
-        // 1. Skip noise
-        if (line.startsWith('PART') || line.startsWith('Note:') || line.match(/^[A-D]\)/)) {
+        // 1. Filter out Multiple Choice options and Headers so they don't corrupt the data
+        if (line.match(/^[A-D]\)/) || line.startsWith('PART') || line.startsWith('Note:')) {
           continue;
         }
 
-        // 2 & 3. Unified Question Matcher
-        const questionMatch = line.match(/^([\s\S]*?)\s*(\d+)\.\s*(.*)$/);
-        if (questionMatch) {
-          const potentialAnswer = questionMatch[1].trim();
-          const questionNum = parseInt(questionMatch[2], 10);
-          const questionText = questionMatch[3].trim();
+        // 2. The Anchor Split: Hunt for the Number + Dot anywhere in the line
+        const anchorMatch = line.match(/(\d+)\s*\.\s*(.*)/);
 
-          if (potentialAnswer.length > 0) {
-            // Same-Line Format (e.g., "B 1. Question" or "B1. Question")
-            parsedQuestions.push({
-              answer_text: potentialAnswer,
-              question_number: questionNum,
-              question_text: questionText
-            });
-          } else {
-            // Split-Line Format (e.g., "6. Question")
-            parsedQuestions.push({
-              answer_text: currentCandidate ? currentCandidate : "?",
-              question_number: questionNum,
-              question_text: questionText
-            });
-          }
-          currentCandidate = null; // Reset state
+        if (anchorMatch) {
+          const questionNum = parseInt(anchorMatch[1], 10);
+          const questionText = anchorMatch[2].trim();
+
+          // 3. Slice the string: grab everything to the left of the number
+          const leftSideText = line.substring(0, anchorMatch.index).trim();
+
+          parsedQuestions.push({
+            answer_text: leftSideText ? leftSideText : (currentCandidate || "?"),
+            question_number: questionNum,
+            question_text: questionText
+          });
+
+          currentCandidate = null; // Reset state for the next pair
           continue;
         }
 
-        // 4. Update candidate string
+        // 4. If no number is found, it's a floating answer waiting for a question
         currentCandidate = line;
       }
 
