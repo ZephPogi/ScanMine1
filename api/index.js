@@ -326,57 +326,57 @@ app.post('/api/upload-answer-key', async (req, res) => {
     // 3. FALLBACK: If the frontend sent a raw string (OCR or Manual definition)
     else if (typeof answers === 'string') {
       console.log("================\nRAW OCR TEXT:\n", answers, "\n================");
-      const lines = answers.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
-      // Stateful Parser: Track candidate answer across lines
       let currentCandidate = null;
+      const parsedQuestions = [];
 
-      for (const line of lines) {
-        // 1. Skip noise lines entirely
+      const lines = answers.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        // 1. Skip noise
         if (line.startsWith('PART') || line.startsWith('Note:') || line.match(/^[A-D]\)/)) {
           continue;
         }
 
-        // 2. Check for Same-Line (e.g., "B 1. Question" or "ScanMine 5. Question")
+        // 2. Same-Line format (e.g. "B 1. Question")
         const sameLineMatch = line.match(/^([A-Za-z0-9.\-]+)\s+(\d+)\.\s*(.*)$/);
         if (sameLineMatch) {
-          const answer = sameLineMatch[1].trim();
-          const qNum = sameLineMatch[2];
-          const questionText = sameLineMatch[3].trim() || `Question ${qNum}`;
-
-          console.log(`Same-line Q${qNum}: answer="${answer}"`);
-
-          questionCount++;
-          await db.query(
-            'INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ($1, $2, $3)',
-            [examId, answer, questionText]
-          );
-
-          currentCandidate = null; // reset state
+          parsedQuestions.push({
+            answer_text: sameLineMatch[1].trim(), // Grabs "B"
+            question_number: parseInt(sameLineMatch[2], 10),
+            question_text: sameLineMatch[3].trim()
+          });
+          currentCandidate = null; // Reset state
           continue;
         }
 
-        // 3. Check for Split-Line (e.g., "6. Question")
+        // 3. Split-Line format (e.g. "6. Question")
         const splitLineMatch = line.match(/^(\d+)\.\s*(.*)$/);
         if (splitLineMatch) {
-          const qNum = splitLineMatch[1];
-          const questionText = splitLineMatch[2].trim() || `Question ${qNum}`;
-          const answer = currentCandidate || '?';
-
-          console.log(`Split-line Q${qNum}: answer="${answer}"`);
-
-          questionCount++;
-          await db.query(
-            'INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ($1, $2, $3)',
-            [examId, answer, questionText]
-          );
-
-          currentCandidate = null; // reset state
+          parsedQuestions.push({
+            answer_text: currentCandidate ? currentCandidate : "?", // Grabs from previous line
+            question_number: parseInt(splitLineMatch[1], 10),
+            question_text: splitLineMatch[2].trim()
+          });
+          currentCandidate = null; // Reset state
           continue;
         }
 
-        // 4. If it's not a question and not noise, it must be an answer string waiting for a number
-        currentCandidate = line.trim();
+        // 4. Update candidate string
+        currentCandidate = line;
+      }
+
+      console.log("====== FINAL PARSED ARRAY ======\n", parsedQuestions);
+
+      // Insert parsed questions into database
+      for (const q of parsedQuestions) {
+        questionCount++;
+        await db.query(
+          'INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ($1, $2, $3)',
+          [examId, q.answer_text, q.question_text]
+        );
       }
     }
 
