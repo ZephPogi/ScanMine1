@@ -110,11 +110,11 @@ const fetchStudents = useCallback(async () => {
   }
 
   const handleDeleteSubmission = async (submissionId) => {
-    if (!window.confirm('Remove this submission record?')) return;
+    if (!window.confirm('Are you sure you want to delete this submission?')) return;
     try {
       const res = await fetch(`/api/submissions/${submissionId}`, { method: 'DELETE' });
       if (res.ok) {
-        fetchSubmissions();
+        setStudentResults(prev => prev.filter(item => item.id !== submissionId));
       }
     } catch (err) {
       console.error('Delete error:', err);

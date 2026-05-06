@@ -312,6 +312,18 @@ app.get('/api/submissions/:classId', async (req, res) => {
   }
 });
 
+// --- DELETE SUBMISSION ---
+app.delete('/api/submissions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.query('DELETE FROM student_submissions WHERE id = $1', [id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Delete submission error:", error);
+    res.status(500).json({ error: "Failed to delete submission" });
+  }
+});
+
 // --- UPLOAD MANUAL OR OCR ANSWER KEY ---
 // --- UPLOAD MANUAL OR OCR ANSWER KEY ---
 app.post('/api/upload-answer-key', async (req, res) => {
