@@ -341,7 +341,7 @@ app.post('/api/upload-answer-key', async (req, res) => {
         }
 
         // 2. Same-Line format (e.g. "B 1. Question")
-        const sameLineMatch = line.match(/^([A-Za-z0-9.\-]+)\s+(\d+)\.\s*(.*)$/);
+        const sameLineMatch = line.match(/^\s*(.*?)\s+(\d+)\.\s*(.*)$/);
         if (sameLineMatch) {
           parsedQuestions.push({
             answer_text: sameLineMatch[1].trim(), // Grabs "B"

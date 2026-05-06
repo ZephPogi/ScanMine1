@@ -181,14 +181,14 @@ const SectionDetails = ({ section, onBack }) => {
       const data = await response.json();
       if (response.ok && data?.text) {
         alert('OCR processed successfully!');
-        
+
         const structuredData = parseScanMineText(data.text);
         setParsedOCRData(structuredData);
-        
+
         const finalAnswersString = structuredData.map(q => q?.correctAnswer || '').join(', ');
         setFormattedAnswersToSave(finalAnswersString);
-        
-        setAnswerKeyImage(null);
+
+        // Keep answerKeyImage visible so user can preview the PDF/Image while reviewing answers
       } else {
         alert('OCR processing failed: ' + (data?.error || 'No text extracted.'));
       }
