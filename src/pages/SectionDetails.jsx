@@ -8,26 +8,36 @@ import Sidebar from './Sidebar';
 // --- THE SMART PARSER ---
 const parseScanMineText = (rawText) => {
   if (!rawText) return [];
-  const lines = rawText.split('\n').map(line => line.trim()).filter(line => line !== '');
+  let currentCandidate = null;
   const parsedQuestions = [];
-  let currentAnswer = '?';
+  const lines = rawText.split('\n');
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i].trim();
+    if (!line) continue;
 
-    // If it's a question (e.g. "1. ...")
-    if (/^\d+\./.test(line)) {
-      parsedQuestions.push({
-        questionText: line,
-        correctAnswer: currentAnswer // Use the last answer we found
-      });
-      currentAnswer = '?'; // Reset ONLY after assigning
-    } 
-    // If it's an answer (Not a question, not a header)
-    else if (!/^[A-D]\)/i.test(line) && !line.toLowerCase().includes('part')) {
-       // Only update if it looks like a real answer
-       if (line.length > 0 && line.length < 50) currentAnswer = line;
+    // Skip Multiple Choice options and Headers
+    if (line.match(/^[A-D]\)/) || line.startsWith('PART') || line.startsWith('Note:')) {
+      continue;
     }
+
+    // The Anchor Split: Hunt for the Number + Dot anywhere in the line
+    const anchorMatch = line.match(/(\d+)\s*\.\s*(.*)/);
+
+    if (anchorMatch) {
+      const questionNum = parseInt(anchorMatch[1], 10);
+      const questionText = anchorMatch[2].trim();
+      const leftSideText = line.substring(0, anchorMatch.index).trim();
+
+      parsedQuestions.push({
+        questionText: questionText,
+        correctAnswer: leftSideText ? leftSideText : (currentCandidate || "?")
+      });
+
+      currentCandidate = null;
+      continue;
+    }
+    currentCandidate = line;
   }
   return parsedQuestions;
 };
