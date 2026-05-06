@@ -1,6 +1,7 @@
 const fs = require('fs');
 const db = require('../db');
 const OCRRouter = require('./ocrRouter');
+const nlp = require('compromise');
 
 /**
  * Extracts text from a file buffer (PDF or plain text)
@@ -44,83 +45,57 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
 }
 
 /**
- * Applies rules to the text to generate questions
+ * Applies compromise NLP to generate fill-in-the-blank questions
  */
-async function generateQuizFromText(text, examId) {
+async function generateQuizFromText(text, examId, numberOfQuestions = 10) {
   try {
-    // Fetch all rules from database
-    const rulesRes = await db.query('SELECT * FROM Rules');
-    const rules = rulesRes.rows;
+    const doc = nlp(text);
+    const sentences = doc.sentences().out('array');
 
-    const lines = text.split(/\r?\n/);
     const generatedQuestions = [];
 
-    for (let line of lines) {
-      line = line.trim();
-      if (!line) continue;
-      
-      // Updated to handle patterns like "( Mercury ) 1. Question text" or "1. Question - Answer"
-      // Captures full words inside any bracket type ( ), [ ], { }
-      const qaMatch = line.match(/^(?:[\(\[\{]\s*([^\]\)\}]+\s*)[\)\]\}]\s*)?(\d+)[\.\)]?\s*(.+)$/);
-      if (qaMatch) {
-        const parenthesizedAns = qaMatch[1]?.trim();
-        const qNum = qaMatch[2];
-        const rest = qaMatch[3].trim();
-        
-        let answer = parenthesizedAns || rest;
-        let questionText = parenthesizedAns ? rest : `Question ${qNum}`;
+    for (const sentence of sentences) {
+      if (generatedQuestions.length >= numberOfQuestions) break;
 
-        // If no parenthesized answer, check if 'rest' contains a separator like '-' or ':'
-        if (!parenthesizedAns && (rest.includes(' - ') || rest.includes(': '))) {
-          const parts = rest.split(/ - |: /);
-          if (parts.length >= 2) {
-            questionText = parts[0].trim();
-            answer = parts[1].trim();
-          }
-        }
-        
-        if (examId) {
-          await db.query(
-            'INSERT INTO Generated_Questions (exam_id, question_text, correct_answer) VALUES ($1, $2, $3)',
-            [examId, questionText, answer]
-          );
-        }
-        generatedQuestions.push({ question_text: questionText, correct_answer: answer });
-        continue; 
+      const trimmedSentence = sentence.trim();
+      const wordCount = trimmedSentence.split(/\s+/).length;
+
+      // Skip sentences that are too short or too long
+      if (wordCount < 5 || wordCount > 20) continue;
+
+      // Find the most prominent noun or entity
+      const sentenceDoc = nlp(trimmedSentence);
+      const nouns = sentenceDoc.nouns().out('array');
+      const topics = sentenceDoc.topics().out('array');
+
+      // Use topics first, then fall back to nouns
+      const candidates = [...topics, ...nouns];
+
+      if (candidates.length === 0) continue;
+
+      // Take the first major noun/entity as the answer
+      const answerText = candidates[0].trim();
+
+      // Replace the answer with "__________" to create the question
+      const questionText = trimmedSentence.replace(answerText, '__________');
+
+      const question = {
+        type: 'identification',
+        answer_text: answerText,
+        question_text: questionText
+      };
+
+      // Save to DB if examId is provided
+      if (examId) {
+        await db.query(
+          'INSERT INTO Generated_Questions (exam_id, question_text, correct_answer) VALUES ($1, $2, $3)',
+          [examId, questionText, answerText]
+        );
       }
 
-      for (let rule of rules) {
-        if (line.toLowerCase().includes(rule.keyword.toLowerCase())) {
-          // Simple logic: remove the keyword and everything after it to form a "What is X?" question
-          // Or just ask about the sentence
-          const parts = line.split(new RegExp(rule.keyword, 'i'));
-          if (parts.length === 2) {
-            const concept = parts[0].trim();
-            const answer = parts[1].trim();
-            
-            let questionText = `What ${rule.keyword} ${answer}?`;
-            if (rule.keyword === 'is defined as') {
-               questionText = `What is the definition of ${concept}?`;
-            }
-
-            // Save to DB
-            if (examId) {
-                const insertRes = await db.query(
-                  'INSERT INTO Generated_Questions (exam_id, rule_id, question_text, correct_answer) VALUES ($1, $2, $3, $4) RETURNING id',
-                  [examId, rule.id, questionText, answer]
-                );
-                generatedQuestions.push({
-                    id: insertRes.rows[0].id,
-                    question_text: questionText,
-                    correct_answer: answer
-                });
-            } else {
-                 generatedQuestions.push({ question_text: questionText, correct_answer: answer });
-            }
-          }
-        }
-      }
+      generatedQuestions.push(question);
     }
+
     return generatedQuestions;
   } catch (error) {
     console.error('Error generating questions:', error);

@@ -2,6 +2,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
+import jsPDF from 'jspdf';
 import './SectionDetails.css';
 import Sidebar from './Sidebar';
 
@@ -57,12 +58,19 @@ const SectionDetails = ({ section, onBack }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [answerKeyImage, setAnswerKeyImage] = useState(null);
   const [isProcessingOCR, setIsProcessingOCR] = useState(false);
-  
+
   const [parsedOCRData, setParsedOCRData] = useState(null);
   const [formattedAnswersToSave, setFormattedAnswersToSave] = useState('');
 
+  const [showQuizGeneratorModal, setShowQuizGeneratorModal] = useState(false);
+  const [quizLessonFile, setQuizLessonFile] = useState(null);
+  const [numberOfQuestions, setNumberOfQuestions] = useState(10);
+  const [generatedQuestions, setGeneratedQuestions] = useState([]);
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+
   const examInputRef = useRef(null);
   const answerKeyInputRef = useRef(null);
+  const quizFileRef = useRef(null);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -320,6 +328,66 @@ const SectionDetails = ({ section, onBack }) => {
     setAnswerKeyImage(null);
   };
 
+  const handleQuizFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) setQuizLessonFile(e.target.files[0]);
+  };
+
+  const handleGenerateQuiz = async () => {
+    if (!quizLessonFile) return alert('Please select a lesson PDF file first');
+    if (!examTitle) return alert('Please enter an exam title');
+
+    setIsGeneratingQuiz(true);
+    try {
+      const formData = new FormData();
+      formData.append('lessonFile', quizLessonFile);
+      formData.append('teacherId', user?.id || '');
+      formData.append('classId', section?.id || '');
+      formData.append('title', examTitle);
+      formData.append('numberOfQuestions', numberOfQuestions);
+
+      const response = await fetch('/api/generate-quiz', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await response.json();
+      if (response.ok && data?.questions) {
+        setGeneratedQuestions(data.questions);
+        alert('Quiz generated successfully!');
+      } else {
+        alert('Quiz generation failed: ' + (data?.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Quiz generation error:', error);
+      alert('Error generating quiz: ' + (error?.message || 'Unknown error'));
+    } finally {
+      setIsGeneratingQuiz(false);
+    }
+  };
+
+  const handleDownloadAnswerKey = () => {
+    if (generatedQuestions.length === 0) return alert('No questions to download');
+
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text('ScanMine Answer Key', 105, 20, { align: 'center' });
+    doc.setFontSize(12);
+
+    let yPosition = 40;
+    generatedQuestions.forEach((q, index) => {
+      const line = `${q.answer_text.padEnd(15)} ${index + 1}. ${q.question_text}`;
+      doc.text(line, 20, yPosition);
+      yPosition += 10;
+
+      if (yPosition > 280) {
+        doc.addPage();
+        yPosition = 20;
+      }
+    });
+
+    doc.save('ScanMine-Answer-Key.pdf');
+  };
+
   return (
     <div className="page-layout">
       <Sidebar />
@@ -369,6 +437,9 @@ const SectionDetails = ({ section, onBack }) => {
               <h4>Exam Management</h4>
               <button className="btn-action primary" onClick={() => setShowAttachModal(true)}>
                 Attach Exam & Key
+              </button>
+              <button className="btn-action success" onClick={() => setShowQuizGeneratorModal(true)}>
+                Generate Quiz
               </button>
               <button className="btn-action success" onClick={() => navigate('/auto-grading-results', { state: { section } })}>Auto-Grading Results</button>
             </div>
@@ -574,6 +645,95 @@ const SectionDetails = ({ section, onBack }) => {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showQuizGeneratorModal && (
+        <div className="modal-overlay" onClick={() => setShowQuizGeneratorModal(false)}>
+          <div className="modal-content attach-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-bar">
+              <span className="modal-prof-label">ScanMine Professor Console</span>
+              <button className="modal-close-btn" onClick={() => setShowQuizGeneratorModal(false)}>×</button>
+            </div>
+
+            <div className="modal-title-banner">Generate Quiz from Lesson</div>
+
+            <div className="upload-section">
+              <label className="upload-label">Exam Title</label>
+              <input
+                type="text"
+                className="create-input"
+                placeholder="e.g. Science Chapter 5 Quiz"
+                value={examTitle}
+                onChange={(e) => setExamTitle(e.target.value)}
+              />
+            </div>
+
+            <div className="upload-section">
+              <label className="upload-label">📄 Lesson PDF File</label>
+              <div className="upload-row" onClick={() => quizFileRef.current && quizFileRef.current.click()}>
+                <span className="upload-placeholder">
+                  {quizLessonFile?.name ? quizLessonFile.name : 'Upload Lesson PDF'}
+                </span>
+                <input
+                  type="file"
+                  ref={quizFileRef}
+                  style={{ display: 'none' }}
+                  accept=".pdf"
+                  onChange={handleQuizFileChange}
+                />
+                <button className="browse-btn exam-browse">Browse</button>
+              </div>
+            </div>
+
+            <div className="upload-section">
+              <label className="upload-label">Number of Questions</label>
+              <input
+                type="number"
+                className="create-input"
+                placeholder="10"
+                value={numberOfQuestions}
+                onChange={(e) => setNumberOfQuestions(parseInt(e.target.value) || 10)}
+                min="1"
+                max="50"
+              />
+            </div>
+
+            <div className="modal-footer">
+              <button
+                className="save-assign-btn"
+                onClick={handleGenerateQuiz}
+                disabled={isGeneratingQuiz}
+              >
+                {isGeneratingQuiz ? 'Generating...' : 'Generate Quiz'}
+              </button>
+            </div>
+
+            {generatedQuestions.length > 0 && (
+              <div style={{ marginTop: '20px', background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <h4 style={{ margin: '0 0 15px 0' }}>Generated Questions Preview ({generatedQuestions.length})</h4>
+                <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: '15px' }}>
+                  {generatedQuestions.map((q, index) => (
+                    <div key={index} style={{ marginBottom: '10px', padding: '10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                      <p style={{ margin: '0 0 5px 0', fontWeight: 'bold', color: '#16a34a' }}>
+                        Answer: {q.answer_text}
+                      </p>
+                      <p style={{ margin: 0, color: '#475569' }}>
+                        {index + 1}. {q.question_text}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  className="save-assign-btn"
+                  onClick={handleDownloadAnswerKey}
+                  style={{ background: '#059669' }}
+                >
+                  Download ScanMine Answer Key
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

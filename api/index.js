@@ -171,7 +171,7 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
   try {
     const file = req.file;
     // Keys match your frontend FormData
-    const { title, teacherId, classId } = req.body; 
+    const { title, teacherId, classId, numberOfQuestions } = req.body;
     let text = '';
     let fileUrl = null;
 
@@ -188,7 +188,7 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
     const examId = examRes.rows[0].id;
 
     let questions = [];
-    if (text) questions = await generateQuizFromText(text, examId);
+    if (text) questions = await generateQuizFromText(text, examId, parseInt(numberOfQuestions) || 10);
     res.json({ message: 'Exam created successfully', examId, questions });
   } catch (error) {
     console.error('QUIZ GENERATION ERROR:', error);
