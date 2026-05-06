@@ -289,22 +289,23 @@ app.post('/api/test-ocr', upload.any(), async (req, res) => {
 });
 
 // --- GET AUTO-GRADING RESULTS ---
-app.get('/api/submissions/:examId', async (req, res) => {
+app.get('/api/submissions/:classId', async (req, res) => {
   try {
-    const { examId } = req.params;
-    
-    // Grabs the submissions and joins the Users table so your frontend knows the student's name!
+    const { classId } = req.params;
+
+    // Grabs the submissions for a class by joining with Exams table
     const query = `
-      SELECT sub.*, u.name as student_name, u.email
+      SELECT sub.*, u.name as student_name, u.email, e.title as exam_title
       FROM student_submissions sub
       JOIN Users u ON sub.student_id = u.id
-      WHERE sub.exam_id = $1
+      JOIN Exams e ON sub.exam_id = e.id
+      WHERE e.class_id = $1
       ORDER BY sub.created_at DESC;
     `;
-    
-    const result = await db.query(query, [examId]);
+
+    const result = await db.query(query, [classId]);
     res.json(result.rows);
-    
+
   } catch (error) {
     console.error("Fetch submissions error:", error);
     res.status(500).json({ error: "Failed to fetch submissions" });
