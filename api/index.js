@@ -142,6 +142,48 @@ app.post('/api/students', async (req, res) => {
   }
 });
 
+app.get('/api/dashboard', async (req, res) => {
+  try {
+    const teacherId = req.query.teacherId;
+    if (!teacherId || teacherId === 'undefined') {
+      return res.status(401).json({ error: "Unauthorized or missing teacher ID" });
+    }
+
+    const totalStudentsResult = await db.query(
+      'SELECT COUNT(DISTINCT s.user_id) FROM Students s JOIN Classes c ON s.class_id = c.id WHERE c.teacher_id = $1',
+      [teacherId]
+    );
+
+    const quizzesCheckedResult = await db.query(
+      'SELECT COUNT(*) FROM Student_Submissions sub JOIN Exams e ON sub.exam_id = e.id WHERE e.teacher_id = $1',
+      [teacherId]
+    );
+
+    const classAverageResult = await db.query(
+      'SELECT COALESCE(AVG(score), 0) as average FROM Student_Submissions sub JOIN Exams e ON sub.exam_id = e.id WHERE e.teacher_id = $1',
+      [teacherId]
+    );
+
+    const recentActivityResult = await db.query(
+      'SELECT u.name as student_name, e.title as subject, sub.score, sub.created_at FROM Student_Submissions sub JOIN Users u ON sub.student_id = u.id JOIN Exams e ON sub.exam_id = e.id WHERE e.teacher_id = $1 ORDER BY sub.created_at DESC LIMIT 5',
+      [teacherId]
+    );
+
+    const average = parseFloat(classAverageResult.rows[0].average).toFixed(1);
+
+    res.json({
+      totalStudents: parseInt(totalStudentsResult.rows[0].count, 10) || 0,
+      quizzesChecked: parseInt(quizzesCheckedResult.rows[0].count, 10) || 0,
+      classAverage: average,
+      recentActivity: recentActivityResult.rows
+    });
+
+  } catch (error) {
+    console.error('DASHBOARD DATA ERROR:', error);
+    res.status(500).json({ error: "Failed to fetch dashboard data" });
+  }
+});
+
 // --- ADDED ROUTES FOR DASHBOARD FUNCTIONALITY ---
 app.get('/api/all-students', async (req, res) => {
   try {

@@ -1,13 +1,51 @@
+import { useState, useEffect } from 'react';
 import './Dashboard.css';
 import Sidebar from './Sidebar';
 import { Users, FileText, TrendingUp, Camera, Scan, Bot, FileDown } from 'lucide-react';
 
 const TeacherDashboard = () => {
+  const [dashboardData, setDashboardData] = useState({
+    totalStudents: 0,
+    quizzesChecked: 0,
+    classAverage: "0.0",
+    recentActivity: []
+  });
+
+  const [loading, setLoading] = useState(true);
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      if (!user.id) return;
+      try {
+        const response = await fetch(`/api/dashboard?teacherId=${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setDashboardData(data);
+        }
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [user.id]);
+
+  const getStatusBadge = (score) => {
+    const numScore = parseFloat(score);
+    if (numScore >= 75) {
+      return <span className="badge success">Passed</span>;
+    }
+    return <span className="badge warning">Retake</span>;
+  };
+
   const stats = [
-    { id: 1, label: "Total Students", value: "165", icon: Users, trend: "+12%" },
-    { id: 2, label: "Quizzes Generated", value: "24", icon: FileText, trend: "+5" },
-    { id: 3, label: "Average Score", value: "82%", icon: TrendingUp, trend: "+3%" },
-    { id: 4, label: "Pending Scans", value: "12", icon: Camera, trend: "Action Required" },
+    { id: 1, label: "Total Students", value: dashboardData.totalStudents.toString(), icon: Users, trend: "" },
+    { id: 2, label: "Quizzes Checked", value: dashboardData.quizzesChecked.toString(), icon: FileText, trend: "" },
+    { id: 3, label: "Average Score", value: `${dashboardData.classAverage}%`, icon: TrendingUp, trend: "" },
+    { id: 4, label: "Pending Scans", value: "0", icon: Camera, trend: "Action Required" }, // Kept static per original if not requested
   ];
 
   return (
@@ -16,7 +54,7 @@ const TeacherDashboard = () => {
       <main className="dashboard-content">
         <header className="dashboard-header">
           <div>
-            <h1>Welcome back, Teacher Maria</h1>
+            <h1>Welcome back, {user.name || "Teacher"}</h1>
             <p>Here's what's happening with your classes today.</p>
           </div>
           <button className="primary-action-btn">+ Create New Quiz</button>
@@ -59,24 +97,20 @@ const TeacherDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>Grade 10 - Rizal</td>
-                  <td>Midterm History</td>
-                  <td><span className="badge success">Completed</span></td>
-                  <td>88%</td>
-                </tr>
-                <tr>
-                  <td>Grade 11 - Bonifacio</td>
-                  <td>PolSci Quiz 1</td>
-                  <td><span className="badge warning">Pending Scans</span></td>
-                  <td>74%</td>
-                </tr>
-                <tr>
-                  <td>Grade 12 - Mabini</td>
-                  <td>Sociology Finals</td>
-                  <td><span className="badge info">Ongoing</span></td>
-                  <td>--</td>
-                </tr>
+                {loading ? (
+                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '20px'}}>Loading recent activity...</td></tr>
+                ) : dashboardData.recentActivity.length === 0 ? (
+                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '20px'}}>No recent activity found.</td></tr>
+                ) : (
+                  dashboardData.recentActivity.map((activity, index) => (
+                    <tr key={index}>
+                      <td>{activity.student_name}</td>
+                      <td>{activity.subject}</td>
+                      <td>{getStatusBadge(activity.score)}</td>
+                      <td>{activity.score}%</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </section>
