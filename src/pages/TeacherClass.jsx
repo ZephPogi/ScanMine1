@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import SectionDetails from './SectionDetails';
 import Sidebar from './Sidebar';
-import { BookOpen, Plus, X, Users } from 'lucide-react';
+import { BookOpen, Plus, X, Users, Trash2 } from 'lucide-react';
 import './TeacherClass.css';
 
 const TeacherClass = () => {
@@ -61,6 +61,28 @@ const TeacherClass = () => {
     }
   };
 
+  const handleDeleteClass = async (classId, e) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this class? This action cannot be undone and will remove all associated exams and students.")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/classes/${classId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        setClasses(prev => prev.filter(c => c.id !== classId));
+      } else {
+        alert("Failed to delete class");
+      }
+    } catch (error) {
+      console.error('Error deleting class:', error);
+      alert("Error deleting class");
+    }
+  };
+
   const closeCreateModal = () => {
     setShowCreateModal(false);
     setNewClass({ name: '', subject: '' });
@@ -90,6 +112,13 @@ const TeacherClass = () => {
               <div key={item.id} className="class-card">
                 <div className="card-top">
                   <span className="subject-label">{item.subject || 'No Subject'}</span>
+                  <button 
+                    className="delete-class-btn" 
+                    onClick={(e) => handleDeleteClass(item.id, e)}
+                    title="Delete Class"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
                 <div className="card-info">
                   <h3>{item.name}</h3>

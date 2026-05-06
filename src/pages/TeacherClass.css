@@ -48,6 +48,30 @@
   transform: translateY(-5px);
 }
 
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.delete-class-btn {
+  background: none;
+  border: none;
+  color: #a0aec0;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.delete-class-btn:hover {
+  color: #ef4444;
+  background-color: #fee2e2;
+}
+
 .subject-label {
   background: #e0e7ff;
   color: #4338ca;

@@ -104,6 +104,17 @@ app.post('/api/classes', async (req, res) => {
   }
 });
 
+app.delete('/api/classes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.query('DELETE FROM Classes WHERE id = $1', [id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('DELETE CLASS ERROR:', error);
+    res.status(500).json({ error: 'Failed to delete class' });
+  }
+});
+
 app.post('/api/students', async (req, res) => {
   try {
     const { email, classId } = req.body;
