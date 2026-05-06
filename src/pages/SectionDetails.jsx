@@ -207,20 +207,39 @@ const SectionDetails = ({ section, onBack }) => {
     }
 
     try {
+      // Upload file to storage first to get the URL
+      let pdfUrl = null;
+      if (answerKeyImage) {
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', answerKeyImage);
+        uploadFormData.append('examId', showExamDetails.id);
+
+        const uploadResponse = await fetch('/api/upload-answer-key-file', {
+          method: 'POST',
+          body: uploadFormData
+        });
+
+        if (uploadResponse.ok) {
+          const uploadData = await uploadResponse.json();
+          pdfUrl = uploadData.publicUrl;
+        }
+      }
+
       const response = await fetch('/api/upload-answer-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           examId: showExamDetails.id,
           // CHANGE: Send the structured array directly!
-          answers: parsedOCRData 
+          answers: parsedOCRData,
+          pdfUrl: pdfUrl
         })
       });
 
       if (response.ok) {
         const result = await response.json();
         alert(result.message); // Will now say "Successfully saved X answers!"
-        
+
         // Refresh UI
         const questionsResponse = await fetch(`/api/exams/${showExamDetails.id}/questions`);
         if (questionsResponse.ok) {
@@ -228,6 +247,7 @@ const SectionDetails = ({ section, onBack }) => {
           setExamQuestions(questionsData || { manual: [], generated: [] });
         }
         setParsedOCRData(null);
+        setAnswerKeyImage(null); // Clear file after successful save
       } else {
         const errorData = await response.json();
         alert('Failed to save: ' + (errorData?.error || 'Unknown error'));
@@ -455,7 +475,16 @@ const SectionDetails = ({ section, onBack }) => {
           <div className="modal-content details-modal" style={{ pointerEvents: 'auto', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Exam Details: {showExamDetails?.title || 'Untitled'}</h2>
-              <div style={{display: 'flex', gap: '10px'}}>
+              <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+                {showExamDetails?.file_path && (
+                  <button
+                    className="btn-action success"
+                    onClick={() => window.open(showExamDetails.file_path, '_blank')}
+                    style={{ padding: '8px 16px', fontSize: '13px', whiteSpace: 'nowrap' }}
+                  >
+                    📄 View Answer Key Document
+                  </button>
+                )}
                 <button className="close-btn" onClick={() => setShowExamDetails(null)}>×</button>
               </div>
             </div>

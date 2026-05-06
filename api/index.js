@@ -196,6 +196,20 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
   }
 });
 
+// --- UPLOAD ANSWER KEY FILE ---
+app.post('/api/upload-answer-key-file', upload.single('file'), async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const { publicUrl } = await uploadFile(file.buffer, file.originalname, file.mimetype);
+    res.json({ publicUrl });
+  } catch (error) {
+    console.error('FILE UPLOAD ERROR:', error);
+    res.status(500).json({ error: 'Failed to upload file' });
+  }
+});
+
 // --- STUDENT: UPLOAD PAPER ---
 app.post('/api/upload-paper', upload.single('studentPaper'), async (req, res) => {
   try {
@@ -301,7 +315,7 @@ app.get('/api/submissions/:examId', async (req, res) => {
 // --- UPLOAD MANUAL OR OCR ANSWER KEY ---
 app.post('/api/upload-answer-key', async (req, res) => {
   try {
-    const { examId, answers } = req.body;
+    const { examId, answers, pdfUrl } = req.body;
     if (!examId || !answers) return res.status(400).json({ error: 'Missing data' });
 
     // 1. Clear old keys for this exam (prevent duplicates)
@@ -340,26 +354,28 @@ app.post('/api/upload-answer-key', async (req, res) => {
           continue;
         }
 
-        // 2. Same-Line format (e.g. "B 1. Question")
-        const sameLineMatch = line.match(/^\s*(.*?)\s+(\d+)\.\s*(.*)$/);
-        if (sameLineMatch) {
-          parsedQuestions.push({
-            answer_text: sameLineMatch[1].trim(), // Grabs "B"
-            question_number: parseInt(sameLineMatch[2], 10),
-            question_text: sameLineMatch[3].trim()
-          });
-          currentCandidate = null; // Reset state
-          continue;
-        }
+        // 2 & 3. Unified Question Matcher
+        const questionMatch = line.match(/^([\s\S]*?)\s*(\d+)\.\s*(.*)$/);
+        if (questionMatch) {
+          const potentialAnswer = questionMatch[1].trim();
+          const questionNum = parseInt(questionMatch[2], 10);
+          const questionText = questionMatch[3].trim();
 
-        // 3. Split-Line format (e.g. "6. Question")
-        const splitLineMatch = line.match(/^(\d+)\.\s*(.*)$/);
-        if (splitLineMatch) {
-          parsedQuestions.push({
-            answer_text: currentCandidate ? currentCandidate : "?", // Grabs from previous line
-            question_number: parseInt(splitLineMatch[1], 10),
-            question_text: splitLineMatch[2].trim()
-          });
+          if (potentialAnswer.length > 0) {
+            // Same-Line Format (e.g., "B 1. Question" or "B1. Question")
+            parsedQuestions.push({
+              answer_text: potentialAnswer,
+              question_number: questionNum,
+              question_text: questionText
+            });
+          } else {
+            // Split-Line Format (e.g., "6. Question")
+            parsedQuestions.push({
+              answer_text: currentCandidate ? currentCandidate : "?",
+              question_number: questionNum,
+              question_text: questionText
+            });
+          }
           currentCandidate = null; // Reset state
           continue;
         }
@@ -378,6 +394,11 @@ app.post('/api/upload-answer-key', async (req, res) => {
           [examId, q.answer_text, q.question_text]
         );
       }
+    }
+
+    // Update exams table with PDF URL if provided
+    if (pdfUrl) {
+      await db.query('UPDATE Exams SET file_path = $1 WHERE id = $2', [pdfUrl, examId]);
     }
 
     res.json({ success: true, message: `Successfully saved ${questionCount} answers to database!` });
