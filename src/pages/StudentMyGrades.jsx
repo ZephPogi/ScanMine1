@@ -77,7 +77,8 @@ const StudentMyGrades = () => {
         {/* Detailed Assessment Results */}
         <div className="smg-table-card">
           <h3 className="smg-table-title">Detailed Assessment Results</h3>
-          <table className="smg-table">
+          <div className="table-responsive-wrapper">
+            <table className="smg-table">
             <thead>
               <tr>
                 <th>Assessment</th>
@@ -98,7 +99,8 @@ const StudentMyGrades = () => {
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
 
         {/* Footer Actions */}

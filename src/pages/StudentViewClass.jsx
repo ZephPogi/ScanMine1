@@ -68,8 +68,9 @@ const StudentViewClass = () => {
         {/* My Grades */}
         <div className="svc-card">
           <h3 className="svc-card-title">🏆 My Grades – {classInfo.title}</h3>
-          <table className="svc-grades-table">
-            <thead>
+          <div className="table-responsive-wrapper">
+            <table className="svc-grades-table">
+              <thead>
               <tr>
                 <th>Assessment</th>
                 <th>Score</th>
@@ -87,7 +88,8 @@ const StudentViewClass = () => {
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       </div>
     </div>

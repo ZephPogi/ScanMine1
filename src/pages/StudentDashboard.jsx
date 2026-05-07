@@ -132,7 +132,7 @@ const StudentDashboard = () => {
         {/* Class Leaderboard */}
         <section className="student-card">
           <h3 className="student-section-title">🏆 Class Leaderboard</h3>
-          <div className="table-responsive">
+          <div className="table-responsive-wrapper">
             <table className="leaderboard-table">
               <thead>
                 <tr>

@@ -14,3 +14,40 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* GLOBAL RESPONSIVE UTILITIES */
+
+/* Responsive Table Wrapper */
+.table-responsive-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Responsive Typography */
+@media (max-width: 768px) {
+  h1 {
+    font-size: 1.5rem !important;
+  }
+  h2 {
+    font-size: 1.3rem !important;
+  }
+  h3 {
+    font-size: 1.15rem !important;
+  }
+  h4 {
+    font-size: 1.05rem !important;
+  }
+  h5 {
+    font-size: 1rem !important;
+  }
+  h6 {
+    font-size: 0.95rem !important;
+  }
+  .dashboard-header h1, .student-dash-header h1, .svc-header h1, .smg-header h1, .profile-header h2 {
+    font-size: 1.5rem !important;
+  }
+  .stat-value {
+    font-size: 1.25rem !important;
+  }
+}

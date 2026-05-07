@@ -87,7 +87,7 @@ const TeacherDashboard = () => {
               <h3>Recent Quiz Results</h3>
               <button className="text-link">View All</button>
             </div>
-            <div className="table-responsive">
+            <div className="table-responsive-wrapper">
               <table className="dashboard-table">
                 <thead>
                   <tr>

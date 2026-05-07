@@ -324,7 +324,7 @@ const handleScanRecord = async () => {
 
         <section className="results-section">
           <h3 className="results-title">Student Results</h3>
-          <div className="results-table-wrapper">
+          <div className="table-responsive-wrapper">
             <table className="results-table">
               <thead>
                 <tr>
