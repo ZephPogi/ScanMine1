@@ -107,7 +107,6 @@ const StudentMyGrades = () => {
           <button className="smg-export-btn">⬇ Download CSV</button>
         </div>
       </div>
-    </div>
   );
 };
 

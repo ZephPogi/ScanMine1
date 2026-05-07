@@ -64,7 +64,6 @@ const StudentClasses = () => {
           </div>
         )}
       </div>
-    </div>
   );
 };
 

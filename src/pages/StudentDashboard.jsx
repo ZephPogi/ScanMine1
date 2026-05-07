@@ -130,7 +130,6 @@ const StudentDashboard = () => {
           </section>
         </div>
       </main>
-    </main>
   );
 };
 

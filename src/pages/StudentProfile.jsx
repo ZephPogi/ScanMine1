@@ -36,6 +36,7 @@ const StudentProfile = () => {
   };
 
   return (
+    <>
       <main className="profile-content">
         <header className="profile-header">
           <h2>My Profile</h2>
@@ -178,7 +179,7 @@ const StudentProfile = () => {
           </div>
         </div>
       )}
-    </main>
+    </>
   );
 };
 

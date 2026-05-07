@@ -156,10 +156,10 @@ const StudentViewClass = () => {
             </header>
             <p>No class selected.</p>
         </div>
-        </div>
   );
 
   return (
+    <>
       <div className="section-container">
         <header className="minimal-header">
           <button className="back-btn" onClick={() => navigate('/student-classes')}>← Back to Classes</button>
@@ -297,7 +297,7 @@ const StudentViewClass = () => {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

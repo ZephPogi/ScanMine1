@@ -95,7 +95,6 @@ const StudentUpcomingExams = () => {
           ))}
         </div>
       </div>
-    </div>
   );
 };
 
