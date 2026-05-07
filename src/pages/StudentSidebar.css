@@ -1,135 +1,120 @@
-.student-sidebar {
-    width: 200px;
-    min-height: 100vh;
-    background: linear-gradient(180deg, #1e2a3a 0%, #162032 100%);
-    display: flex;
-    flex-direction: column;
-    position: fixed;
-    left: 0;
-    top: 0;
-    z-index: 100;
-    padding-bottom: 20px;
+/* StudentSidebar.css — 1:1 visual clone of Sidebar.css */
+.sidebar {
+  width: 260px;
+  background-color: #1e293b;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  padding: 30px;
+  position: fixed;
+  height: 100vh;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
 }
 
-.student-sidebar-brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 24px 20px 20px;
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 50px;
 }
 
-.student-brand-logo {
-    width: 32px;
-    height: 32px;
-    background: #4483f2;
-    color: white;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 800;
-    font-size: 1rem;
+.brand-logo {
+  background-color: #3b82f6;
+  width: 35px;
+  height: 35px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 1.2rem;
 }
 
-.student-sidebar-brand h2 {
-    color: white;
-    font-size: 1.1rem;
-    margin: 0;
-    font-weight: 700;
+.sidebar-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
 }
 
-.student-sidebar-nav {
-    flex: 1;
-    padding: 8px 12px;
+.nav-item {
+  padding: 14px 18px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  color: #94a3b8;
+  transition: all 0.3s ease;
+  margin-bottom: 10px;
 }
 
-.student-sidebar-nav ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+.nav-item .icon {
+  color: #94a3b8;
 }
 
-.student-nav-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 11px 14px;
-    border-radius: 10px;
-    color: #94a3b8;
-    font-size: 0.9rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.18s;
+.nav-item:hover,
+.nav-item.active {
+  background-color: #3b82f6;
+  color: white;
 }
 
-.student-nav-item:hover {
-    background: rgba(255, 255, 255, 0.07);
-    color: white;
+.nav-item:hover .icon,
+.nav-item.active .icon {
+  color: white;
 }
 
-.student-nav-item.active {
-    background: #4483f2;
-    color: white;
-    font-weight: 600;
+.sidebar-footer {
+  margin-top: auto;
 }
 
-.student-icon {
-    font-size: 1rem;
-    flex-shrink: 0;
+.logout {
+  color: #ef4444;
 }
 
-.student-sidebar-footer {
-    padding: 10px 12px;
+.logout:hover {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
 }
 
-.student-logout {
-    color: #ef4444 !important;
-}
-
-.student-logout:hover {
-    background: rgba(239, 68, 68, 0.12) !important;
-    color: #ef4444 !important;
+.logout:hover .icon {
+  color: #ef4444;
 }
 
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
-  .student-sidebar {
+  .sidebar {
     position: fixed;
     bottom: 0;
     left: 0;
     width: 100%;
     z-index: 9999;
-    min-height: auto;
     height: 70px;
     flex-direction: row;
     top: auto;
     padding: 10px;
     justify-content: space-around;
     align-items: center;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  .student-sidebar-brand {
+  .sidebar-brand {
     display: none;
   }
 
-  .student-sidebar-nav {
+  .sidebar-nav {
     width: 100%;
-    padding: 0;
   }
 
-  .student-sidebar-nav ul {
+  .sidebar-nav ul {
     display: flex;
-    flex-direction: row;
     justify-content: space-around;
     width: 100%;
     align-items: center;
   }
 
-  .student-nav-item {
+  .nav-item {
     flex-direction: column;
     padding: 8px;
     margin-bottom: 0;
@@ -141,21 +126,20 @@
     border-radius: 8px;
   }
 
-  .student-nav-item span {
-    display: block; /* Keep text visible but small */
+  .nav-item span {
+    display: block;
     font-size: 0.65rem;
     white-space: nowrap;
   }
 
-  .student-sidebar-footer {
-    padding: 0;
+  .sidebar-footer {
     margin-top: 0;
     display: flex;
     align-items: center;
     margin-left: 10px;
   }
 
-  .student-logout {
+  .logout {
     padding: 8px;
     margin-bottom: 0;
     flex-direction: column;
@@ -164,7 +148,7 @@
     border-radius: 8px;
   }
 
-  .student-logout span {
+  .logout span {
     font-size: 0.65rem;
   }
 }

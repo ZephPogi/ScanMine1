@@ -1,6 +1,6 @@
 /* Shared layout */
 .student-page-layout { display: flex; background: #f1f5f9; min-height: 100vh; }
-.student-main { margin-left: 200px; flex: 1; padding: 30px 36px; min-height: 100vh; }
+.student-main { margin-left: 260px; flex: 1; padding: 30px 36px; min-height: 100vh; }
 .student-avatar-circle {
     width: 42px; height: 42px;
     background: linear-gradient(135deg, #4483f2, #7c3aed);
