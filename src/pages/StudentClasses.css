@@ -182,6 +182,8 @@
 @media (max-width: 768px) {
   .student-main {
     margin-left: 0;
+    width: 100%;
+    box-sizing: border-box;
     padding: 20px;
     padding-bottom: 90px;
   }

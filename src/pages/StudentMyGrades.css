@@ -103,4 +103,6 @@
 }
 .smg-export-btn:hover { transform: translateY(-1px); box-shadow: 0 5px 16px rgba(16,185,129,0.4); }
 
-@media (max-width: 768px) { .student-main { margin-left: 0; padding: 20px; padding-bottom: 90px; } .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; } }
+@media (max-width: 768px) { .student-main { margin-left: 0;
+    width: 100%;
+    box-sizing: border-box; padding: 20px; padding-bottom: 90px; } .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; } }

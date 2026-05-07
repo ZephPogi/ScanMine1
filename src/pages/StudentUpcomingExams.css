@@ -72,4 +72,6 @@
 .sue-btn.upload-paper   { background: linear-gradient(135deg, #7c3aed, #9333ea); color: white; }
 .sue-btn.view-results   { background: #94a3b8; color: white; }
 
-@media (max-width: 768px) { .student-main { margin-left: 0; padding: 20px; padding-bottom: 90px; } .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; } }
+@media (max-width: 768px) { .student-main { margin-left: 0;
+    width: 100%;
+    box-sizing: border-box; padding: 20px; padding-bottom: 90px; } .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; } }
