@@ -433,7 +433,7 @@ const SectionDetails = ({ section, onBack }) => {
           </section>
 
           <aside className="actions-sidebar">
-            <div className="action-card">
+            <div className="action-card exam-management">
               <h4>Exam Management</h4>
               <button className="btn-action primary" onClick={() => setShowAttachModal(true)}>
                 Attach Exam & Key

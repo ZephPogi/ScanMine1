@@ -963,3 +963,21 @@
     margin: 0 auto;
   }
 }
+
+/* Exam Management Button Resizing */
+.exam-management {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    overflow: hidden;
+}
+
+.exam-management button {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100%;
+    white-space: normal; /* Allows long text to wrap to a second line */
+    height: auto;
+    padding: 12px 10px;
+    box-sizing: border-box;
+}

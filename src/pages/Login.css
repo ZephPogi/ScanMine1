@@ -215,3 +215,26 @@
   color: white;
   padding: 60px;
 }
+
+@media (max-width: 768px) {
+  .login-container {
+    flex-direction: column;
+  }
+  .login-left {
+    width: 100%;
+    min-height: auto;
+    padding: 20px 15px;
+    flex: none;
+    display: none; /* Hide on mobile so user instantly sees login form as suggested by user */
+  }
+  .login-right {
+    width: 100%;
+    flex: 1;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  .input-group input, .signin-btn, .role-switcher {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
