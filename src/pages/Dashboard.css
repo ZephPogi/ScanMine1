@@ -118,4 +118,53 @@
   color: #475569;
 }
 .shortcut-item:hover { background: #eff6ff; border-color: #3b82f6; color: #3b82f6; }
-@media (max-width: 768px) { .dashboard-container { margin-left: 0; padding: 20px; padding-bottom: 90px; } .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; } }
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .dashboard-content {
+    margin-left: 0;
+    padding: 20px;
+    padding-bottom: 90px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .dashboard-header h1 {
+    font-size: 1.4rem;
+  }
+
+  .dashboard-main-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+  }
+
+  .stats-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    width: 100%;
+  }
+
+  .stat-card {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .table-responsive-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-top: 10px;
+  }
+
+  .dashboard-table {
+    min-width: 500px;
+  }
+}

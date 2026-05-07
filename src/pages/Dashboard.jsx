@@ -87,32 +87,34 @@ const TeacherDashboard = () => {
               <h3>Recent Quiz Results</h3>
               <button className="text-link">View All</button>
             </div>
-            <table className="dashboard-table">
-              <thead>
-                <tr>
-                  <th>Section</th>
-                  <th>Quiz Title</th>
-                  <th>Status</th>
-                  <th>Avg. Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '20px'}}>Loading recent activity...</td></tr>
-                ) : dashboardData.recentActivity.length === 0 ? (
-                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '20px'}}>No recent activity found.</td></tr>
-                ) : (
-                  dashboardData.recentActivity.map((activity, index) => (
-                    <tr key={index}>
-                      <td>{activity.student_name}</td>
-                      <td>{activity.subject}</td>
-                      <td>{getStatusBadge(activity.score)}</td>
-                      <td>{activity.score}%</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            <div className="table-responsive-wrapper">
+              <table className="dashboard-table">
+                <thead>
+                  <tr>
+                    <th>Section</th>
+                    <th>Quiz Title</th>
+                    <th>Status</th>
+                    <th>Avg. Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan="4" style={{textAlign: 'center', padding: '20px'}}>Loading recent activity...</td></tr>
+                  ) : dashboardData.recentActivity.length === 0 ? (
+                    <tr><td colSpan="4" style={{textAlign: 'center', padding: '20px'}}>No recent activity found.</td></tr>
+                  ) : (
+                    dashboardData.recentActivity.map((activity, index) => (
+                      <tr key={index}>
+                        <td>{activity.student_name}</td>
+                        <td>{activity.subject}</td>
+                        <td>{getStatusBadge(activity.score)}</td>
+                        <td>{activity.score}%</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           {/* Quick Actions / Shortcuts */}

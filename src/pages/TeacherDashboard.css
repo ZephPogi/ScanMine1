@@ -124,7 +124,9 @@
   .dashboard-content {
     margin-left: 0;
     padding: 20px;
-    padding-bottom: 90px; /* Space for bottom nav */
+    padding-bottom: 90px;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .dashboard-header {
@@ -138,14 +140,25 @@
   }
 
   .dashboard-main-grid {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
   }
 
   .stats-grid {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    width: 100%;
   }
 
-  .table-responsive {
+  .stat-card {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .table-responsive-wrapper {
     width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -153,6 +166,6 @@
   }
 
   .dashboard-table {
-    min-width: 500px; /* Ensure table doesn't squash too much */
+    min-width: 500px;
   }
 }

@@ -376,4 +376,37 @@
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
 }
-@media (max-width: 768px) { .profile-content { margin-left: 0; padding: 20px; padding-bottom: 90px; } }
+@media (max-width: 768px) {
+  .profile-content {
+    margin-left: 0;
+    padding: 15px;
+    padding-bottom: 90px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .profile-grid {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .profile-card {
+    padding: 20px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .form-group-row {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .profile-actions {
+    flex-direction: column;
+  }
+
+  .btn-edit, .btn-password {
+    width: 100%;
+    justify-content: center;
+  }
+}
