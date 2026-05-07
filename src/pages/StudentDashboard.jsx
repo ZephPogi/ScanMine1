@@ -1,18 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
-import { Camera } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Clock, FileText, TrendingUp, Award } from 'lucide-react';
 import StudentSidebar from './StudentSidebar';
 import './StudentDashboard.css';
 
 const StudentDashboard = () => {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const student = { name: user.name || 'Student', avatar: (user.name || 'S').substring(0, 2).toUpperCase() };
-
-  // Upload modal state
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadFile, setUploadFile] = useState(null);
-  const [activeExam, setActiveExam] = useState(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const uploadRef = useRef(null);
 
   const [pendingExams, setPendingExams] = useState([]);
 
@@ -22,16 +15,15 @@ const StudentDashboard = () => {
 
   const fetchPendingExams = async () => {
     try {
-      // In a full app, we'd fetch based on student's classes. 
-      // For now, we fetch all exams to make testing easier for the user.
       const response = await fetch('/api/exams'); 
       if (response.ok) {
         const data = await response.json();
         setPendingExams(data.map(e => ({
           id: e.id,
           title: e.title,
+          subject: 'Enrolled Class',
           due: 'Active',
-          status: 'Not submitted',
+          status: 'Pending',
           statusClass: 'status-pending'
         })));
       }
@@ -40,182 +32,107 @@ const StudentDashboard = () => {
     }
   };
 
-  const openUploadModal = (exam) => {
-    setActiveExam(exam);
-    setShowUploadModal(true);
-  };
-
-  const closeUploadModal = () => {
-    setShowUploadModal(false);
-    setUploadFile(null);
-    setActiveExam(null);
-  };
-
-  const handleSubmitAutoGrade = async () => {
-    if (!uploadFile || !activeExam) return alert('Please select a file');
-    
-    setIsUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('studentPaper', uploadFile);
-      formData.append('studentId', user.id);
-      formData.append('examId', activeExam.id);
-
-      const response = await fetch('/api/upload-paper', {
-        method: 'POST',
-        body: formData
-      });
-
-      const data = await response.json();
-      if (response.ok) {
-        const total = data.result.totalScore || 0;
-        const max = data.result.maxScore || 1;
-        const perc = ((total / max) * 100).toFixed(0);
-        alert(`Grading Complete! Your Score: ${perc}%`);
-        console.log('Feedback:', data.result.feedback);
-      } else {
-        alert('Grading failed: ' + data.error);
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-      alert('Error uploading paper');
-    } finally {
-      setIsUploading(false);
-      closeUploadModal();
-    }
-  };
-
-  const leaderboard = [
-    { rank: 1, name: 'Mike Chen',          avg: '96%', isMe: false },
-    { rank: 2, name: `${student.name} (You)`, avg: '90%', isMe: true  },
-    { rank: 3, name: 'Emma Davis',          avg: '88%', isMe: false },
-    { rank: 4, name: 'James Wilson',        avg: '82%', isMe: false },
-    { rank: 5, name: 'Olivia Brown',        avg: '78%', isMe: false },
+  const stats = [
+    { id: 1, label: "Active Classes", value: "4", icon: FileText, trend: "" },
+    { id: 2, label: "Pending Exams", value: pendingExams.length.toString(), icon: Clock, trend: pendingExams.length > 0 ? "Action Required" : "" },
+    { id: 3, label: "Average Grade", value: "92%", icon: TrendingUp, trend: "+2% this month" },
+    { id: 4, label: "Class Rank", value: "Top 10%", icon: Award, trend: "" },
   ];
 
+  const getStatusBadge = (status) => {
+    if (status === 'Pending') {
+      return <span className="badge warning">Pending</span>;
+    }
+    return <span className="badge success">Completed</span>;
+  };
+
   return (
-    <div className="student-page-layout">
+    <div className="page-layout">
       <StudentSidebar />
-      <div className="student-main">
-        {/* Header */}
-        <header className="student-dash-header">
+      <main className="dashboard-content">
+        <header className="dashboard-header">
           <div>
-            <p className="student-dash-label">student / student view</p>
             <h1>Welcome back, {student.name}!</h1>
+            <p>Here's what's happening with your classes today.</p>
           </div>
-          <div className="student-avatar-circle">{student.avatar}</div>
+          <div className="student-avatar-circle" style={{background: '#3b82f6', color: 'white', width: '45px', height: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontWeight: 'bold', fontSize: '1.2rem'}}>{student.avatar}</div>
         </header>
 
-        {/* Pending Quizzes & Exams */}
-        <section className="student-card">
-          <h3 className="student-section-title">📋 Pending Quizzes & Exams</h3>
-          <div className="exam-list">
-            {pendingExams.length === 0 && <p style={{padding: '10px'}}>No pending exams found.</p>}
-            {pendingExams.map(exam => (
-              <div className="exam-row" key={exam.id}>
-                <div className="exam-info">
-                  <span className="exam-title">{exam.title}</span>
-                  <span className="exam-due">{exam.due}</span>
-                  <span className={`exam-status ${exam.statusClass}`}>{exam.status}</span>
-                </div>
-                <div className="exam-actions">
-                  <button className="btn-upload-paper" onClick={() => openUploadModal(exam)}>
-                    <Camera size={16} />
-                    <span>Upload Paper Photo</span>
-                  </button>
+        {/* Stats Grid */}
+        <section className="stats-grid">
+          {stats.map(stat => {
+            const Icon = stat.icon;
+            return (
+              <div key={stat.id} className="stat-card">
+                <div className="stat-icon"><Icon size={24} /></div>
+                <div className="stat-info">
+                  <span className="stat-label">{stat.label}</span>
+                  <h2 className="stat-value">{stat.value}</h2>
+                  <span className={`stat-trend ${stat.trend.includes('+') ? 'positive' : 'neutral'}`}>
+                    {stat.trend}
+                  </span>
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </section>
 
-        {/* Class Leaderboard */}
-        <section className="student-card">
-          <h3 className="student-section-title">🏆 Class Leaderboard</h3>
-          <div className="table-responsive-wrapper">
-            <table className="leaderboard-table">
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Student</th>
-                  <th>Avg. Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leaderboard.map(entry => (
-                  <tr key={entry.rank} className={entry.isMe ? 'leaderboard-me' : ''}>
-                    <td className="rank-cell">
-                      {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : entry.rank}
-                    </td>
-                    <td className="leaderboard-name">
-                      {entry.name}
-                      {entry.isMe && <span className="you-badge">You</span>}
-                    </td>
-                    <td>
-                      <span className={`avg-badge ${entry.avg >= '90%' ? 'avg-high' : entry.avg >= '80%' ? 'avg-mid' : 'avg-low'}`}>
-                        {entry.avg}
-                      </span>
-                    </td>
+        {/* Main Section */}
+        <div className="dashboard-main-grid">
+          {/* Pending Exams Table */}
+          <section className="dashboard-card table-container">
+            <div className="card-header">
+              <h3>Pending Quizzes & Exams</h3>
+              <button className="text-link">View All</button>
+            </div>
+            <div className="table-responsive-wrapper">
+              <table className="dashboard-table">
+                <thead>
+                  <tr>
+                    <th>Exam Title</th>
+                    <th>Class</th>
+                    <th>Status</th>
+                    <th>Due</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
-
-      {/* ===== UPLOAD ANSWER SHEET MODAL ===== */}
-      {showUploadModal && (
-        <div className="upload-modal-overlay" onClick={closeUploadModal}>
-          <div className="upload-modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="upload-modal-header">
-              <span className="upload-prof-label">student</span>
+                </thead>
+                <tbody>
+                  {pendingExams.length === 0 ? (
+                    <tr><td colSpan="4" style={{textAlign: 'center', padding: '20px'}}>No pending exams.</td></tr>
+                  ) : (
+                    pendingExams.map((exam, index) => (
+                      <tr key={index}>
+                        <td>{exam.title}</td>
+                        <td>{exam.subject}</td>
+                        <td>{getStatusBadge(exam.status)}</td>
+                        <td>{exam.due}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
+          </section>
 
-            <div className="upload-title-banner">
-              <Camera size={20} />
-              <span>Upload Answer Sheet</span>
-              <button className="upload-close-btn" onClick={closeUploadModal}>×</button>
+          {/* Leaderboard or Shortcuts */}
+          <section className="dashboard-card shortcuts">
+            <h3>Leaderboard Rank</h3>
+            <div className="shortcut-list" style={{padding: '10px 0'}}>
+                <div style={{display: 'flex', justifyContent: 'space-between', padding: '12px 10px', borderBottom: '1px solid #f1f5f9'}}>
+                    <span>🥇 Mike Chen</span>
+                    <span style={{fontWeight: 'bold', color: '#16a34a'}}>96%</span>
+                </div>
+                <div style={{display: 'flex', justifyContent: 'space-between', padding: '12px 10px', borderBottom: '1px solid #f1f5f9', background: '#eef2ff', borderRadius: '8px'}}>
+                    <span style={{fontWeight: 'bold', color: '#4338ca'}}>🥈 {student.name} (You)</span>
+                    <span style={{fontWeight: 'bold', color: '#4338ca'}}>92%</span>
+                </div>
+                <div style={{display: 'flex', justifyContent: 'space-between', padding: '12px 10px', borderBottom: '1px solid #f1f5f9'}}>
+                    <span>🥉 Emma Davis</span>
+                    <span style={{fontWeight: 'bold', color: '#16a34a'}}>88%</span>
+                </div>
             </div>
-
-            <div className="upload-exam-info">
-              <h4 className="upload-exam-title">Exam: {activeExam?.title}</h4>
-              <p className="upload-exam-sub">Take a photo or upload your answered paper</p>
-            </div>
-
-            <div
-              className="upload-drop-zone"
-              onClick={() => !isUploading && uploadRef.current.click()}
-            >
-              <input
-                type="file"
-                ref={uploadRef}
-                accept=".jpg,.jpeg,.png,.pdf"
-                style={{ display: 'none' }}
-                onChange={(e) => { if (e.target.files[0]) setUploadFile(e.target.files[0]); }}
-              />
-              <div className="upload-camera-icon"><Camera size={32} /></div>
-              <p className="upload-take-photo">
-                {uploadFile ? uploadFile.name : 'Take Photo'}
-              </p>
-              <p className="upload-or">or</p>
-              <p className="upload-gallery-link">📱 Upload from Gallery</p>
-              <p className="upload-supported">Supported: JPG, PNG, PDF (max 10MB)</p>
-            </div>
-
-            <div className="upload-modal-footer">
-              <button 
-                className="upload-submit-btn" 
-                onClick={handleSubmitAutoGrade}
-                disabled={isUploading || !uploadFile}
-              >
-                {isUploading ? 'Processing...' : 'Submit for Auto-Grading'}
-              </button>
-              <p className="upload-submit-hint">ScanMine will automatically grade and record your score</p>
-            </div>
-          </div>
+          </section>
         </div>
-      )}
+      </main>
     </div>
   );
 };

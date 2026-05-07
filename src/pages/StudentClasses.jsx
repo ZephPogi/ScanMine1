@@ -1,105 +1,71 @@
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import StudentSidebar from './StudentSidebar';
+import { Users } from 'lucide-react';
 import './StudentClasses.css';
 
 const StudentClasses = () => {
   const navigate = useNavigate();
-  const student = { avatar: 'SJ' };
+  const [classes, setClasses] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const classes = [
-    {
-      id: 1,
-      icon: '📐',
-      title: 'Algebra 101',
-      status: 'Active',
-      professor: 'Dr. Sarah Johnson',
-      schedule: 'Mon/Wed 10:00 AM – 11:30 AM',
-      progress: 65,
-      progressLabel: '65% completed',
-      finished: false,
-    },
-    {
-      id: 2,
-      icon: '🌍',
-      title: 'World History',
-      status: 'Active',
-      professor: 'Dr. Michael Chen',
-      schedule: 'Tue/Thu 1:00 PM – 2:30 PM',
-      progress: 40,
-      progressLabel: '40% completed',
-      finished: false,
-    },
-    {
-      id: 3,
-      icon: '🔬',
-      title: 'Biology Basics',
-      status: 'Grade: A',
-      statusClass: 'status-grade',
-      professor: 'Dr. Emily Rodriguez',
-      schedule: 'Mon/Wed 3:00 PM – 4:30 PM',
-      progress: 100,
-      progressLabel: 'Final Grade: 92% (A)',
-      finished: true,
-    },
-  ];
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+  const fetchClasses = useCallback(async () => {
+    if (!user.id) return;
+    try {
+      const response = await fetch(`/api/student-classes?studentId=${user.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setClasses(Array.isArray(data) ? data : []);
+      }
+    } catch (error) {
+      console.error('Error fetching student classes:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user.id]);
+
+  useEffect(() => {
+    fetchClasses();
+  }, [fetchClasses]);
+
+  const handleViewClass = (cls) => {
+    navigate('/student-view-class', { state: { section: cls } });
+  };
 
   return (
-    <div className="student-page-layout">
+    <div className="page-layout">
       <StudentSidebar />
-      <div className="student-main">
-        {/* Header */}
-        <header className="student-classes-header">
+      <div className="main-content">
+        <header className="page-header">
           <div>
-            <h1>My Classes</h1>
-            <p className="student-classes-sub">Spring Semester 2025</p>
+            <h2>My Classes</h2>
+            <p style={{color: '#64748b', marginTop: '5px'}}>View and access your enrolled classes.</p>
           </div>
-          <div className="student-avatar-circle">{student.avatar}</div>
         </header>
 
-        {/* Class Cards */}
-        <div className="classes-list">
-          {classes.map(cls => (
-            <div className="class-card-student" key={cls.id}>
-              {/* Card Header */}
-              <div className="class-card-top">
-                <div className="class-card-title-row">
-                  <span className="class-icon">{cls.icon}</span>
-                  <span className="class-name">{cls.title}</span>
+        {loading ? (
+          <p>Loading classes...</p>
+        ) : (
+          <div className="class-grid">
+            {classes.map((item) => (
+              <div key={item.id} className="class-card">
+                <div className="card-top">
+                  <span className="subject-label">{item.subject || 'No Subject'}</span>
                 </div>
-                <span className={`class-status-badge ${cls.statusClass || (cls.status === 'Active' ? 'status-active' : '')}`}>
-                  {cls.status}
-                </span>
+                <div className="card-info">
+                  <h3>{item.name}</h3>
+                  <p><Users size={16} /> Professor: {item.professor || 'Unknown'}</p>
+                </div>
+                <button className="view-btn" onClick={() => handleViewClass(item)}>
+                  View Class
+                </button>
               </div>
-
-              {/* Card Body */}
-              <div className="class-card-body">
-                <div className="class-meta">
-                  <p>Professor: {cls.professor}</p>
-                  <p>Schedule: {cls.schedule}</p>
-                  <div className="class-progress-bar">
-                    <div
-                      className={`class-progress-fill ${cls.finished ? 'fill-green' : 'fill-blue'}`}
-                      style={{ width: `${cls.progress}%` }}
-                    />
-                  </div>
-                  <p className="class-progress-label">{cls.progressLabel}</p>
-                </div>
-
-                <div className="class-card-actions">
-                  {!cls.finished ? (
-                    <>
-                      <button className="cls-btn view" onClick={() => navigate('/student-view-class')}>View Class</button>
-                      <button className="cls-btn upcoming" onClick={() => navigate('/student-upcoming-exams')}>Upcoming Exams</button>
-                      <button className="cls-btn grades" onClick={() => navigate('/student-my-grades')}>My Grades</button>
-                    </>
-                  ) : (
-                    <button className="cls-btn grades">My Grades</button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+            {classes.length === 0 && <p>You are not enrolled in any classes yet.</p>}
+          </div>
+        )}
       </div>
     </div>
   );

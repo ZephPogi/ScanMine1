@@ -1,212 +1,279 @@
-/* Shared layout from StudentDashboard.css */
-.student-page-layout {
-    display: flex;
-    background: #f1f5f9;
-    min-height: 100vh;
+.page-layout {
+  display: flex;
+  background-color: #f4f7fe;
+  min-height: 100vh;
 }
 
-.student-main {
-    margin-left: 200px;
-    flex: 1;
-    padding: 30px 36px;
-    min-height: 100vh;
+.main-content {
+  margin-left: 260px; /* Sukat ng sidebar para hindi tabon */
+  flex: 1;
+  padding: 40px;
 }
 
-.student-avatar-circle {
-    width: 42px;
-    height: 42px;
-    background: linear-gradient(135deg, #4483f2, #7c3aed);
-    color: white;
-    border-radius: 50%;
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.add-btn {
+  background-color: #4483f2;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* Grid System para sa Cards */
+.class-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 25px;
+}
+
+.class-card {
+  background: white;
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  transition: 0.3s;
+}
+
+.class-card:hover {
+  transform: translateY(-5px);
+}
+
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.delete-class-btn {
+  background: none;
+  border: none;
+  color: #a0aec0;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.delete-class-btn:hover {
+  color: #ef4444;
+  background-color: #fee2e2;
+}
+
+.subject-label {
+  background: #e0e7ff;
+  color: #4338ca;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.card-info h3 {
+  margin: 15px 0 5px 0;
+  font-size: 1.2rem;
+  color: #1a2233;
+}
+
+.card-info p {
+  color: #718096;
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+}
+
+.view-btn {
+  margin-top: auto;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 10px;
+  border-radius: 10px;
+  color: #1a2233;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.view-btn:hover {
+  background: #4483f2;
+  color: white;
+  border-color: #4483f2;
+}
+
+/* ===== CREATE CLASS MODAL ===== */
+.create-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
     display: flex;
-    align-items: center;
     justify-content: center;
-    font-weight: 700;
-    font-size: 0.9rem;
-    box-shadow: 0 4px 12px rgba(68, 131, 242, 0.3);
-    flex-shrink: 0;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+    animation: createFadeIn 0.2s ease;
 }
 
-/* Header */
-.student-classes-header {
+@keyframes createFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes createSlideUp {
+    from { opacity: 0; transform: translateY(30px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.create-modal-content {
+    background: #f8fafc;
+    border-radius: 18px;
+    width: 460px;
+    max-width: 94vw;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+    animation: createSlideUp 0.3s ease;
+}
+
+.create-modal-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 26px;
+    align-items: center;
+    padding: 14px 20px 8px;
 }
 
-.student-classes-header h1 {
-    font-size: 1.8rem;
-    color: #1e293b;
-    margin: 0;
-    font-weight: 800;
+.create-prof-label {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    font-weight: 600;
+    letter-spacing: 0.5px;
 }
 
-.student-classes-sub {
-    color: #64748b;
-    font-size: 0.9rem;
-    margin: 4px 0 0;
+.create-close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #94a3b8;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.15s;
 }
 
-/* Classes List */
-.classes-list {
+.create-close-btn:hover {
+    color: #334155;
+}
+
+.create-title-banner {
+    background: linear-gradient(135deg, #3b5fe0, #5b7ff5);
+    color: white;
+    text-align: center;
+    padding: 14px 20px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0 20px;
+    border-radius: 12px;
+    letter-spacing: 0.3px;
+}
+
+/* Form */
+.create-form {
+    padding: 20px 24px 6px;
     display: flex;
     flex-direction: column;
-    gap: 18px;
-}
-
-/* Class Card */
-.class-card-student {
-    background: white;
-    border-radius: 16px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-    overflow: hidden;
-    transition: transform 0.15s, box-shadow 0.15s;
-}
-
-.class-card-student:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 18px rgba(0,0,0,0.08);
-}
-
-/* Card Header bar */
-.class-card-top {
-    background: linear-gradient(135deg, #1e2a3a, #2d3a50);
-    padding: 14px 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.class-card-title-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.class-icon { font-size: 1.2rem; }
-
-.class-name {
-    color: white;
-    font-weight: 700;
-    font-size: 1rem;
-}
-
-.class-status-badge {
-    padding: 4px 14px;
-    border-radius: 20px;
-    font-size: 0.78rem;
-    font-weight: 700;
-}
-
-.status-active {
-    background: #10b981;
-    color: white;
-}
-
-.status-grade {
-    background: #f59e0b;
-    color: white;
-}
-
-/* Card Body */
-.class-card-body {
-    padding: 18px 22px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     gap: 16px;
 }
 
-.class-meta {
-    flex: 1;
-}
-
-.class-meta p {
-    margin: 0 0 4px;
-    font-size: 0.85rem;
-    color: #64748b;
-}
-
-.class-progress-bar {
-    width: 100%;
-    height: 6px;
-    background: #e2e8f0;
-    border-radius: 10px;
-    overflow: hidden;
-    margin: 8px 0 4px;
-}
-
-.class-progress-fill {
-    height: 100%;
-    border-radius: 10px;
-    transition: width 0.4s ease;
-}
-
-.fill-blue  { background: linear-gradient(90deg, #4483f2, #6366f1); }
-.fill-green { background: linear-gradient(90deg, #10b981, #34d399); }
-
-.class-progress-label {
-    font-size: 0.78rem;
-    color: #94a3b8 !important;
-}
-
-/* Card Actions */
-.class-card-actions {
+.create-field {
     display: flex;
-    gap: 10px;
-    flex-shrink: 0;
+    flex-direction: column;
+    gap: 6px;
 }
 
-.cls-btn {
-    padding: 9px 18px;
+.create-label {
+    font-weight: 700;
+    font-size: 0.92rem;
+    color: #1e293b;
+}
+
+.create-input {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    color: #334155;
+    background: white;
+    font-family: inherit;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+}
+
+.create-input:focus {
+    outline: none;
+    border-color: #4483f2;
+    box-shadow: 0 0 0 3px rgba(68, 131, 242, 0.1);
+}
+
+.create-input::placeholder {
+    color: #cbd5e1;
+}
+
+/* Footer */
+.create-modal-footer {
+    padding: 20px 24px 26px;
+    display: flex;
+    justify-content: center;
+}
+
+.create-submit-btn {
+    background: linear-gradient(135deg, #4483f2, #6366f1);
+    color: white;
     border: none;
-    border-radius: 8px;
-    font-size: 0.82rem;
-    font-weight: 600;
+    padding: 14px 48px;
+    border-radius: 30px;
+    font-size: 1.05rem;
+    font-weight: 700;
     cursor: pointer;
-    transition: transform 0.15s, opacity 0.15s;
-    white-space: nowrap;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 4px 16px rgba(68, 131, 242, 0.35);
 }
 
-.cls-btn:hover {
-    transform: translateY(-1px);
-    opacity: 0.9;
+.create-submit-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 22px rgba(68, 131, 242, 0.5);
 }
-
-.cls-btn.view     { background: #4483f2; color: white; }
-.cls-btn.upcoming { background: #f59e0b; color: white; }
-.cls-btn.grades   { background: #f59e0b; color: white; }
 
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
-  .student-main {
+  .main-content {
     margin-left: 0;
     width: 100%;
     box-sizing: border-box;
     padding: 20px;
-    padding-bottom: 90px;
+    padding-bottom: 90px; /* Space for bottom nav */
   }
 
-  .student-classes-header {
-    flex-direction: column;
-    gap: 15px;
-    align-items: flex-start;
-  }
-
-  .class-card-body {
+  .page-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 15px;
   }
 
-  .class-card-actions {
-    width: 100%;
-    flex-wrap: wrap;
+  .class-grid {
+    grid-template-columns: 1fr;
   }
 
-  .cls-btn {
-    flex: 1;
-    text-align: center;
+  .create-modal-content {
+    width: 95%;
+    max-width: 95vw;
+    margin: 0 auto;
   }
 }

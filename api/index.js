@@ -219,6 +219,26 @@ app.get('/api/classes/:id/students', async (req, res) => {
   }
 });
 
+app.get('/api/student-classes', async (req, res) => {
+  try {
+    const { studentId } = req.query;
+    if (!studentId || studentId === 'undefined' || studentId === 'null') return res.json([]);
+    
+    const query = `
+      SELECT c.*, u.name as professor
+      FROM Classes c
+      JOIN Students s ON c.id = s.class_id
+      JOIN Users u ON c.teacher_id = u.id
+      WHERE s.user_id = $1;
+    `;
+    const result = await db.query(query, [studentId]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('FETCH STUDENT CLASSES ERROR:', error);
+    res.status(500).json({ error: 'Failed to fetch student classes' });
+  }
+});
+
 // --- TEACHER: GENERATE QUIZ ---
 app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => {
   try {
