@@ -177,3 +177,34 @@
 .cls-btn.view     { background: #4483f2; color: white; }
 .cls-btn.upcoming { background: #f59e0b; color: white; }
 .cls-btn.grades   { background: #f59e0b; color: white; }
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .student-main {
+    margin-left: 0;
+    padding: 20px;
+    padding-bottom: 90px;
+  }
+
+  .student-classes-header {
+    flex-direction: column;
+    gap: 15px;
+    align-items: flex-start;
+  }
+
+  .class-card-body {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .class-card-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .cls-btn {
+    flex: 1;
+    text-align: center;
+  }
+}

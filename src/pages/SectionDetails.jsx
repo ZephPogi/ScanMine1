@@ -406,7 +406,7 @@ const SectionDetails = ({ section, onBack }) => {
               <h3>👥 Student Roster</h3>
               <button className="add-btn" onClick={fetchAllStudents}>+ Add Student</button>
             </div>
-            <div className="table-wrapper">
+            <div className="table-responsive">
               <table className="roster-table">
                 <thead>
                   <tr>

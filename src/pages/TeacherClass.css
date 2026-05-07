@@ -250,3 +250,28 @@
     transform: translateY(-2px);
     box-shadow: 0 6px 22px rgba(68, 131, 242, 0.5);
 }
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .main-content {
+    margin-left: 0;
+    padding: 20px;
+    padding-bottom: 90px; /* Space for bottom nav */
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .class-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .create-modal-content {
+    width: 95%;
+    max-width: 95vw;
+    margin: 0 auto;
+  }
+}

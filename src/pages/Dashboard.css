@@ -118,3 +118,4 @@
   color: #475569;
 }
 .shortcut-item:hover { background: #eff6ff; border-color: #3b82f6; color: #3b82f6; }
+@media (max-width: 768px) { .dashboard-container { margin-left: 0; padding: 20px; padding-bottom: 90px; } .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; } }

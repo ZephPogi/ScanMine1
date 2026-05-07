@@ -376,3 +376,4 @@
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
 }
+@media (max-width: 768px) { .profile-content { margin-left: 0; padding: 20px; padding-bottom: 90px; } }

@@ -77,3 +77,5 @@
 .vc-st-a { background: #ecfdf5; color: #059669; }
 .vc-st-b { background: #eff6ff; color: #2563eb; }
 .vc-st-c { background: #fffbeb; color: #d97706; }
+
+@media (max-width: 768px) { .student-main { margin-left: 0; padding: 20px; padding-bottom: 90px; } .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; } }

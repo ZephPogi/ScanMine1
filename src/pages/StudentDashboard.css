@@ -422,3 +422,50 @@
     margin: 0;
     text-align: center;
 }
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .student-main {
+    margin-left: 0;
+    padding: 20px;
+    padding-bottom: 90px;
+  }
+
+  .student-dash-header {
+    flex-direction: column;
+    gap: 15px;
+    align-items: flex-start;
+  }
+
+  .exam-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .exam-actions {
+    width: 100%;
+    margin-top: 10px;
+  }
+
+  .btn-take-quiz, .btn-upload-paper, .btn-submit-late {
+    flex: 1;
+    text-align: center;
+  }
+
+  /* Table Wrapper */
+  .table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .leaderboard-table {
+    min-width: 400px;
+  }
+
+  .upload-modal-content {
+    width: 95%;
+    max-width: 95vw;
+    margin: 0 auto;
+  }
+}

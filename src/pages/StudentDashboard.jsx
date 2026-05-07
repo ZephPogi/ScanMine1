@@ -132,33 +132,35 @@ const StudentDashboard = () => {
         {/* Class Leaderboard */}
         <section className="student-card">
           <h3 className="student-section-title">🏆 Class Leaderboard</h3>
-          <table className="leaderboard-table">
-            <thead>
-              <tr>
-                <th>Rank</th>
-                <th>Student</th>
-                <th>Avg. Score</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leaderboard.map(entry => (
-                <tr key={entry.rank} className={entry.isMe ? 'leaderboard-me' : ''}>
-                  <td className="rank-cell">
-                    {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : entry.rank}
-                  </td>
-                  <td className="leaderboard-name">
-                    {entry.name}
-                    {entry.isMe && <span className="you-badge">You</span>}
-                  </td>
-                  <td>
-                    <span className={`avg-badge ${entry.avg >= '90%' ? 'avg-high' : entry.avg >= '80%' ? 'avg-mid' : 'avg-low'}`}>
-                      {entry.avg}
-                    </span>
-                  </td>
+          <div className="table-responsive">
+            <table className="leaderboard-table">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Student</th>
+                  <th>Avg. Score</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {leaderboard.map(entry => (
+                  <tr key={entry.rank} className={entry.isMe ? 'leaderboard-me' : ''}>
+                    <td className="rank-cell">
+                      {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : entry.rank}
+                    </td>
+                    <td className="leaderboard-name">
+                      {entry.name}
+                      {entry.isMe && <span className="you-badge">You</span>}
+                    </td>
+                    <td>
+                      <span className={`avg-badge ${entry.avg >= '90%' ? 'avg-high' : entry.avg >= '80%' ? 'avg-mid' : 'avg-low'}`}>
+                        {entry.avg}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       </div>
 

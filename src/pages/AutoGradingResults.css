@@ -608,3 +608,49 @@
     border-left: 4px solid #ef4444;
     color: #991b1b;
 }
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .grading-container {
+    margin-left: 0;
+    padding: 20px;
+    padding-bottom: 90px;
+  }
+
+  .grading-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .stats-row {
+    grid-template-columns: 1fr 1fr; /* 2 columns on tablet/mobile */
+  }
+
+  @media (max-width: 480px) {
+    .stats-row {
+      grid-template-columns: 1fr; /* 1 column on small phones */
+    }
+  }
+
+  .grading-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .action-buttons {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .scan-btn, .export-btn {
+    flex: 1;
+    text-align: center;
+  }
+
+  .scan-modal-content {
+    width: 95%;
+    max-width: 95vw;
+    margin: 0 auto;
+  }
+}

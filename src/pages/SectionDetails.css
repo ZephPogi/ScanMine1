@@ -919,3 +919,45 @@
     opacity: 1;
     transform: scale(1.1);
 }
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .section-container {
+    margin-left: 0;
+    padding: 20px;
+    padding-bottom: 90px;
+  }
+
+  .section-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .roster-section {
+    padding: 15px;
+  }
+
+  .actions-sidebar {
+    gap: 15px;
+  }
+
+  /* Table Wrapper */
+  .table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .roster-table {
+    min-width: 400px; /* Prevent squishing too much */
+  }
+
+  .modal-content.attach-modal,
+  .modal-content.quiz-modal,
+  .modal-content.qa-modal,
+  .modal-content.quiz-taking-modal,
+  .details-modal {
+    width: 95%;
+    max-width: 95vw;
+    margin: 0 auto;
+  }
+}

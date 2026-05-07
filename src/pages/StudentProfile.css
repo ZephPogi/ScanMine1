@@ -192,3 +192,5 @@
     transform: translateY(-1px);
     box-shadow: 0 6px 18px rgba(16, 185, 129, 0.4);
 }
+
+@media (max-width: 768px) { .student-main { margin-left: 0; padding: 20px; padding-bottom: 90px; } }
