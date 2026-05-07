@@ -2,7 +2,6 @@ import imageCompression from 'browser-image-compression';
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Camera, X, CheckCircle, Clock } from 'lucide-react';
-import StudentSidebar from './StudentSidebar';
 import './StudentViewClass.css';
 
 const StudentViewClass = () => {
@@ -141,7 +140,7 @@ const StudentViewClass = () => {
       alert(`Score recorded successfully! You got ${percentage}%`);
       closeScanModal();
       
-      navigate('/auto-grading-results', { state: { section } });
+      navigate(`/student/grades/${section.id}`, { state: { section } });
     } catch (error) {
       console.error("Error grading:", error);
       alert("Error during scanning: " + error.message);
@@ -151,20 +150,16 @@ const StudentViewClass = () => {
   };
 
   if (!section || !section.id) return (
-      <div className="page-layout">
-        <StudentSidebar />
         <div className="section-container">
             <header className="minimal-header">
                 <button className="back-btn" onClick={() => navigate('/student-classes')}>← Back to Classes</button>
             </header>
             <p>No class selected.</p>
         </div>
-      </div>
+        </div>
   );
 
   return (
-    <div className="page-layout">
-      <StudentSidebar />
       <div className="section-container">
         <header className="minimal-header">
           <button className="back-btn" onClick={() => navigate('/student-classes')}>← Back to Classes</button>
@@ -191,7 +186,7 @@ const StudentViewClass = () => {
               <button 
                 className="btn-action success" 
                 style={{ padding: '18px', fontSize: '1.15rem', marginTop: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: 'white', color: '#10b981', border: '2px solid #10b981', borderRadius: '12px', cursor: 'pointer', width: '100%', transition: 'all 0.2s' }}
-                onClick={() => navigate('/auto-grading-results', { state: { section } })}
+                onClick={() => navigate(`/student/grades/${section.id}`, { state: { section } })}
               >
                 View Auto-Grading Results (My Grades)
               </button>

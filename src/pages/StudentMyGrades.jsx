@@ -1,9 +1,9 @@
-import { useNavigate } from 'react-router-dom';
-import StudentSidebar from './StudentSidebar';
+import { useNavigate, useParams } from 'react-router-dom';
 import './StudentMyGrades.css';
 
 const StudentMyGrades = () => {
   const navigate = useNavigate();
+  const { classId } = useParams();
 
   const assessments = [
     { id: 1, name: 'Algebra Quiz 1',        date: 'Feb 10, 2025', totalScore: '15/20', grade: '75%',  gradeClass: 'grade-c',  status: 'Done',    statusClass: 'st-done'    },
@@ -17,8 +17,6 @@ const StudentMyGrades = () => {
   const overallGrade = '85%';
 
   return (
-    <div className="student-page-layout">
-      <StudentSidebar />
       <div className="student-main">
         {/* Header */}
         <header className="smg-header">

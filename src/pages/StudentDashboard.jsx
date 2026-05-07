@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Clock, FileText, TrendingUp, Award } from 'lucide-react';
-import StudentSidebar from './StudentSidebar';
 import './StudentDashboard.css';
 
 const StudentDashboard = () => {
@@ -47,8 +46,6 @@ const StudentDashboard = () => {
   };
 
   return (
-    <div className="page-layout">
-      <StudentSidebar />
       <main className="dashboard-content">
         <header className="dashboard-header">
           <div>
@@ -133,7 +130,7 @@ const StudentDashboard = () => {
           </section>
         </div>
       </main>
-    </div>
+    </main>
   );
 };
 

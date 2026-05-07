@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import StudentSidebar from './StudentSidebar';
 import { Lock, Camera, Edit, Users, BookOpen } from 'lucide-react';
 import './StudentProfile.css';
 
@@ -37,8 +36,6 @@ const StudentProfile = () => {
   };
 
   return (
-    <div className="page-layout">
-      <StudentSidebar />
       <main className="profile-content">
         <header className="profile-header">
           <h2>My Profile</h2>
@@ -181,7 +178,7 @@ const StudentProfile = () => {
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 };
 

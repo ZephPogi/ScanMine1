@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import StudentSidebar from './StudentSidebar';
 import { Users } from 'lucide-react';
 import './StudentClasses.css';
 
@@ -35,8 +34,6 @@ const StudentClasses = () => {
   };
 
   return (
-    <div className="page-layout">
-      <StudentSidebar />
       <div className="main-content">
         <header className="page-header">
           <div>

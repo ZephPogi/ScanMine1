@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Camera, Monitor } from 'lucide-react';
-import StudentSidebar from './StudentSidebar';
 import './StudentUpcomingExams.css';
 
 const StudentUpcomingExams = () => {
@@ -38,8 +37,6 @@ const StudentUpcomingExams = () => {
     : exams.filter(e => e.category === activeFilter);
 
   return (
-    <div className="student-page-layout">
-      <StudentSidebar />
       <div className="student-main">
         {/* Header */}
         <header className="sue-header">

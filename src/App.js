@@ -20,6 +20,7 @@ import StudentProfile      from "./pages/StudentProfile";
 import StudentMyGrades     from "./pages/StudentMyGrades";
 import StudentUpcomingExams from "./pages/StudentUpcomingExams";
 import StudentViewClass    from "./pages/StudentViewClass";
+import StudentLayout       from "./pages/StudentLayout";
 
 function App() {
   return (
@@ -42,12 +43,14 @@ function App() {
         <Route path="/auto-grading-results" element={<AutoGradingResults />} />
 
         {/* Student */}
-        <Route path="/student-dashboard"      element={<StudentDashboard />} />
-        <Route path="/student-classes"        element={<StudentClasses />} />
-        <Route path="/student-profile"        element={<StudentProfile />} />
-        <Route path="/student-my-grades"      element={<StudentMyGrades />} />
-        <Route path="/student-upcoming-exams" element={<StudentUpcomingExams />} />
-        <Route path="/student-view-class"     element={<StudentViewClass />} />
+        <Route element={<StudentLayout />}>
+          <Route path="/student-dashboard"      element={<StudentDashboard />} />
+          <Route path="/student-classes"        element={<StudentClasses />} />
+          <Route path="/student-profile"        element={<StudentProfile />} />
+          <Route path="/student/grades/:classId" element={<StudentMyGrades />} />
+          <Route path="/student-upcoming-exams" element={<StudentUpcomingExams />} />
+          <Route path="/student-view-class"     element={<StudentViewClass />} />
+        </Route>
 
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
