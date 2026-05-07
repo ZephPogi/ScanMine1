@@ -179,8 +179,8 @@ const StudentViewClass = () => {
                 style={{ padding: '18px', fontSize: '1.15rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', width: '100%', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' }}
                 onClick={() => setShowScanModal(true)}
               >
-                <Camera size={26} />
-                📷 Scan / Upload My Answer Sheet
+                <Camera size={20} />
+                Scan / Upload My Answer Sheet
               </button>
 
               <button 

@@ -515,6 +515,74 @@ app.delete('/api/exams/:id', async (req, res) => {
   }
 });
 
+// --- STUDENT DASHBOARD STATS ---
+app.get('/api/student/dashboard', async (req, res) => {
+  try {
+    const { studentId } = req.query;
+    if (!studentId || studentId === 'undefined' || studentId === 'null') {
+      return res.status(400).json({ error: 'Missing studentId' });
+    }
+
+    const activeClassesRes = await db.query(
+      'SELECT COUNT(*) FROM Students WHERE user_id = $1',
+      [studentId]
+    );
+
+    const avgGradeRes = await db.query(
+      'SELECT COALESCE(AVG(score), 0) as average FROM Student_Submissions WHERE student_id = $1',
+      [studentId]
+    );
+
+    const totalSubRes = await db.query(
+      'SELECT COUNT(*) FROM Student_Submissions WHERE student_id = $1',
+      [studentId]
+    );
+
+    const recentRes = await db.query(
+      `SELECT sub.id, e.title as exam_title, sub.score, sub.created_at,
+              (SELECT COUNT(*) FROM answer_keys ak WHERE ak.exam_id = e.id) as total_questions
+       FROM Student_Submissions sub
+       JOIN Exams e ON sub.exam_id = e.id
+       WHERE sub.student_id = $1
+       ORDER BY sub.created_at DESC
+       LIMIT 5`,
+      [studentId]
+    );
+
+    res.json({
+      activeClasses: parseInt(activeClassesRes.rows[0].count, 10),
+      averageGrade: parseFloat(avgGradeRes.rows[0].average).toFixed(1),
+      totalSubmissions: parseInt(totalSubRes.rows[0].count, 10),
+      recentSubmissions: recentRes.rows
+    });
+  } catch (error) {
+    console.error('STUDENT DASHBOARD ERROR:', error);
+    res.status(500).json({ error: 'Failed to fetch student dashboard data' });
+  }
+});
+
+// --- STUDENT GRADES BY CLASS (strict student_id filter) ---
+app.get('/api/student/:studentId/grades/:classId', async (req, res) => {
+  try {
+    const { studentId, classId } = req.params;
+
+    const result = await db.query(
+      `SELECT sub.id, e.title as exam_title, sub.score, sub.created_at,
+              (SELECT COUNT(*) FROM answer_keys ak WHERE ak.exam_id = e.id) as total_questions
+       FROM Student_Submissions sub
+       JOIN Exams e ON sub.exam_id = e.id
+       WHERE sub.student_id = $1 AND e.class_id = $2
+       ORDER BY sub.created_at DESC`,
+      [studentId, classId]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('STUDENT GRADES ERROR:', error);
+    res.status(500).json({ error: 'Failed to fetch student grades' });
+  }
+});
+
 module.exports = app;
 
 if (require.main === module) {

@@ -65,12 +65,27 @@
 .stat-trend.positive { color: #10b981; }
 .stat-trend.neutral { color: #64748b; }
 
-/* Main Grid Layout */
+/* Main Grid Layout — full width, single column */
 .dashboard-main-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 25px;
 }
+
+.dashboard-full-card {
+  width: 100%;
+}
+
+/* Grade Badges */
+.grade-badge-a { background: #ecfdf5; color: #059669; }
+.grade-badge-b { background: #eff6ff; color: #2563eb; }
+.grade-badge-c { background: #fffbeb; color: #d97706; }
+.grade-badge-f { background: #fef2f2; color: #dc2626; }
+
+/* Table helpers */
+.fw-600 { font-weight: 600; color: #1e293b; }
+.text-muted { color: #64748b; font-size: 0.85rem; }
+.table-empty-state { text-align: center; padding: 28px; color: #94a3b8; font-size: 0.9rem; }
 
 .dashboard-card {
   background: white;
