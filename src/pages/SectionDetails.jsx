@@ -1,7 +1,7 @@
 /* eslint-disable */
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Search, UserPlus, UserMinus } from 'lucide-react';
 import jsPDF from 'jspdf';
 import './SectionDetails.css';
 import Sidebar from './Sidebar';
@@ -47,8 +47,6 @@ const SectionDetails = ({ section, onBack }) => {
   const navigate = useNavigate();
   const [students, setStudents] = useState([]);
   const [exams, setExams] = useState([]);
-  const [allStudents, setAllStudents] = useState([]);
-  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
   const [showAttachModal, setShowAttachModal] = useState(false);
   const [showExamDetails, setShowExamDetails] = useState(null);
   const [examQuestions, setExamQuestions] = useState({ manual: [], generated: [] });
@@ -67,6 +65,12 @@ const SectionDetails = ({ section, onBack }) => {
   const [numberOfQuestions, setNumberOfQuestions] = useState(10);
   const [generatedQuestions, setGeneratedQuestions] = useState([]);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+
+  // ── Invite search state ────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchTimeoutRef = useRef(null);
 
   const examInputRef = useRef(null);
   const answerKeyInputRef = useRef(null);
@@ -137,40 +141,54 @@ const SectionDetails = ({ section, onBack }) => {
     }
   };
 
-  const fetchAllStudents = async () => {
+  const handleSearchStudents = useCallback(async (query) => {
+    if (query.trim().length < 2) { setSearchResults([]); return; }
+    setIsSearching(true);
     try {
-      const response = await fetch(`/api/all-students`);
-      if (response.ok) {
-        const data = await response.json();
-        setAllStudents(Array.isArray(data) ? data : []);
-        setShowAddStudentModal(true);
+      const res = await fetch(`/api/students/search?q=${encodeURIComponent(query.trim())}&classId=${section?.id}`);
+      if (res.ok) setSearchResults(await res.json());
+    } catch (err) {
+      console.error('Search error:', err);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [section?.id]);
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearchQuery(val);
+    clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => handleSearchStudents(val), 300);
+  };
+
+  const handleInviteStudent = async (student) => {
+    try {
+      const res = await fetch('/api/class/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ classId: section.id, userId: student.id }),
+      });
+      if (res.ok) {
+        setSearchQuery('');
+        setSearchResults([]);
+        fetchStudents();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to send invite');
       }
-    } catch (error) {
-      console.error('Error fetching all students:', error);
+    } catch (err) {
+      console.error('Invite error:', err);
     }
   };
 
-  const handleAddStudentToClass = async (student) => {
-    if (!student?.email) return;
+  const handleKickStudent = async (student) => {
+    if (!window.confirm(`Remove ${student.name} from this class?`)) return;
     try {
-      const response = await fetch(`/api/students`, { 
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          email: student.email,
-          classId: section.id 
-        }),
-      });
-
-      if (response.ok) {
-        fetchStudents();
-        setShowAddStudentModal(false);
-      } else {
-        const errorData = await response.json();
-        alert("Error: " + (errorData?.error || 'Unknown error'));
-      }
-    } catch (error) {
-      console.error('Error adding student:', error);
+      const res = await fetch(`/api/class/decline-invite?classId=${section.id}&userId=${student.user_id}`, { method: 'DELETE' });
+      if (res.ok) fetchStudents();
+      else { const err = await res.json(); alert(err.error || 'Failed to remove student'); }
+    } catch (err) {
+      console.error('Kick error:', err);
     }
   };
 
@@ -403,29 +421,85 @@ const SectionDetails = ({ section, onBack }) => {
         <div className="section-grid">
           <section className="roster-section">
             <div className="card-header">
-              <h3>👥 Student Roster</h3>
-              <button className="add-btn" onClick={fetchAllStudents}>+ Add Student</button>
+              <h3>Student Roster
+                <span className="roster-count">{students.length}</span>
+              </h3>
             </div>
+
+            {/* ── Inline Search / Invite Bar ── */}
+            <div className="invite-search-wrapper">
+              <div className="invite-search-bar">
+                <Search size={16} className="search-icon" />
+                <input
+                  type="text"
+                  className="invite-search-input"
+                  placeholder="Search students by name or email to invite…"
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  autoComplete="off"
+                />
+                {searchQuery && (
+                  <button className="search-clear-btn" onClick={() => { setSearchQuery(''); setSearchResults([]); }}>×</button>
+                )}
+              </div>
+              {(searchResults.length > 0 || (isSearching && searchQuery.length >= 2)) && (
+                <div className="search-results-dropdown">
+                  {isSearching ? (
+                    <div className="search-result-loading">Searching…</div>
+                  ) : searchResults.length === 0 ? (
+                    <div className="search-result-empty">No students found</div>
+                  ) : (
+                    searchResults.map(s => (
+                      <div key={s.id} className="search-result-item">
+                        <div className="search-result-info">
+                          <span className="search-result-name">{s.name}</span>
+                          <span className="search-result-email">{s.email}</span>
+                        </div>
+                        <button className="invite-btn" onClick={() => handleInviteStudent(s)}>
+                          <UserPlus size={14} />
+                          Invite
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="table-responsive-wrapper">
               <table className="roster-table">
                 <thead>
                   <tr>
-                    <th>ID</th>
                     <th>Name</th>
                     <th>Email</th>
+                    <th>Status</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {students && students.length > 0 ? (
                     students.map((s, idx) => s ? (
-                      <tr key={s.id || `student-${idx}`}>
-                        <td>{s.id || 'N/A'}</td>
+                      <tr key={s.user_id || `student-${idx}`}>
                         <td className="student-name">{s.name || 'Unknown'}</td>
                         <td>{s.email || 'N/A'}</td>
+                        <td>
+                          <span className={`status-badge ${s.status === 'enrolled' ? 'badge-enrolled' : 'badge-pending'}`}>
+                            {s.status === 'enrolled' ? 'Enrolled' : 'Pending'}
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            className="kick-btn"
+                            title="Remove student"
+                            onClick={() => handleKickStudent(s)}
+                          >
+                            <UserMinus size={15} />
+                          </button>
+                        </td>
                       </tr>
                     ) : null)
                   ) : (
-                    <tr><td colSpan="3">No students found.</td></tr>
+                    <tr><td colSpan="4" style={{textAlign:'center', color:'#94a3b8', padding:'20px'}}>No students yet. Use the search bar above to invite them.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -475,21 +549,7 @@ const SectionDetails = ({ section, onBack }) => {
 
       {/* MODALS BELOW */}
       
-      {showAddStudentModal && (
-        <div className="modal-overlay" onClick={() => setShowAddStudentModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Add Student to Class</h3>
-            <div className="student-select-list">
-              {allStudents && allStudents.map((s, idx) => s ? (
-                <div key={s.id || `allstudent-${idx}`} className="student-select-item">
-                  <span>{s.name || 'Unknown'} ({s.email || 'No email'})</span>
-                  <button onClick={() => handleAddStudentToClass(s)}>Add</button>
-                </div>
-              ) : null)}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Old Add-Student modal removed — replaced by inline search */}
 
       {showAttachModal && (
         <div className="modal-overlay" onClick={closeModal}>

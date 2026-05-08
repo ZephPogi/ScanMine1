@@ -28,6 +28,19 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
+// ── Idempotent migration: add 'status' column to Students if missing ──────
+(async () => {
+  try {
+    await db.query(`
+      ALTER TABLE Students
+      ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'pending'
+    `);
+    console.log('Migration OK: Students.status column ready');
+  } catch (err) {
+    console.error('Migration warning:', err.message);
+  }
+})();
+
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
@@ -115,30 +128,101 @@ app.delete('/api/classes/:id', async (req, res) => {
   }
 });
 
+// Kept for backwards-compat; prefer /api/class/invite going forward
 app.post('/api/students', async (req, res) => {
   try {
     const { email, classId } = req.body;
-
     const userRes = await db.query('SELECT id FROM Users WHERE email = $1 AND role = $2', [email, 'student']);
-    
-    if (userRes.rows.length === 0) {
-      return res.status(404).json({ error: "No student account found with that email." });
-    }
-
+    if (userRes.rows.length === 0) return res.status(404).json({ error: 'No student account found with that email.' });
     const userId = userRes.rows[0].id;
-
     const result = await db.query(
-      'INSERT INTO Students (class_id, user_id) VALUES ($1, $2) RETURNING *',
+      "INSERT INTO Students (class_id, user_id, status) VALUES ($1, $2, 'enrolled') RETURNING *",
       [classId, userId]
     );
-
-    res.json({ message: "Student added successfully", student: result.rows[0] });
+    res.json({ message: 'Student added successfully', student: result.rows[0] });
   } catch (error) {
     console.error('ADD STUDENT ERROR:', error);
-    if (error.code === '23505') { 
-      return res.status(400).json({ error: "This student is already in this class." });
-    }
+    if (error.code === '23505') return res.status(400).json({ error: 'This student is already in this class.' });
     res.status(500).json({ error: 'Failed to add student to class' });
+  }
+});
+
+// ── INVITATION SYSTEM ────────────────────────────────────────────────────
+
+// GET /api/students/search?q=...&classId=...
+// Returns users (students) matching q by name or email, excluding already-in-class
+app.get('/api/students/search', async (req, res) => {
+  try {
+    const { q, classId } = req.query;
+    if (!q || q.trim().length < 2) return res.json([]);
+    const search = `%${q.trim().toLowerCase()}%`;
+    const query = `
+      SELECT u.id, u.name, u.email
+      FROM Users u
+      WHERE u.role = 'student'
+        AND (LOWER(u.name) LIKE $1 OR LOWER(u.email) LIKE $1)
+        AND u.id NOT IN (
+          SELECT user_id FROM Students WHERE class_id = $2
+        )
+      LIMIT 10
+    `;
+    const result = await db.query(query, [search, classId || 0]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('STUDENT SEARCH ERROR:', error);
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+// POST /api/class/invite  { classId, userId }
+app.post('/api/class/invite', async (req, res) => {
+  try {
+    const { classId, userId } = req.body;
+    if (!classId || !userId) return res.status(400).json({ error: 'Missing classId or userId' });
+    const result = await db.query(
+      "INSERT INTO Students (class_id, user_id, status) VALUES ($1, $2, 'pending') RETURNING *",
+      [classId, userId]
+    );
+    res.json({ message: 'Invitation sent', student: result.rows[0] });
+  } catch (error) {
+    console.error('INVITE ERROR:', error);
+    if (error.code === '23505') return res.status(400).json({ error: 'This student already has a pending invite or is enrolled.' });
+    res.status(500).json({ error: 'Failed to send invite' });
+  }
+});
+
+// PUT /api/class/accept-invite  { classId, userId }
+app.put('/api/class/accept-invite', async (req, res) => {
+  try {
+    const { classId, userId } = req.body;
+    if (!classId || !userId) return res.status(400).json({ error: 'Missing classId or userId' });
+    const result = await db.query(
+      "UPDATE Students SET status = 'enrolled' WHERE class_id = $1 AND user_id = $2 RETURNING *",
+      [classId, userId]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Invite not found' });
+    res.json({ message: 'Invitation accepted', student: result.rows[0] });
+  } catch (error) {
+    console.error('ACCEPT INVITE ERROR:', error);
+    res.status(500).json({ error: 'Failed to accept invite' });
+  }
+});
+
+// DELETE /api/class/decline-invite  ?classId=&userId=
+// Used for both decline (by student) and kick (by teacher)
+app.delete('/api/class/decline-invite', async (req, res) => {
+  try {
+    const { classId, userId } = req.query;
+    if (!classId || !userId) return res.status(400).json({ error: 'Missing classId or userId' });
+    const result = await db.query(
+      'DELETE FROM Students WHERE class_id = $1 AND user_id = $2 RETURNING *',
+      [classId, userId]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Enrollment record not found' });
+    res.json({ message: 'Student removed from class' });
+  } catch (error) {
+    console.error('DECLINE/KICK ERROR:', error);
+    res.status(500).json({ error: 'Failed to remove student' });
   }
 });
 
@@ -208,14 +292,16 @@ app.get('/api/exams', async (req, res) => {
 app.get('/api/classes/:id/students', async (req, res) => {
   try {
     const query = `
-      SELECT Students.id AS enrollment_id, Users.id AS user_id, Users.name, Users.email
+      SELECT Students.id AS enrollment_id, Students.status,
+             Users.id AS user_id, Users.name, Users.email
       FROM Students
       JOIN Users ON Students.user_id = Users.id
-      WHERE Students.class_id = $1;`;
+      WHERE Students.class_id = $1
+      ORDER BY Students.status ASC, Users.name ASC;`;
     const result = await db.query(query, [req.params.id]);
     res.json(result.rows);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch class students" });
+    res.status(500).json({ error: 'Failed to fetch class students' });
   }
 });
 
@@ -223,13 +309,13 @@ app.get('/api/student-classes', async (req, res) => {
   try {
     const { studentId } = req.query;
     if (!studentId || studentId === 'undefined' || studentId === 'null') return res.json([]);
-    
     const query = `
-      SELECT c.*, u.name as professor
+      SELECT c.*, u.name as professor, s.status
       FROM Classes c
       JOIN Students s ON c.id = s.class_id
       JOIN Users u ON c.teacher_id = u.id
-      WHERE s.user_id = $1;
+      WHERE s.user_id = $1
+      ORDER BY s.status ASC, c.name ASC;
     `;
     const result = await db.query(query, [studentId]);
     res.json(result.rows);
