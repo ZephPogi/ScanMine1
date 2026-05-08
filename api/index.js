@@ -583,6 +583,81 @@ app.get('/api/student/:studentId/grades/:classId', async (req, res) => {
   }
 });
 
+// --- USER PROFILE ---
+// GET /api/user/profile?userId=...
+app.get('/api/user/profile', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId || userId === 'undefined') {
+      return res.status(400).json({ error: 'Missing userId' });
+    }
+    const result = await db.query(
+      'SELECT id, name, email, role FROM Users WHERE id = $1',
+      [userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('FETCH PROFILE ERROR:', error);
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+});
+
+// PUT /api/user/update-name
+app.put('/api/user/update-name', async (req, res) => {
+  try {
+    const { userId, firstName, lastName } = req.body;
+    if (!userId || !firstName || !lastName) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    const newName = `${firstName.trim()} ${lastName.trim()}`;
+    const result = await db.query(
+      'UPDATE Users SET name = $1 WHERE id = $2 RETURNING id, name, email, role',
+      [newName, userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    // Update the name in localStorage-friendly response
+    res.json({ success: true, user: result.rows[0] });
+  } catch (error) {
+    console.error('UPDATE NAME ERROR:', error);
+    res.status(500).json({ error: 'Failed to update name' });
+  }
+});
+
+// PUT /api/user/update-password
+app.put('/api/user/update-password', async (req, res) => {
+  try {
+    const { userId, currentPassword, newPassword } = req.body;
+    if (!userId || !currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+    // Fetch current hash
+    const result = await db.query('SELECT password_hash FROM Users WHERE id = $1', [userId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    // Verify current password
+    const match = await bcrypt.compare(currentPassword, result.rows[0].password_hash);
+    if (!match) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+    // Hash and save new password
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await db.query('UPDATE Users SET password_hash = $1 WHERE id = $2', [newHash, userId]);
+    res.json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('UPDATE PASSWORD ERROR:', error);
+    res.status(500).json({ error: 'Failed to update password' });
+  }
+});
+
 module.exports = app;
 
 if (require.main === module) {
