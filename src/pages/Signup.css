@@ -77,7 +77,10 @@
 }
 
 .user-plus-icon {
-  font-size: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4483f2;
 }
 
 /* Form Section (Right Side) */
@@ -129,6 +132,12 @@
 }
 
 /* Inputs */
+.input-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
 .input-box {
   margin-bottom: 18px;
 }
@@ -205,6 +214,9 @@
     flex: 1;
     padding: 20px;
     box-sizing: border-box;
+  }
+  .input-group {
+    grid-template-columns: 1fr;
   }
   .input-box input, .signup-btn {
     width: 100%;

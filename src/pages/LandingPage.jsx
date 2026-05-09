@@ -153,24 +153,22 @@ function GenerateGraphic() {
   );
 }
 
-/* ─── SECTION 2 GRAPHIC: Scanner Beam ───────────────────────── */
+/* ─── SECTION 2 GRAPHIC: Left-Margin OCR Scan ───────────────── */
 function ScanGraphic() {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: false, margin: '-60px' });
 
-  // Row positions (top percentage) where badges appear
-  const badgeRows = [
-    { topPct: 22, label: '100%' },
-    { topPct: 40, label: 'Correct' },
-    { topPct: 58, label: '100%' },
-    { topPct: 76, label: 'Correct' },
+  // Each row: the handwritten answer in the left margin + question preview text
+  const paperRows = [
+    { answer: 'A',       question: '1. What is the primary...', badgeLabel: 'Correct' },
+    { answer: 'C',       question: '2. Which element is found...', badgeLabel: '100%' },
+    { answer: 'B',       question: '3. The process by which...', badgeLabel: 'Correct' },
+    { answer: 'Nucleus', question: '4. Identify the organelle...', badgeLabel: 'Correct' },
+    { answer: 'A',       question: '5. Which law states that...', badgeLabel: '100%' },
   ];
 
-  // Paper rows (answer bubbles)
-  const paperRows = Array.from({ length: 6 }, (_, i) => ({
-    num: i + 1,
-    filled: [0, 2, 1, 3, 0, 2][i],
-  }));
+  // Beam cycles: 3s sweep + 1s pause
+  const CYCLE = 3.6;
 
   return (
     <div ref={ref} className="lp-graphic-stage">
@@ -178,60 +176,88 @@ function ScanGraphic() {
         <div className="s2-paper-wrap">
           {/* Paper */}
           <div className="s2-paper">
-            <div className="s2-paper-header">ANSWER SHEET</div>
+            <div className="s2-paper-header">QUIZ — Answer Sheet</div>
+
+            {/* Column divider label */}
+            <div className="s2-col-labels">
+              <span className="s2-col-label-ans">Answer</span>
+              <span className="s2-col-label-q">Question</span>
+            </div>
+
             {paperRows.map((row, i) => (
               <div key={i} className="s2-paper-row">
-                <span className="s2-paper-num">{row.num}.</span>
-                <div className="s2-paper-bubble-row">
-                  {[0, 1, 2, 3].map((b) => (
-                    <div
-                      key={b}
-                      className={`s2-bubble${b === row.filled ? ' filled' : ''}`}
-                    />
-                  ))}
+                {/* Left margin — handwritten answer */}
+                <div className="s2-margin-col">
+                  <motion.span
+                    className="s2-handwritten"
+                    animate={isInView ? {
+                      backgroundColor: [
+                        'rgba(37,99,235,0)',
+                        'rgba(37,99,235,0.18)',
+                        'rgba(37,99,235,0)',
+                      ],
+                    } : { backgroundColor: 'rgba(37,99,235,0)' }}
+                    transition={{
+                      duration: 0.55,
+                      delay: 0.55 + i * (CYCLE / paperRows.length),
+                      repeat: Infinity,
+                      repeatDelay: CYCLE - 0.55,
+                      ease: 'easeInOut',
+                    }}
+                  >
+                    {row.answer}
+                  </motion.span>
+                </div>
+
+                {/* Divider line */}
+                <div className="s2-margin-divider" />
+
+                {/* Right — question text */}
+                <div className="s2-question-col">
+                  <span className="s2-question-text">{row.question}</span>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Scanning Beam — loops when in view */}
+          {/* Scanning Beam */}
           {isInView && (
             <motion.div
               className="s2-beam"
-              initial={{ top: '14%' }}
-              animate={{ top: '86%' }}
+              initial={{ top: '18%' }}
+              animate={{ top: '92%' }}
               transition={{
-                duration: 2.8,
+                duration: CYCLE * 0.8,
                 ease: 'easeInOut',
                 repeat: Infinity,
-                repeatDelay: 0.8,
+                repeatDelay: CYCLE * 0.2,
                 repeatType: 'loop',
               }}
             />
           )}
 
-          {/* Badges that pop up after beam passes */}
-          {badgeRows.map((b, i) =>
+          {/* Badges that pop up after beam passes each row */}
+          {paperRows.map((row, i) =>
             isInView ? (
               <motion.div
                 key={i}
                 className="s2-badge"
-                style={{ top: `${b.topPct}%` }}
+                style={{ top: `${24 + i * 14}%` }}
                 initial={{ opacity: 0, scale: 0.5, x: 10 }}
                 animate={{ opacity: 1, scale: 1, x: 0 }}
                 transition={{
                   duration: 0.35,
-                  delay: 0.6 + i * 0.65,
+                  delay: 0.7 + i * (CYCLE / paperRows.length),
                   ease: [0.22, 1, 0.36, 1],
                   repeat: Infinity,
-                  repeatDelay: 2.8 + 0.8 - 0.35,
+                  repeatDelay: CYCLE - 0.35,
                   repeatType: 'loop',
                 }}
               >
                 <div className="s2-badge-check">
                   <CheckCircle size={6} strokeWidth={3} />
                 </div>
-                {b.label}
+                {row.badgeLabel}
               </motion.div>
             ) : null
           )}
@@ -526,15 +552,15 @@ export default function LandingPage() {
               Grade handwritten papers in seconds with Computer Vision.
             </h2>
             <p className="lp-section-body">
-              Point your camera at any filled-out answer sheet and watch ScanMine
-              detect bubble responses, match against the answer key, and compute
-              scores automatically — no manual counting required.
+              Point your camera at any filled-out answer sheet. ScanMine's OCR instantly
+              extracts handwritten letters and words from the left margin, matches them
+              against your custom answer key, and computes scores automatically.
             </p>
             <ul className="lp-section-bullets">
               {[
-                'Bubble-sheet OCR with high accuracy',
-                'Supports student camera capture on mobile',
-                'Handles poor lighting and slight skew',
+                'Advanced OCR for handwritten letters and text',
+                'Supports both Multiple Choice and Identification exams',
+                'Handles poor lighting and slight skew from mobile captures',
               ].map((b, i) => (
                 <li key={i}>
                   <div className="lp-bullet-dot s2-bullet-dot">

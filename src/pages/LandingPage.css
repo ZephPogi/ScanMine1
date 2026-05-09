@@ -437,8 +437,8 @@
 
 .s2-paper-wrap {
   position: relative;
-  width: 200px;
-  height: 270px;
+  width: 240px;
+  height: 290px;
 }
 
 .s2-paper {
@@ -450,50 +450,103 @@
   box-shadow: 0 6px 24px rgba(0,0,0,0.1);
   overflow: hidden;
   position: relative;
-  padding: 18px 16px;
+  padding: 14px 14px 14px 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 7px;
 }
 
 .s2-paper-header {
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   font-weight: 700;
   color: #0f172a;
   text-align: center;
   border-bottom: 1px solid #e2e8f0;
   padding-bottom: 6px;
   letter-spacing: 0.05em;
+  margin-bottom: 2px;
 }
 
+/* Column header row */
+.s2-col-labels {
+  display: flex;
+  align-items: center;
+  padding: 0 2px;
+  gap: 0;
+  margin-bottom: 2px;
+}
+.s2-col-label-ans {
+  width: 46px;
+  flex-shrink: 0;
+  font-size: 0.46rem;
+  font-weight: 700;
+  color: #2563eb;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: center;
+}
+.s2-col-label-q {
+  flex: 1;
+  font-size: 0.46rem;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding-left: 10px;
+}
+
+/* Each answer row */
 .s2-paper-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0;
+  min-height: 22px;
 }
 
-.s2-paper-num {
-  font-size: 0.55rem;
-  font-weight: 600;
-  color: #94a3b8;
-  width: 10px;
+/* Left margin column — holds the handwritten answer */
+.s2-margin-col {
+  width: 46px;
   flex-shrink: 0;
-}
-
-.s2-paper-bubble-row {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
 }
 
-.s2-bubble {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 1.5px solid #cbd5e1;
+/* Thin vertical rule separating margin from question area */
+.s2-margin-divider {
+  width: 1.5px;
+  height: 18px;
+  background: #e2e8f0;
+  flex-shrink: 0;
+  border-radius: 1px;
 }
-.s2-bubble.filled {
-  background: #1e293b;
-  border-color: #1e293b;
+
+/* Question text column */
+.s2-question-col {
+  flex: 1;
+  padding-left: 8px;
+  overflow: hidden;
+}
+.s2-question-text {
+  font-size: 0.5rem;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+/* Handwritten-style answer in the left margin */
+.s2-handwritten {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #1e293b;
+  font-family: 'Georgia', serif;
+  border-radius: 4px;
+  padding: 1px 4px;
+  line-height: 1;
+  letter-spacing: 0;
+  display: inline-block;
 }
 
 /* Scan beam */
