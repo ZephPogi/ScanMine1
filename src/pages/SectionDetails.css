@@ -297,6 +297,13 @@
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
+/* Table Responsive Wrapper - applies to all screen sizes */
+.table-responsive-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 .action-card h4 {
     margin-top: 0;
     margin-bottom: 15px;
@@ -313,6 +320,15 @@
     cursor: pointer;
     text-align: left;
     transition: 0.2s;
+}
+
+/* Add gap for Exam Management buttons */
+.action-card.exam-management .btn-action {
+    margin-bottom: 12px;
+}
+
+.action-card.exam-management .btn-action:last-child {
+    margin-bottom: 0;
 }
 
 .btn-action.primary { background: #4483f2; color: white; }
@@ -1132,32 +1148,20 @@
   }
 
   .roster-section {
-    padding: 15px;
+    padding: 16px; /* Reduced from 25px to 16px */
   }
 
   .actions-sidebar {
     gap: 15px;
   }
 
-  /* Table Wrapper — matches the div class used in SectionDetails.jsx */
-  .table-responsive-wrapper {
-    width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .roster-table {
-    min-width: 480px; /* Prevent squishing too much */
-  }
-
   /* Reduce inner padding on cards for more breathing room */
-  .roster-section,
   .action-card {
-    padding: 16px;
+    padding: 16px; /* Reduced from 20px to 16px */
   }
 
   /* Exam management buttons: full-width with gap */
-  .exam-management .btn-action {
+  .action-card.exam-management .btn-action {
     width: 100%;
     margin-bottom: 12px;
   }
