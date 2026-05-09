@@ -41,6 +41,38 @@ app.use(express.json());
   }
 })();
 
+// ── Idempotent migration: add 'supabase_id' column to Users if missing ────
+// This UUID links the PostgreSQL profile row to the Supabase Auth user,
+// enabling password reset emails and Supabase session management.
+(async () => {
+  try {
+    await db.query(`
+      ALTER TABLE Users
+      ADD COLUMN IF NOT EXISTS supabase_id UUID UNIQUE
+    `);
+    console.log('Migration OK: Users.supabase_id column ready');
+  } catch (err) {
+    console.error('Migration warning (supabase_id):', err.message);
+  }
+})();
+
+// ── Idempotent migration: make password_hash nullable ─────────────────────
+// New users registered via Supabase Auth don't have a local password hash;
+// Supabase owns the credential. Existing users are unaffected.
+(async () => {
+  try {
+    await db.query(`
+      ALTER TABLE Users
+      ALTER COLUMN password_hash DROP NOT NULL
+    `);
+    console.log('Migration OK: Users.password_hash is now nullable');
+  } catch (err) {
+    // Postgres throws if the column is already nullable — that's fine.
+    console.log('Migration note (password_hash):', err.message);
+  }
+})();
+
+
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
@@ -57,33 +89,84 @@ const upload = multer({
 // --- AUTHENTICATION ---
 app.post('/api/register', async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const result = await db.query(
-      'INSERT INTO Users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
-      [name, email, hashedPassword, role]
-    );
+    const { supabaseId, name, email, role } = req.body;
+
+    if (!name || !email || !role) {
+      return res.status(400).json({ error: 'Missing required fields: name, email, role' });
+    }
+
+    let result;
+
+    if (supabaseId) {
+      // ── New flow: Supabase Auth manages the password ──────────────────────
+      // We insert the profile using the Supabase UUID as the primary key so
+      // both systems reference the same user ID. The id column must accept
+      // UUIDs — if it's currently SERIAL/integer, see note below.
+      //
+      // NOTE: If your Users table uses a SERIAL integer id, you may need to
+      // run this migration in Supabase SQL editor first:
+      //   ALTER TABLE Users ADD COLUMN IF NOT EXISTS supabase_id UUID UNIQUE;
+      //   UPDATE Users SET supabase_id = gen_random_uuid() WHERE supabase_id IS NULL;
+      //
+      // For new projects, change the id column to UUID:
+      //   ALTER TABLE Users ALTER COLUMN id TYPE UUID USING id::text::uuid;
+      //
+      // For now, we store supabaseId in a separate column if the id is SERIAL:
+      result = await db.query(
+        `INSERT INTO Users (name, email, role, supabase_id)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (email) DO UPDATE
+           SET supabase_id = EXCLUDED.supabase_id,
+               name = EXCLUDED.name,
+               role = EXCLUDED.role
+         RETURNING id, name, email, role, supabase_id`,
+        [name, email, role, supabaseId]
+      );
+    } else {
+      // ── Legacy fallback: no Supabase ID provided ──────────────────────────
+      const { password } = req.body;
+      if (!password) return res.status(400).json({ error: 'Missing password for legacy registration' });
+      const hashedPassword = await bcrypt.hash(password, 10);
+      result = await db.query(
+        'INSERT INTO Users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
+        [name, email, hashedPassword, role]
+      );
+    }
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error('REGISTRATION ERROR:', error);
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'An account with this email already exists.' });
+    }
     res.status(500).json({ error: 'Server error during registration' });
   }
 });
 
+
 app.post('/api/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role, isSupabaseAuth } = req.body;
     const result = await db.query('SELECT * FROM Users WHERE email = $1', [email]);
     if (result.rows.length === 0) return res.status(401).json({ error: 'User not found' });
     
     const user = result.rows[0];
-    const match = await bcrypt.compare(password, user.password_hash);
-    if (!match) return res.status(401).json({ error: 'Invalid password' });
     
-    if (user.role !== req.body.role) {
-       return res.status(401).json({ error: `Account registered as ${user.role}, not ${req.body.role}` });
+    // If authenticated via Supabase on the frontend, skip local password check
+    if (!isSupabaseAuth) {
+      if (!user.password_hash) {
+        return res.status(401).json({ error: 'Please use the unified login (Supabase) for this account.' });
+      }
+      const match = await bcrypt.compare(password, user.password_hash);
+      if (!match) return res.status(401).json({ error: 'Invalid password' });
     }
-    res.json({ id: user.id, name: user.name, role: user.role });
+    
+    // Role check
+    if (user.role !== role) {
+       return res.status(401).json({ error: `Account registered as ${user.role}, not ${role}` });
+    }
+    
+    res.json({ id: user.id, name: user.name, role: user.role, email: user.email });
   } catch (error) {
     console.error('LOGIN ERROR:', error);
     res.status(500).json({ error: 'Server error during login' });

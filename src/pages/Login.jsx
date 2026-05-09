@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { supabase } from '../supabaseClient';
 import './Login.css';
 
 const Login = () => {
@@ -9,25 +10,48 @@ const Login = () => {
   const navigate = useNavigate();
 
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
     try {
+      // ── STEP 1: Authenticate with Supabase Auth ───────────────────────────
+      // This establishes a Supabase session, enabling "Forgot Password" to work
+      // for anyone who signed up via the new registration flow.
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authError) {
+        // Supabase returns generic errors; translate common ones for clarity.
+        if (authError.message.includes('Invalid login credentials')) {
+          throw new Error('Invalid email or password. Please try again.');
+        }
+        throw new Error(authError.message);
+      }
+
+      // ── STEP 2: Fetch the user's role & profile from our PostgreSQL API ───
+      // Supabase Auth doesn't know about roles (teacher vs student), so we
+      // still call our backend which handles the role-based routing logic.
       const response = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, role: activeRole }),
+        body: JSON.stringify({ email, password, role: activeRole, isSupabaseAuth: true }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
+        // If the role check fails, sign out of Supabase to avoid a dangling session
+        await supabase.auth.signOut();
         throw new Error(data.error || 'Failed to login');
       }
 
-      // Login successful, save user data to localStorage
+      // ── Success: save profile to localStorage and route ───────────────────
       localStorage.setItem('user', JSON.stringify(data));
 
       if (data.role === 'teacher') {
@@ -35,8 +59,11 @@ const Login = () => {
       } else {
         navigate('/student-dashboard');
       }
+
     } catch (err) {
       setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -67,12 +94,14 @@ const Login = () => {
           {/* ROLE SWITCHER TABS */}
           <div className="role-switcher">
             <button 
+              type="button"
               className={`role-btn ${activeRole === 'teacher' ? 'active' : ''}`}
               onClick={() => setActiveRole('teacher')}
             >
               Teacher
             </button>
             <button 
+              type="button"
               className={`role-btn ${activeRole === 'student' ? 'active' : ''}`}
               onClick={() => setActiveRole('student')}
             >
@@ -81,7 +110,21 @@ const Login = () => {
           </div>
 
           <form onSubmit={handleLogin}>
-            {error && <div style={{ color: 'red', marginBottom: '10px', textAlign: 'center' }}>{error}</div>}
+            {error && (
+              <div style={{
+                color: '#dc2626',
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                marginBottom: '12px',
+                textAlign: 'center',
+                fontSize: '0.9rem',
+              }}>
+                {error}
+              </div>
+            )}
+
             <div className="input-group">
               <label>{activeRole === 'teacher' ? 'Faculty Email' : 'Student Email'}</label>
               <input 
@@ -111,8 +154,8 @@ const Login = () => {
               <Link to="/forgot-password" className="forgot-password">Forgot Password?</Link>
             </div>
 
-            <button type="submit" className="signin-btn">
-              Sign In as {activeRole.charAt(0).toUpperCase() + activeRole.slice(1)}
+            <button type="submit" className="signin-btn" disabled={loading}>
+              {loading ? 'Signing in…' : `Sign In as ${activeRole.charAt(0).toUpperCase() + activeRole.slice(1)}`}
             </button>
           </form>
 
