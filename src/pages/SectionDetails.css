@@ -74,11 +74,13 @@
     padding: 12px;
     border-bottom: 2px solid #f1f5f9;
     color: #64748b;
+    white-space: nowrap;
 }
 
 .roster-table td {
     padding: 15px 12px;
     border-bottom: 1px solid #f1f5f9;
+    white-space: nowrap;
 }
 
 
@@ -304,7 +306,7 @@
 .btn-action {
     width: 100%;
     padding: 12px;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     border-radius: 10px;
     border: none;
     font-weight: 600;
@@ -1137,15 +1139,27 @@
     gap: 15px;
   }
 
-  /* Table Wrapper */
-  .table-responsive {
+  /* Table Wrapper — matches the div class used in SectionDetails.jsx */
+  .table-responsive-wrapper {
     width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
 
   .roster-table {
-    min-width: 400px; /* Prevent squishing too much */
+    min-width: 480px; /* Prevent squishing too much */
+  }
+
+  /* Reduce inner padding on cards for more breathing room */
+  .roster-section,
+  .action-card {
+    padding: 16px;
+  }
+
+  /* Exam management buttons: full-width with gap */
+  .exam-management .btn-action {
+    width: 100%;
+    margin-bottom: 12px;
   }
 
   .modal-content.attach-modal,

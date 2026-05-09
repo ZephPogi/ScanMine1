@@ -1,38 +1,73 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { supabase } from '../supabaseClient';
 import './ForgotPassword.css';
+
+// Simple toast notification component
+const Toast = ({ message, type }) => (
+  <div style={{
+    position: 'fixed',
+    top: '20px',
+    right: '20px',
+    padding: '14px 20px',
+    borderRadius: '12px',
+    background: type === 'success' ? '#10b981' : '#ef4444',
+    color: 'white',
+    fontWeight: 600,
+    fontSize: '0.9rem',
+    boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+    zIndex: 9999,
+    maxWidth: '320px',
+    animation: 'slideInRight 0.3s ease',
+  }}>
+    {type === 'success' ? '✅ ' : '❌ '}{message}
+  </div>
+);
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState('teacher');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState(null);
   const navigate = useNavigate();
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      await fetch('/api/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role })
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'https://scan-mine1-b7qe.vercel.app/reset-password',
       });
-      // We ignore the response and just show success for security
-    } catch (err) {
-      console.error('Failed to request reset', err);
-    } finally {
-      setLoading(false);
+
+      if (error) {
+        throw error;
+      }
+
+      // Show success state
       setSubmitted(true);
+      showToast('Password reset email sent! Check your inbox.', 'success');
       setTimeout(() => {
         navigate('/login');
-      }, 3000);
+      }, 5000);
+    } catch (err) {
+      console.error('Failed to request reset:', err);
+      showToast(err.message || 'Failed to send reset email. Please try again.', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="forgot-container">
+      {/* Toast Notification */}
+      {toast && <Toast message={toast.message} type={toast.type} />}
+
       {/* LEFT SIDE: Branding */}
       <div className="forgot-left">
         <div className="branding-wrapper">
@@ -56,46 +91,28 @@ const ForgotPassword = () => {
           </div>
 
           {!submitted ? (
-            <>
-              {/* ROLE SWITCHER TABS */}
-              <div className="role-switcher">
-                <button 
-                  className={`role-btn ${role === 'teacher' ? 'active' : ''}`}
-                  onClick={() => setRole('teacher')}
-                >
-                  Teacher
-                </button>
-                <button 
-                  className={`role-btn ${role === 'student' ? 'active' : ''}`}
-                  onClick={() => setRole('student')}
-                >
-                  Student
-                </button>
+            <form onSubmit={handleSubmit}>
+              <div className="input-group">
+                <label>Registered Email Address</label>
+                <input 
+                  type="email" 
+                  placeholder="Enter your email" 
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required 
+                />
               </div>
 
-              <form onSubmit={handleSubmit}>
-                <div className="input-group">
-                  <label>Registered Email Address</label>
-                  <input 
-                    type="email" 
-                    placeholder="Enter your email" 
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required 
-                  />
-                </div>
-
-                <button type="submit" className="signin-btn reset-btn" disabled={loading}>
-                  {loading ? 'Sending...' : 'Send Reset Link'}
-                </button>
-              </form>
-            </>
+              <button type="submit" className="signin-btn reset-btn" disabled={loading}>
+                {loading ? 'Sending...' : 'Send Reset Link'}
+              </button>
+            </form>
           ) : (
             <div className="success-message">
               <div className="success-icon">✓</div>
               <h3>Check your inbox</h3>
               <p>We've sent a password reset link to <strong>{email}</strong>.</p>
-              <p className="redirect-text">Redirecting to login...</p>
+              <p className="redirect-text">Redirecting to login in a few seconds...</p>
             </div>
           )}
 
