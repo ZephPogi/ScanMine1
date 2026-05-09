@@ -1,5 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
+// ── Landing ───────────────────────────────────────────
+import LandingPage from "./pages/LandingPage";
+
 // ── Auth ──────────────────────────────────────────────
 import Login  from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -26,8 +29,8 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Default */}
-        <Route path="/" element={<Login />} />
+        {/* Default — Promotional Landing Page */}
+        <Route path="/" element={<LandingPage />} />
 
         {/* Auth */}
         <Route path="/login"  element={<Login />} />
