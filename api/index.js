@@ -146,8 +146,17 @@ app.post('/api/register', async (req, res) => {
 
 app.post('/api/login', async (req, res) => {
   try {
-    const { email, password, role, isSupabaseAuth } = req.body;
-    const result = await db.query('SELECT * FROM Users WHERE email = $1', [email]);
+    const { email, password, role, isSupabaseAuth, supabaseId } = req.body;
+    let result;
+
+    if (isSupabaseAuth && supabaseId) {
+      // Find by Supabase UUID
+      result = await db.query('SELECT * FROM Users WHERE supabase_id = $1', [supabaseId]);
+    } else {
+      // Standard find by email
+      result = await db.query('SELECT * FROM Users WHERE email = $1', [email]);
+    }
+
     if (result.rows.length === 0) return res.status(401).json({ error: 'User not found' });
     
     const user = result.rows[0];
@@ -166,7 +175,7 @@ app.post('/api/login', async (req, res) => {
        return res.status(401).json({ error: `Account registered as ${user.role}, not ${role}` });
     }
     
-    res.json({ id: user.id, name: user.name, role: user.role, email: user.email });
+    res.json({ id: user.id, name: user.name, role: user.role, email: user.email, supabase_id: user.supabase_id });
   } catch (error) {
     console.error('LOGIN ERROR:', error);
     res.status(500).json({ error: 'Server error during login' });

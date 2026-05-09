@@ -40,7 +40,14 @@ const Login = () => {
       const response = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, role: activeRole, isSupabaseAuth: true }),
+        // Pass isSupabaseAuth: true and the supabaseId so the backend matches by UUID
+        body: JSON.stringify({ 
+          email, 
+          password, 
+          role: activeRole, 
+          isSupabaseAuth: true,
+          supabaseId: authData.user.id 
+        }),
       });
 
       const data = await response.json();

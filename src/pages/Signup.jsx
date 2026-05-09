@@ -61,8 +61,14 @@ const Signup = () => {
       const response = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Pass isSupabaseAuth: true so the backend skips the local password check
-        body: JSON.stringify({ email: email, password: password, role: activeRole, isSupabaseAuth: true }),
+        // Pass isSupabaseAuth: true and the supabaseId so the backend matches by UUID
+        body: JSON.stringify({ 
+          email: email, 
+          password: password, 
+          role: activeRole, 
+          isSupabaseAuth: true,
+          supabaseId: data.user.id
+        }),
       });
 
       if (response.ok) {
