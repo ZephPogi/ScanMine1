@@ -620,7 +620,91 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ══════════════════════════════════════════════════
+          SECTION 4 — ACKNOWLEDGMENTS
+          ══════════════════════════════════════════════════ */}
+      <section className="lp-section advisers-bg">
+        <div className="lp-section-inner-full">
+          <FadeInView delay={0.1} direction="up" className="lp-section-header-center">
+            <span className="lp-section-label advisers-label">
+              <Users size={11} />
+              Acknowledgments
+            </span>
+            <h2 className="lp-section-heading">Project Advisers</h2>
+            <p className="lp-section-body">
+              Special thanks to the mentors and partners who guided the development of ScanMine.
+            </p>
+          </FadeInView>
+
+          <div className="lp-advisers-grid">
+            {[
+              { role: 'Research Adviser', name: 'Ms. Armilyn Martinez' },
+              { role: 'Thesis Adviser', name: 'Kenneth V. Bautista' },
+              { role: 'Technical Adviser', name: 'Chris Allen Pineda' },
+              { role: 'Beneficiary', name: 'Sir Heal Ryan G. Banaylo' },
+            ].map((adv, i) => (
+              <FadeInView key={i} delay={0.2 + i * 0.1} direction="up">
+                <div className="lp-adviser-card">
+                  <span className="lp-adviser-role">{adv.role}</span>
+                  <h3 className="lp-adviser-name">{adv.name}</h3>
+                </div>
+              </FadeInView>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div className="lp-divider" />
+
+      {/* ══════════════════════════════════════════════════
+          SECTION 5 — MEET THE DEVELOPERS
+          ══════════════════════════════════════════════════ */}
+      <section className="lp-section devs-bg">
+        <div className="lp-section-inner-full">
+          <FadeInView delay={0.1} direction="up" className="lp-section-header-center">
+            <span className="lp-section-label devs-label">
+              <Zap size={11} />
+              System Architects
+            </span>
+            <h2 className="lp-section-heading">Meet the Developers</h2>
+          </FadeInView>
+
+          <div className="lp-devs-container">
+            {[
+              {
+                name: 'Jon Zeph Glodoviza',
+                role: 'Lead Developer / System Architect',
+                image: 'JZ',
+              },
+              {
+                name: 'Justin Laguatan',
+                role: 'Developer / UI/UX',
+                image: 'JL',
+              },
+            ].map((dev, i) => (
+              <FadeInView key={i} delay={0.3 + i * 0.15} direction="up" className="lp-dev-card-wrapper">
+                <div className="lp-dev-card">
+                  <div className="lp-dev-card-inner">
+                    <div className="lp-dev-avatar">
+                      {dev.image}
+                    </div>
+                    <div className="lp-dev-info">
+                      <span className="lp-dev-role">{dev.role}</span>
+                      <h3 className="lp-dev-name">{dev.name}</h3>
+                    </div>
+                  </div>
+                  <div className="lp-dev-card-glow" />
+                </div>
+              </FadeInView>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div className="lp-divider" />
+
       {/* ── CTA Banner ── */}
+
       <section className="lp-cta-section">
         <motion.h2
           className="lp-cta-heading"
