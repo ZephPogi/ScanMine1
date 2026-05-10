@@ -37,6 +37,7 @@
     display: grid;
     grid-template-columns: 2fr 1fr;
     gap: 25px;
+    min-width: 0;
 }
 
 /* Roster Table Styles */
@@ -45,6 +46,7 @@
     padding: 25px;
     border-radius: 16px;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    min-width: 0;
 }
 
 .card-header {
