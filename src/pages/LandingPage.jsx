@@ -160,11 +160,11 @@ function ScanGraphic() {
 
   // Each row: the handwritten answer in the left margin + question preview text
   const paperRows = [
-    { answer: 'A',       question: '1. What is the primary...', badgeLabel: 'Correct' },
-    { answer: 'C',       question: '2. Which element is found...', badgeLabel: '100%' },
-    { answer: 'B',       question: '3. The process by which...', badgeLabel: 'Correct' },
+    { answer: 'A', question: '1. What is the primary...', badgeLabel: 'Correct' },
+    { answer: 'C', question: '2. Which element is found...', badgeLabel: '100%' },
+    { answer: 'B', question: '3. The process by which...', badgeLabel: 'Correct' },
     { answer: 'Nucleus', question: '4. Identify the organelle...', badgeLabel: 'Correct' },
-    { answer: 'A',       question: '5. Which law states that...', badgeLabel: '100%' },
+    { answer: 'A', question: '5. Which law states that...', badgeLabel: '100%' },
   ];
 
   // Beam cycles: 3s sweep + 1s pause
@@ -510,7 +510,7 @@ export default function LandingPage() {
               Instantly convert your materials into structured assessments.
             </h2>
             <p className="lp-section-body">
-              Upload any PDF or document and let ScanMine's AI engine extract key
+              Upload any PDF or document and let ScanMine's rule-base algorithm extract key
               concepts, build multiple-choice questions, and produce a print-ready
               quiz  in seconds, not hours.
             </p>
