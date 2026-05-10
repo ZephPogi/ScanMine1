@@ -511,13 +511,13 @@ export default function LandingPage() {
             </h2>
             <p className="lp-section-body">
               Upload any PDF or document and let ScanMine's rule-base algorithm extract key
-              concepts, build multiple-choice questions, and produce a print-ready
+              concepts, build identification questions, and produce a print-ready
               quiz  in seconds, not hours.
             </p>
             <ul className="lp-section-bullets">
               {[
                 'PDF, DOCX, and plain-text support',
-                'Multiple question types: MC, identification, true/false',
+                'Identification question types',
                 'Editable answer key before printing',
               ].map((b, i) => (
                 <li key={i}>
