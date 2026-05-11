@@ -146,7 +146,7 @@ app.post('/api/register', async (req, res) => {
 
 app.post('/api/login', async (req, res) => {
   try {
-    const { email, password, role, isSupabaseAuth, supabaseId } = req.body;
+    const { email, password, isSupabaseAuth, supabaseId } = req.body;
     let result;
 
     if (isSupabaseAuth && supabaseId) {
@@ -170,12 +170,7 @@ app.post('/api/login', async (req, res) => {
       if (!match) return res.status(401).json({ error: 'Invalid password' });
     }
     
-    // Role check
-    if (user.role !== role) {
-       return res.status(401).json({ error: `Account registered as ${user.role}, not ${role}` });
-    }
-    
-    res.json({ id: user.id, name: user.name, role: user.role, email: user.email, supabase_id: user.supabase_id });
+    res.json({ user: { id: user.id, name: user.name, role: user.role, email: user.email, supabase_id: user.supabase_id } });
   } catch (error) {
     console.error('LOGIN ERROR:', error);
     res.status(500).json({ error: 'Server error during login' });
