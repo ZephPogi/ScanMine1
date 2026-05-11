@@ -163,32 +163,7 @@
 }
 /* ... (keep the previous styles for login-container, left-side, and animations) ... */
 
-/* ROLE SWITCHER STYLES */
-.role-switcher {
-  display: flex;
-  background-color: #f1f5f9;
-  padding: 5px;
-  border-radius: 12px;
-  margin-bottom: 30px;
-}
 
-.role-btn {
-  flex: 1;
-  padding: 10px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-weight: 600;
-  color: #64748b;
-  border-radius: 8px;
-  transition: 0.3s;
-}
-
-.role-btn.active {
-  background-color: #ffffff;
-  color: #4483f2;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
 
 /* SIGN IN BUTTON DYNAMIC COLOR */
 .signin-btn {
@@ -233,7 +208,7 @@
     padding: 20px;
     box-sizing: border-box;
   }
-  .input-group input, .signin-btn, .role-switcher {
+  .input-group input, .signin-btn {
     width: 100%;
     box-sizing: border-box;
   }

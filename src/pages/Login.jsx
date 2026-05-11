@@ -4,7 +4,6 @@ import { supabase } from '../supabaseClient';
 import './Login.css';
 
 const Login = () => {
-  const [activeRole, setActiveRole] = useState('teacher'); // 'teacher' or 'student'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
@@ -47,7 +46,6 @@ const Login = () => {
         body: JSON.stringify({ 
           email, 
           password, 
-          role: activeRole, 
           isSupabaseAuth: true,
           supabaseId: authData.user.id 
         }),
@@ -62,12 +60,16 @@ const Login = () => {
       }
 
       // ── Success: save profile to localStorage and route ───────────────────
-      localStorage.setItem('user', JSON.stringify(data));
+      localStorage.setItem('user', JSON.stringify(data.user || data));
 
-      if (data.role === 'teacher') {
-        navigate('/dashboard');
+      const userRole = data.user?.role || data.role; // Extract the role from the backend response
+
+      if (userRole === 'teacher') {
+        navigate('/dashboard'); // Route to Teacher Dashboard
+      } else if (userRole === 'student') {
+        navigate('/student-dashboard'); // Route to Student Dashboard
       } else {
-        navigate('/student-dashboard');
+        navigate('/'); // Fallback
       }
 
     } catch (err) {
@@ -98,26 +100,10 @@ const Login = () => {
         <div className="form-wrapper">
           <div className="form-header">
             <h2>Welcome Back</h2>
-            <p>Please select your role and log in.</p>
+            <p>Please log in to your account.</p>
           </div>
 
-          {/* ROLE SWITCHER TABS */}
-          <div className="role-switcher">
-            <button 
-              type="button"
-              className={`role-btn ${activeRole === 'teacher' ? 'active' : ''}`}
-              onClick={() => setActiveRole('teacher')}
-            >
-              Teacher
-            </button>
-            <button 
-              type="button"
-              className={`role-btn ${activeRole === 'student' ? 'active' : ''}`}
-              onClick={() => setActiveRole('student')}
-            >
-              Student
-            </button>
-          </div>
+
 
           <form onSubmit={handleLogin}>
             {error && (
@@ -136,7 +122,7 @@ const Login = () => {
             )}
 
             <div className="input-group">
-              <label>{activeRole === 'teacher' ? 'Faculty Email' : 'Student Email'}</label>
+              <label>Email Address</label>
               <input 
                 type="email" 
                 placeholder="Enter your email" 
@@ -165,7 +151,7 @@ const Login = () => {
             </div>
 
             <button type="submit" className="signin-btn" disabled={loading}>
-              {loading ? 'Signing in…' : `Sign In as ${activeRole.charAt(0).toUpperCase() + activeRole.slice(1)}`}
+              {loading ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
 
