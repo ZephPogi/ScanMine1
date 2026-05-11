@@ -52,7 +52,8 @@ const AutoGradingResults = () => {
           method: 'AI Grading',
           score: sub.points_earned !== null ? `${sub.points_earned} / ${sub.total_items}` : `${Math.round(sub.score)}%`,
           status: sub.score >= 50 ? 'Pass' : 'Fail',
-          feedback: sub.feedback || ''
+          feedback: sub.feedback || '',
+          image_url: sub.image_url
         }));
         setStudentResults(formatted);
       }
@@ -230,7 +231,8 @@ const handleScanRecord = async () => {
         method: 'AI Grading',
         score: `${totalScore} / ${maxScore}`,
         status: percentage >= 50 ? 'Pass' : 'Fail',
-        feedback: data.result.feedback || ''
+        feedback: data.result.feedback || '',
+        image_url: imageUrl
       };
 
       setStudentResults(prev => [newResult, ...prev.filter(r => !(r.name === studentName && r.exam === examTitle))]);
@@ -288,7 +290,8 @@ const handleScanRecord = async () => {
         submittedBy: 'Teacher (Manual)',
         score: `${data.result.totalScore} / ${data.result.maxScore}`,
         status: percentage >= 50 ? 'Pass' : 'Fail',
-        feedback: data.result.feedback || ''
+        feedback: data.result.feedback || '',
+        image_url: null
       }, ...prev.filter(r => !(r.name === studentName && r.exam === examTitle))]);
       
       setShowScanModal(false);
@@ -397,15 +400,25 @@ const handleScanRecord = async () => {
               <button className="scan-close-btn" onClick={() => setShowFeedback(null)}><X size={20} /></button>
             </div>
             <div style={{padding: '20px'}}>
+              {showFeedback.image_url && (
+                <img 
+                  src={showFeedback.image_url} 
+                  alt="Student Scan" 
+                  className="proof-image"
+                />
+              )}
               <div style={{display:'flex', justifyContent:'space-between', marginBottom:'16px'}}>
                 <span style={{fontSize:'1.5rem', fontWeight:'800'}}>{showFeedback.score}</span>
                 <span className={`status-badge ${showFeedback.status.toLowerCase()}`}>{showFeedback.status}</span>
               </div>
               {showFeedback.feedback ? showFeedback.feedback.split('\n').filter(Boolean).map((line, i) => {
                 const isCorrect = line.includes('Correct');
+                // Extract only "Q1: Student answered 'X'"
+                const displayLine = line.split('|')[0].trim();
+                
                 return (
                   <div key={i} className={`feedback-row ${isCorrect ? 'correct' : 'wrong'}`}>
-                    {line}
+                    {displayLine}
                   </div>
                 );
               }) : <p style={{color:'#94a3b8'}}>No detailed feedback. Re-scan this student to generate feedback.</p>}

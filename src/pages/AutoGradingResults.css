@@ -595,24 +595,32 @@
     color: white;
 }
 
+.proof-image {
+    max-height: 300px;
+    width: auto;
+    object-fit: contain;
+    border-radius: 12px;
+    border: 2px solid #e2e8f0;
+    margin: 0 auto 20px;
+    display: block;
+}
+
 .feedback-row {
     padding: 10px 14px;
     border-radius: 10px;
     margin-bottom: 8px;
     font-size: 0.9rem;
-    font-weight: 500;
-    font-family: monospace;
+    font-weight: 600;
+    font-family: inherit;
 }
 
 .feedback-row.correct {
-    background: #f0fdf4;
-    border-left: 4px solid #22c55e;
+    background: #dcfce7;
     color: #166534;
 }
 
 .feedback-row.wrong {
-    background: #fef2f2;
-    border-left: 4px solid #ef4444;
+    background: #fee2e2;
     color: #991b1b;
 }
 
