@@ -50,7 +50,7 @@ const AutoGradingResults = () => {
           exam: sub.exam_title,
           submittedBy: 'System',
           method: 'AI Grading',
-          score: `${Math.round(sub.score)}%`,
+          score: sub.points_earned !== null ? `${sub.points_earned} / ${sub.total_items}` : `${Math.round(sub.score)}%`,
           status: sub.score >= 50 ? 'Pass' : 'Fail',
           feedback: sub.feedback || ''
         }));
@@ -228,7 +228,7 @@ const handleScanRecord = async () => {
         exam: examTitle,
         submittedBy: 'Teacher (Scan)',
         method: 'AI Grading',
-        score: `${percentage}%`,
+        score: `${totalScore} / ${maxScore}`,
         status: percentage >= 50 ? 'Pass' : 'Fail',
         feedback: data.result.feedback || ''
       };
@@ -286,7 +286,7 @@ const handleScanRecord = async () => {
         id: data.result.submission_id || Date.now(),
         name: studentName, exam: examTitle,
         submittedBy: 'Teacher (Manual)',
-        score: `${percentage}%`,
+        score: `${data.result.totalScore} / ${data.result.maxScore}`,
         status: percentage >= 50 ? 'Pass' : 'Fail',
         feedback: data.result.feedback || ''
       }, ...prev.filter(r => !(r.name === studentName && r.exam === examTitle))]);

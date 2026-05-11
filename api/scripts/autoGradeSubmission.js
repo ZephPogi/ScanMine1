@@ -235,11 +235,18 @@ async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null,
 
     // 5. Save or update result (overwrite if student already has a submission)
     await db.query(
-      `INSERT INTO Student_Submissions (student_id, exam_id, extracted_text, score, feedback, image_url)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO Student_Submissions (student_id, exam_id, extracted_text, score, feedback, image_url, points_earned, total_items)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (student_id, exam_id)
-       DO UPDATE SET extracted_text = $3, score = $4, feedback = $5, image_url = $6, created_at = NOW()`,
-      [studentId, examId, ocrText, percentage, feedback, imageUrl]
+       DO UPDATE SET 
+         extracted_text = EXCLUDED.extracted_text, 
+         score = EXCLUDED.score, 
+         feedback = EXCLUDED.feedback, 
+         image_url = EXCLUDED.image_url, 
+         points_earned = EXCLUDED.points_earned,
+         total_items = EXCLUDED.total_items,
+         created_at = NOW()`,
+      [studentId, examId, ocrText, percentage, feedback, imageUrl, totalScore, maxScore]
     );
 
     const sub = await db.query(

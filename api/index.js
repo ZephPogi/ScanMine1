@@ -72,6 +72,20 @@ app.use(express.json());
   }
 })();
 
+// ── Idempotent migration: add raw score columns to Student_Submissions ───
+(async () => {
+  try {
+    await db.query(`
+      ALTER TABLE Student_Submissions 
+      ADD COLUMN IF NOT EXISTS points_earned INTEGER,
+      ADD COLUMN IF NOT EXISTS total_items INTEGER
+    `);
+    console.log('Migration OK: Student_Submissions points/total columns ready');
+  } catch (err) {
+    console.error('Migration warning (raw scores):', err.message);
+  }
+})();
+
 
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -336,7 +350,7 @@ app.get('/api/dashboard', async (req, res) => {
     );
 
     const recentActivityResult = await db.query(
-      'SELECT u.name as student_name, e.title as subject, sub.score, sub.created_at FROM Student_Submissions sub JOIN Users u ON sub.student_id = u.id JOIN Exams e ON sub.exam_id = e.id WHERE e.teacher_id = $1 ORDER BY sub.created_at DESC LIMIT 5',
+      'SELECT u.name as student_name, e.title as subject, sub.score, sub.created_at, sub.points_earned, sub.total_items FROM Student_Submissions sub JOIN Users u ON sub.student_id = u.id JOIN Exams e ON sub.exam_id = e.id WHERE e.teacher_id = $1 ORDER BY sub.created_at DESC LIMIT 5',
       [teacherId]
     );
 
@@ -482,6 +496,81 @@ app.post('/api/upload-paper', upload.single('studentPaper'), async (req, res) =>
     console.error('CRITICAL GRADING ERROR:', error);
     // This ensures we send JSON even if the server crashes
     res.status(500).json({ error: 'Internal Server Error: ' + error.message });
+  }
+});
+
+// --- TEACHER: GRADE MANUALLY ---
+app.post('/api/grade-manual', async (req, res) => {
+  try {
+    const { studentId, examId, answers } = req.body;
+    if (!studentId || !examId || !answers) {
+      return res.status(400).json({ error: 'Missing studentId, examId, or answers' });
+    }
+
+    // 1. Get Answer Keys
+    let keysRes = await db.query('SELECT * FROM Answer_Keys WHERE exam_id = $1 ORDER BY id ASC', [examId]);
+    let answerKeys = keysRes.rows;
+
+    if (answerKeys.length === 0) {
+      const genRes = await db.query('SELECT id, correct_answer as answer_text FROM Generated_Questions WHERE exam_id = $1 ORDER BY id ASC', [examId]);
+      answerKeys = genRes.rows;
+    }
+
+    if (answerKeys.length === 0) {
+      return res.status(400).json({ error: 'No answer key found for this exam' });
+    }
+
+    // 2. Parse manual answers (comma separated)
+    const studentAnswers = {};
+    const answerList = answers.split(',').map(a => a.trim());
+    answerList.forEach((val, idx) => {
+      studentAnswers[idx + 1] = val;
+    });
+
+    let correctCount = 0;
+    const feedbackLines = [];
+
+    // 3. Grade
+    for (let i = 0; i < answerKeys.length; i++) {
+      const qNum = i + 1;
+      const correctAnswer = answerKeys[i].answer_text?.toString().trim();
+      const studentAnswer = (studentAnswers[qNum] || '').trim();
+      
+      const isCorrect = studentAnswer && correctAnswer && studentAnswer.toLowerCase() === correctAnswer.toLowerCase();
+      if (isCorrect) correctCount++;
+      
+      feedbackLines.push(`Q${qNum}: Student answered "${studentAnswer}" | Correct: "${correctAnswer}" | ${isCorrect ? '✅ Correct' : '❌ Wrong'}`);
+    }
+
+    const totalScore = correctCount;
+    const maxScore = answerKeys.length;
+    const percentage = maxScore > 0 ? (totalScore / maxScore) * 100 : 0;
+    const feedback = feedbackLines.join('\n');
+
+    // 4. Save
+    await db.query(
+      `INSERT INTO Student_Submissions (student_id, exam_id, score, feedback, points_earned, total_items)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (student_id, exam_id)
+       DO UPDATE SET score = EXCLUDED.score, feedback = EXCLUDED.feedback, points_earned = EXCLUDED.points_earned, total_items = EXCLUDED.total_items, created_at = NOW()`,
+      [studentId, examId, percentage, feedback, totalScore, maxScore]
+    );
+
+    const subRes = await db.query('SELECT id FROM Student_Submissions WHERE student_id = $1 AND exam_id = $2', [studentId, examId]);
+
+    res.json({
+      message: 'Graded successfully',
+      result: {
+        submission_id: subRes.rows[0]?.id,
+        totalScore,
+        maxScore,
+        feedback
+      }
+    });
+
+  } catch (error) {
+    console.error('MANUAL GRADING ERROR:', error);
+    res.status(500).json({ error: 'Server error during manual grading' });
   }
 });
 
