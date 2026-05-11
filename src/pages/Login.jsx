@@ -169,6 +169,10 @@ const Login = () => {
           <p className="register-text">
             Don't have an account? <Link to="/signup" className="register-link">Register Now</Link>
           </p>
+
+          <p className="login-legal">
+            By logging in, you agree to our <a href="/#">Privacy Policy</a> & <a href="/#">Terms of Use</a>.
+          </p>
         </div>
       </div>
     </div>

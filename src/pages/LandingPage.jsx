@@ -620,39 +620,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════════
-          SECTION 4 — ACKNOWLEDGMENTS
-          ══════════════════════════════════════════════════ */}
-      <section className="lp-section advisers-bg">
-        <div className="lp-section-inner-full">
-          <FadeInView delay={0.1} direction="up" className="lp-section-header-center">
-            <span className="lp-section-label advisers-label">
-              <Users size={11} />
-              Acknowledgments
-            </span>
-            <h2 className="lp-section-heading">Project Advisers</h2>
-            <p className="lp-section-body">
-              Special thanks to the mentors and partners who guided the development of ScanMine.
-            </p>
-          </FadeInView>
 
-          <div className="lp-advisers-grid">
-            {[
-              { role: 'Research Adviser', name: 'Ms. Armilyn Martinez' },
-              { role: 'Thesis Adviser', name: 'Kenneth V. Bautista' },
-              { role: 'Technical Adviser', name: 'Chris Allen Pineda' },
-              { role: 'Beneficiary', name: 'Sir Heal Ryan G. Banaylo' },
-            ].map((adv, i) => (
-              <FadeInView key={i} delay={0.2 + i * 0.1} direction="up">
-                <div className="lp-adviser-card">
-                  <span className="lp-adviser-role">{adv.role}</span>
-                  <h3 className="lp-adviser-name">{adv.name}</h3>
-                </div>
-              </FadeInView>
-            ))}
-          </div>
-        </div>
-      </section>
 
       <div className="lp-divider" />
 

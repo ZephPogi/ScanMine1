@@ -238,3 +238,21 @@
     box-sizing: border-box;
   }
 }
+
+.login-legal {
+  margin-top: 25px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.login-legal a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.login-legal a:hover {
+  color: #4483f2;
+}
