@@ -12,6 +12,9 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
@@ -171,10 +174,47 @@ const Login = () => {
           </p>
 
           <p className="login-legal">
-            By logging in, you agree to our <a href="/#">Privacy Policy</a> & <a href="/#">Terms of Use</a>.
+            By logging in, you agree to our{' '}
+            <span onClick={() => setShowPrivacy(true)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>
+              Privacy Policy
+            </span>{' '}
+            &{' '}
+            <span onClick={() => setShowTerms(true)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>
+              Terms of Use
+            </span>.
           </p>
         </div>
       </div>
+
+      {showPrivacy && (
+        <div className="legal-modal-overlay" onClick={() => setShowPrivacy(false)}>
+          <div className="legal-modal-content" onClick={e => e.stopPropagation()}>
+            <button className="close-btn" onClick={() => setShowPrivacy(false)}>×</button>
+            <h2>ScanMine Privacy Policy</h2>
+            <div className="modal-body">
+              <p><strong>1. Data Collection:</strong> ScanMine (developed by JoJu Informatics) collects user information including names, faculty emails, and student rosters to facilitate automated grading. When using the scanner, images of physical answer sheets are processed using our Optical Recognition (OCR) engine.</p>
+              <p><strong>2. Data Usage:</strong> Extracted data is strictly used to evaluate student performance, generate quizzes via our rule-based algorithm, and maintain class records.</p>
+              <p><strong>3. Data Storage & Security:</strong> Authentication and database records are securely managed via Supabase and PostgreSQL. We do not sell your personal data or student records to third parties.</p>
+              <p><strong>4. User Rights:</strong> Educators may delete exam records, OCR scans, and student data from their dashboards at any time.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTerms && (
+        <div className="legal-modal-overlay" onClick={() => setShowTerms(false)}>
+          <div className="legal-modal-content" onClick={e => e.stopPropagation()}>
+            <button className="close-btn" onClick={() => setShowTerms(false)}>×</button>
+            <h2>ScanMine Terms of Use</h2>
+            <div className="modal-body">
+              <p><strong>1. Acceptance of Terms:</strong> By registering as a Teacher or Student, you agree to these terms. ScanMine is an educational utility designed to assist with grading workflow.</p>
+              <p><strong>2. System Accuracy:</strong> While our OCR and Computer Vision engines are highly optimized, physical document damage, poor lighting, or illegible handwriting may affect extraction accuracy. Educators are responsible for reviewing auto-graded results before finalizing them.</p>
+              <p><strong>3. Intellectual Property:</strong> The ScanMine system architecture, UI/UX, and rule-based generation algorithms are the intellectual property of JoJu Informatics.</p>
+              <p><strong>4. Acceptable Use:</strong> Users agree not to attempt to breach the Supabase authentication layer, upload malicious files disguised as Answer Keys, or use the platform for non-educational purposes.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
