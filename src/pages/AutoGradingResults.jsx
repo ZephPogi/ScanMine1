@@ -232,7 +232,7 @@ const handleScanRecord = async () => {
         score: `${totalScore} / ${maxScore}`,
         status: percentage >= 50 ? 'Pass' : 'Fail',
         feedback: data.result.feedback || '',
-        image_url: imageUrl
+        image_url: data.result.image_url
       };
 
       setStudentResults(prev => [newResult, ...prev.filter(r => !(r.name === studentName && r.exam === examTitle))]);
@@ -400,7 +400,7 @@ const handleScanRecord = async () => {
               <button className="scan-close-btn" onClick={() => setShowFeedback(null)}><X size={20} /></button>
             </div>
             <div style={{padding: '20px'}}>
-              {showFeedback.image_url && (
+              {showFeedback?.image_url && (
                 <img 
                   src={showFeedback.image_url} 
                   alt="Student Scan" 
