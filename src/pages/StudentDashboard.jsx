@@ -88,7 +88,6 @@ const StudentDashboard = () => {
                 <th>Exam Title</th>
                 <th>Date Submitted</th>
                 <th>Score</th>
-                <th>Grade</th>
               </tr>
             </thead>
             <tbody>
@@ -109,13 +108,7 @@ const StudentDashboard = () => {
                     <tr key={sub.id}>
                       <td className="fw-600">{sub.exam_title}</td>
                       <td className="text-muted">{formatDate(sub.created_at)}</td>
-                      <td>{sub.score} / {sub.total_questions ?? '—'}</td>
-                      <td>
-                        {label !== '—'
-                          ? <span className={`badge ${cls}`}>{label}</span>
-                          : <span className="text-muted">—</span>
-                        }
-                      </td>
+                      <td>{sub.points_earned ?? Math.round(sub.score) ?? 0} / {sub.total_items ?? sub.total_questions ?? '?'}</td>
                     </tr>
                   );
                 })
