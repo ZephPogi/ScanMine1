@@ -830,6 +830,7 @@ app.get('/api/student/:studentId/grades/:classId', async (req, res) => {
 
     const result = await db.query(
       `SELECT sub.id, e.title as exam_title, sub.score, sub.created_at,
+              sub.points_earned, sub.total_items,
               (SELECT COUNT(*) FROM answer_keys ak WHERE ak.exam_id = e.id) as total_questions
        FROM Student_Submissions sub
        JOIN Exams e ON sub.exam_id = e.id

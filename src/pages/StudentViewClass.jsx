@@ -231,7 +231,7 @@ const StudentViewClass = () => {
                             <td style={{ padding: '12px', fontWeight: '600', color: '#1e293b' }}>{a.exam_title}</td>
                             <td style={{ padding: '12px', color: '#64748b', fontSize: '0.88rem' }}>{new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                             <td style={{ padding: '12px', fontWeight: '700', color: '#334155' }}>
-                              {a.points_earned !== null ? `${a.points_earned} / ${a.total_items}` : (a.score !== null ? `${a.score} / ${a.total_questions || '—'}` : 'N/A')}
+                              {a.points_earned ?? a.score ?? 0} / {a.total_items ?? a.total_questions ?? '?'}
                             </td>
                           </tr>
                         ))
