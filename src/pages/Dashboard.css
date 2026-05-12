@@ -68,7 +68,7 @@
   align-items: center;
 }
 .stat-label { font-size: 0.85rem; color: #64748b; font-weight: 500; }
-.stat-value { font-size: 1.5rem; margin: 4px 0; color: #1e293b; }
+.stat-value { font-size: 1.5rem; margin: 4px 0; color: #1e293b; width: 100%; text-align: center; }
 .stat-trend { font-size: 0.75rem; font-weight: 600; }
 .stat-trend.positive { color: #10b981; }
 .stat-trend.neutral { color: #64748b; }

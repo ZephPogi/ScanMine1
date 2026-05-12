@@ -117,24 +117,7 @@ const TeacherDashboard = () => {
             </div>
           </section>
 
-          {/* Quick Actions / Shortcuts */}
-          <section className="dashboard-card shortcuts">
-            <h3>Quick Actions</h3>
-            <div className="shortcut-list">
-              <button className="shortcut-item">
-                <Scan size={18} />
-                <span>Scan Answer Sheets</span>
-              </button>
-              <button className="shortcut-item">
-                <Bot size={18} />
-                <span>AI Quiz Generator</span>
-              </button>
-              <button className="shortcut-item">
-                <FileDown size={18} />
-                <span>Export Grade Reports</span>
-              </button>
-            </div>
-          </section>
+
         </div>
       </main>
     </div>
