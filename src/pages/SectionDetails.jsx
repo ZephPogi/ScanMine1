@@ -858,49 +858,118 @@ const SectionDetails = ({ section, onBack }) => {
       )}
 
       {selectedStudent && (
-        <div className="modal-overlay" onClick={() => setSelectedStudent(null)}>
-          <div className="modal-content" style={{ maxWidth: '600px', width: '90%', pointerEvents: 'auto' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '15px', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0, color: '#1e293b' }}>Student Details: {selectedStudent.name}</h2>
-              <button className="close-btn" onClick={() => setSelectedStudent(null)}>×</button>
-            </div>
+        <div className="modal-overlay" onClick={() => setSelectedStudent(null)} style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="modal-content" style={{ 
+            backgroundColor: '#ffffff', 
+            borderRadius: '16px', 
+            padding: '32px', 
+            width: '100%', 
+            maxWidth: '600px', 
+            position: 'relative',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.15)',
+            pointerEvents: 'auto',
+            maxHeight: '85vh',
+            overflowY: 'auto'
+          }} onClick={e => e.stopPropagation()}>
+            
+            <button 
+              className="modal-close-btn" 
+              onClick={() => setSelectedStudent(null)}
+              style={{ 
+                position: 'absolute', 
+                top: '20px', 
+                right: '20px', 
+                background: 'none', 
+                border: 'none', 
+                fontSize: '24px', 
+                color: '#94a3b8', 
+                cursor: 'pointer',
+                lineHeight: 1
+              }}
+            >
+              ×
+            </button>
 
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <header style={{ marginBottom: '28px' }}>
+              <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#0f172a', fontWeight: '800' }}>
+                Student Details: {selectedStudent.name}
+              </h2>
+              <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.95rem' }}>{selectedStudent.email}</p>
+            </header>
+
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+              {/* Completed Section */}
               <div>
-                <h4 style={{ color: '#059669', marginBottom: '12px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Completed Assessments ({studentSubmissions.length})
                 </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
                   {studentSubmissions.length > 0 ? (
-                    studentSubmissions.map(sub => (
-                      <div key={sub.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                        <span style={{ fontWeight: '600', color: '#334155' }}>{sub.exam_title}</span>
-                        <span style={{ background: '#dcfce7', color: '#15803d', padding: '4px 10px', borderRadius: '6px', fontSize: '13px', fontWeight: '700' }}>
+                    studentSubmissions.map((sub, idx) => (
+                      <div key={sub.id} style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        padding: '16px', 
+                        backgroundColor: '#ffffff',
+                        borderBottom: idx === studentSubmissions.length - 1 ? 'none' : '1px solid #e2e8f0'
+                      }}>
+                        <span style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.95rem' }}>{sub.exam_title}</span>
+                        <span style={{ 
+                          backgroundColor: '#dcfce7', 
+                          color: '#166534', 
+                          padding: '4px 12px', 
+                          borderRadius: '9999px', 
+                          fontSize: '13px', 
+                          fontWeight: '700' 
+                        }}>
                           {sub.points_earned ?? sub.score ?? 0} / {sub.total_items ?? sub.total_questions ?? '?'}
                         </span>
                       </div>
                     ))
                   ) : (
-                    <p style={{ color: '#94a3b8', fontSize: '14px', fontStyle: 'italic' }}>No completed assessments found.</p>
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '14px' }}>
+                      No completed assessments found.
+                    </div>
                   )}
                 </div>
               </div>
 
+              {/* Pending Section */}
               <div>
-                <h4 style={{ color: '#64748b', marginBottom: '12px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Pending Assessments ({exams.filter(e => !studentSubmissions.some(sub => sub.exam_title === e.title)).length})
                 </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
                   {exams
                     .filter(e => !studentSubmissions.some(sub => sub.exam_title === e.title))
-                    .map(e => (
-                      <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#ffffff', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-                        <span style={{ color: '#64748b' }}>{e.title}</span>
-                        <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase' }}>Pending</span>
+                    .map((e, idx, arr) => (
+                      <div key={e.id} style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        padding: '16px', 
+                        backgroundColor: '#ffffff',
+                        borderBottom: idx === arr.length - 1 ? 'none' : '1px solid #e2e8f0'
+                      }}>
+                        <span style={{ color: '#475569', fontSize: '0.95rem', fontWeight: '500' }}>{e.title}</span>
+                        <span style={{ 
+                          backgroundColor: '#f1f5f9', 
+                          color: '#475569', 
+                          padding: '4px 12px', 
+                          borderRadius: '9999px', 
+                          fontSize: '11px', 
+                          fontWeight: '700',
+                          textTransform: 'uppercase'
+                        }}>
+                          Pending
+                        </span>
                       </div>
                     ))}
                   {exams.filter(e => !studentSubmissions.some(sub => sub.exam_title === e.title)).length === 0 && (
-                    <p style={{ color: '#94a3b8', fontSize: '14px', fontStyle: 'italic' }}>All assigned assessments are complete.</p>
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#16a34a', fontSize: '14px', fontWeight: '500', backgroundColor: '#f0fdf4' }}>
+                      ✨ All assigned assessments are complete.
+                    </div>
                   )}
                 </div>
               </div>
