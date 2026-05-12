@@ -111,7 +111,7 @@ const TeacherClass = () => {
             {classes.map((item) => (
               <div key={item.id} className="class-card">
                 <div className="card-top">
-                  <span className="subject-label">{item.subject || 'No Subject'}</span>
+                  <span className="subject-label">{item.name || 'No Section'}</span>
                   <button 
                     className="delete-class-btn" 
                     onClick={(e) => handleDeleteClass(item.id, e)}
@@ -121,7 +121,7 @@ const TeacherClass = () => {
                   </button>
                 </div>
                 <div className="card-info">
-                  <h3>{item.name}</h3>
+                  <h3>{item.subject || 'No Subject'}</h3>
                   <p><Users size={16} /> View Students & Exams</p>
                 </div>
                 <button className="view-btn" onClick={() => setSelectedSection(item)}>
