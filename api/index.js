@@ -647,6 +647,24 @@ app.get('/api/submissions/:classId', async (req, res) => {
   }
 });
 
+// --- GET SUBMISSIONS FOR SPECIFIC EXAM ---
+app.get('/api/exams/:examId/submissions', async (req, res) => {
+  try {
+    const { examId } = req.params;
+    const query = `
+      SELECT sub.*, u.name as student_name 
+      FROM student_submissions sub 
+      JOIN Users u ON sub.student_id = u.id 
+      WHERE sub.exam_id = $1
+    `;
+    const result = await db.query(query, [examId]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Fetch exam submissions error:", error);
+    res.status(500).json({ error: "Failed to fetch submissions" });
+  }
+});
+
 // --- DELETE SUBMISSION ---
 app.delete('/api/submissions/:id', async (req, res) => {
   try {

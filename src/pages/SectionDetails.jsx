@@ -65,6 +65,7 @@ const SectionDetails = ({ section, onBack }) => {
   const [numberOfQuestions, setNumberOfQuestions] = useState(10);
   const [generatedQuestions, setGeneratedQuestions] = useState([]);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [examSubmissions, setExamSubmissions] = useState([]);
 
   // ── Invite search state ────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -115,14 +116,23 @@ const SectionDetails = ({ section, onBack }) => {
     if (!exam) return;
     setShowExamDetails(exam);
     setParsedOCRData(null);
+    setExamSubmissions([]);
     try {
-      const response = await fetch(`/api/exams/${exam.id}/questions`);
-      if (response.ok) {
-        const data = await response.json();
-        setExamQuestions(data || { manual: [], generated: [] });
+      // Fetch questions
+      const qRes = await fetch(`/api/exams/${exam.id}/questions`);
+      if (qRes.ok) {
+        const qData = await qRes.json();
+        setExamQuestions(qData || { manual: [], generated: [] });
+      }
+
+      // Fetch submissions for this exam
+      const subRes = await fetch(`/api/exams/${exam.id}/submissions`);
+      if (subRes.ok) {
+        const subData = await subRes.json();
+        setExamSubmissions(subData || []);
       }
     } catch (error) {
-      console.error('Error fetching exam questions:', error);
+      console.error('Error fetching exam details:', error);
     }
   };
 
@@ -613,7 +623,7 @@ const SectionDetails = ({ section, onBack }) => {
 
       {showExamDetails && (
         <div className="modal-overlay" onClick={() => setShowExamDetails(null)}>
-          <div className="modal-content details-modal" style={{ pointerEvents: 'auto', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+          <div className="modal-content details-modal" style={{ pointerEvents: 'auto', maxHeight: '90vh', overflowY: 'auto', width: '95%', maxWidth: '1000px' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Exam Details: {showExamDetails?.title || 'Untitled'}</h2>
               <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
@@ -630,79 +640,125 @@ const SectionDetails = ({ section, onBack }) => {
               </div>
             </div>
             
-            <div className="modal-body">
-              <div className="details-section">
-                <h4>Manual Answer Key ({examQuestions?.manual?.length || 0})</h4>
-                <div className="questions-list">
-                  {examQuestions?.manual && examQuestions.manual.length > 0 ? (
-                    examQuestions.manual.map((a, idx) => a ? (
-                      <div key={a.id || `manual-${idx}`} className="question-item">
-                        <p><strong>{idx + 1}. {a.question_text || `Question ${idx + 1}`}</strong></p>
-                        <p className="ans-text" style={{ color: '#059669', fontWeight: 'bold' }}>Answer: {a.correct_answer || 'N/A'}</p>
+            <div className="modal-body" style={{ display: 'flex', gap: '24px', padding: '20px' }}>
+              {/* Left Column: Answer Keys & OCR */}
+              <div style={{ flex: '1.2' }}>
+                <div className="details-section">
+                  <h4>Manual Answer Key ({examQuestions?.manual?.length || 0})</h4>
+                  <div className="questions-list">
+                    {examQuestions?.manual && examQuestions.manual.length > 0 ? (
+                      examQuestions.manual.map((a, idx) => a ? (
+                        <div key={a.id || `manual-${idx}`} className="question-item">
+                          <p><strong>{idx + 1}. {a.question_text || `Question ${idx + 1}`}</strong></p>
+                          <p className="ans-text" style={{ color: '#059669', fontWeight: 'bold' }}>Answer: {a.correct_answer || 'N/A'}</p>
+                        </div>
+                      ) : null)
+                    ) : (
+                      <p>No manual answers defined.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="details-section" style={{ background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <h4 style={{ margin: '0 0 10px 0' }}>OCR Answer Key Extraction</h4>
+                  <div className="upload-row" onClick={() => answerKeyInputRef.current && answerKeyInputRef.current.click()} style={{ marginBottom: '10px' }}>
+                    <span className="upload-placeholder">
+                      {answerKeyImage?.name ? answerKeyImage.name : 'Upload Official Answer Key PDF/Image'}
+                    </span>
+                    <input
+                      type="file"
+                      ref={answerKeyInputRef}
+                      style={{ display: 'none' }}
+                      accept=".jpg,.jpeg,.png,.pdf"
+                      onChange={handleAnswerKeyImageChange}
+                    />
+                    <button className="browse-btn exam-browse">Browse</button>
+                  </div>
+                  
+                  <button 
+                    className="save-assign-btn" 
+                    onClick={() => handleProcessOCR(showExamDetails.id)}
+                    disabled={isProcessingOCR || !answerKeyImage}
+                    style={{ width: '100%', marginBottom: '10px' }}
+                  >
+                    {isProcessingOCR ? 'Scanning Document...' : 'Extract Answers via OCR'}
+                  </button>
+
+                  {parsedOCRData && parsedOCRData.length > 0 && (
+                    <div style={{ marginTop: '15px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '15px' }}>
+                      <h5 style={{ margin: '0 0 10px 0', color: '#334155' }}>Preview: {parsedOCRData.length} Answers Detected</h5>
+                      <div style={{ maxHeight: '200px', overflowY: 'auto', marginBottom: '15px', padding: '10px', background: '#f1f5f9', borderRadius: '6px' }}>
+                        {parsedOCRData.map((item, i) => item ? (
+                          <div key={`parsed-${i}`} style={{ marginBottom: '8px', fontSize: '13px', display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#475569' }}>{item?.questionText ? item.questionText.substring(0, 30) : 'Question'}...</span>
+                            <strong style={{ color: '#16a34a' }}>{item?.correctAnswer || '?'}</strong>
+                          </div>
+                        ) : null)}
                       </div>
-                    ) : null)
-                  ) : (
-                    <p>No manual answers defined.</p>
+                      
+                      <button
+                        onClick={handleSaveOCRToDatabase}
+                        style={{
+                          width: '100%',
+                          padding: '10px 16px',
+                          background: '#2563eb',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)'
+                        }}
+                      >
+                        Save to Database
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
 
-              <div className="details-section" style={{ background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <h4 style={{ margin: '0 0 10px 0' }}>OCR Answer Key Extraction</h4>
-                <div className="upload-row" onClick={() => answerKeyInputRef.current && answerKeyInputRef.current.click()} style={{ marginBottom: '10px' }}>
-                  <span className="upload-placeholder">
-                    {answerKeyImage?.name ? answerKeyImage.name : 'Upload Official Answer Key PDF/Image'}
-                  </span>
-                  <input
-                    type="file"
-                    ref={answerKeyInputRef}
-                    style={{ display: 'none' }}
-                    accept=".jpg,.jpeg,.png,.pdf"
-                    onChange={handleAnswerKeyImageChange}
-                  />
-                  <button className="browse-btn exam-browse">Browse</button>
-                </div>
+              {/* Right Column: Student Progress */}
+              <div style={{ flex: '1', background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <h3 style={{ margin: '0 0 20px 0', fontSize: '1.2rem', color: '#1e293b' }}>Student Progress</h3>
                 
-                <button 
-                  className="save-assign-btn" 
-                  onClick={() => handleProcessOCR(showExamDetails.id)}
-                  disabled={isProcessingOCR || !answerKeyImage}
-                  style={{ width: '100%', marginBottom: '10px' }}
-                >
-                  {isProcessingOCR ? 'Scanning Document...' : 'Extract Answers via OCR'}
-                </button>
-
-                {parsedOCRData && parsedOCRData.length > 0 && (
-                  <div style={{ marginTop: '15px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '15px' }}>
-                    <h5 style={{ margin: '0 0 10px 0', color: '#334155' }}>Preview: {parsedOCRData.length} Answers Detected</h5>
-                    <div style={{ maxHeight: '200px', overflowY: 'auto', marginBottom: '15px', padding: '10px', background: '#f1f5f9', borderRadius: '6px' }}>
-                      {parsedOCRData.map((item, i) => item ? (
-                        <div key={`parsed-${i}`} style={{ marginBottom: '8px', fontSize: '13px', display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: '#475569' }}>{item?.questionText ? item.questionText.substring(0, 30) : 'Question'}...</span>
-                          <strong style={{ color: '#16a34a' }}>{item?.correctAnswer || '?'}</strong>
-                        </div>
-                      ) : null)}
-                    </div>
-                    
-                    <button
-                      onClick={handleSaveOCRToDatabase}
-                      style={{
-                        width: '100%',
-                        padding: '10px 16px',
-                        background: '#2563eb',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)'
-                      }}
-                    >
-                      Save to Database
-                    </button>
+                <div style={{ marginBottom: '25px' }}>
+                  <h5 style={{ color: '#059669', marginBottom: '10px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Graded ({students.filter(s => examSubmissions.some(sub => sub.student_id === s.user_id)).length})
+                  </h5>
+                  <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                    {students
+                      .filter(s => s.status === 'enrolled')
+                      .map(s => {
+                        const sub = examSubmissions.find(sub => sub.student_id === s.user_id);
+                        if (!sub) return null;
+                        return (
+                          <div key={s.user_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #e2e8f0' }}>
+                            <span style={{ fontSize: '14px', color: '#334155', fontWeight: '500' }}>{s.name}</span>
+                            <span style={{ background: '#dcfce7', color: '#15803d', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: '700' }}>
+                              {sub.points_earned ?? sub.score ?? 0} / {sub.total_items ?? '?'}
+                            </span>
+                          </div>
+                        );
+                      })}
                   </div>
-                )}
+                </div>
+
+                <div>
+                  <h5 style={{ color: '#64748b', marginBottom: '10px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Pending ({students.filter(s => s.status === 'enrolled' && !examSubmissions.some(sub => sub.student_id === s.user_id)).length})
+                  </h5>
+                  <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                    {students
+                      .filter(s => s.status === 'enrolled' && !examSubmissions.some(sub => sub.student_id === s.user_id))
+                      .map(s => (
+                        <div key={s.user_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #e2e8f0' }}>
+                          <span style={{ fontSize: '14px', color: '#64748b' }}>{s.name}</span>
+                          <span style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase' }}>Not Submitted</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
