@@ -1,8 +1,9 @@
 /* eslint-disable */
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Search, UserPlus, UserMinus } from 'lucide-react';
+import { Trash2, Search, UserPlus, UserMinus, Download } from 'lucide-react';
 import jsPDF from 'jspdf';
+import * as XLSX from 'xlsx';
 import './SectionDetails.css';
 import Sidebar from './Sidebar';
 
@@ -415,6 +416,62 @@ const SectionDetails = ({ section, onBack }) => {
 
     doc.save('ScanMine-Answer-Key.pdf');
   };
+  
+  const handleExportExcel = () => {
+    if (!showExamDetails || !students.length) return;
+
+    const gradedStudents = students.filter(s => 
+      s.status === 'enrolled' && 
+      examSubmissions.some(sub => sub.student_id === s.user_id)
+    );
+    
+    const pendingStudents = students.filter(s => 
+      s.status === 'enrolled' && 
+      !examSubmissions.some(sub => sub.student_id === s.user_id)
+    );
+
+    const excelData = [
+      ...gradedStudents.map(s => {
+        const sub = examSubmissions.find(sub => sub.student_id === s.user_id);
+        return {
+          'Subject': section.subject,
+          'Section': section.name,
+          'Exam Name': showExamDetails.title,
+          'Student Name': s.name,
+          'Status': 'Graded',
+          'Points Earned': sub?.points_earned ?? 0,
+          'Total Points': sub?.total_items ?? 0,
+          'Formatted Score': `'${sub?.points_earned ?? 0}/${sub?.total_items ?? 0}`
+        };
+      }),
+      ...pendingStudents.map(s => ({
+        'Subject': section.subject,
+        'Section': section.name,
+        'Exam Name': showExamDetails.title,
+        'Student Name': s.name,
+        'Status': 'Pending',
+        'Points Earned': 0,
+        'Total Points': 0,
+        'Formatted Score': 'Pending'
+      }))
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Grades");
+    
+    // Auto-size columns (rough approximation)
+    const maxWidths = excelData.reduce((acc, row) => {
+      Object.keys(row).forEach((key, i) => {
+        const val = String(row[key]);
+        acc[i] = Math.max(acc[i] || 10, val.length, key.length);
+      });
+      return acc;
+    }, []);
+    worksheet['!cols'] = maxWidths.map(w => ({ wch: w + 2 }));
+
+    XLSX.writeFile(workbook, `${section.name}_${showExamDetails.title}_Grades.xlsx`);
+  };
 
   return (
     <div className="page-layout">
@@ -719,10 +776,20 @@ const SectionDetails = ({ section, onBack }) => {
               </div>
 
               {/* Right Column: Student Progress */}
-              <div style={{ flex: '1', background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                <h3 style={{ margin: '0 0 20px 0', fontSize: '1.2rem', color: '#1e293b' }}>Student Progress</h3>
+              <div style={{ flex: '1', background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#1e293b' }}>Student Progress</h3>
+                  <button 
+                    onClick={handleExportExcel}
+                    className="btn-action success"
+                    style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Download size={14} />
+                    Export to Excel
+                  </button>
+                </div>
                 
-                <div style={{ marginBottom: '25px' }}>
+                <div style={{ marginBottom: '25px', flex: 1, overflowY: 'auto' }}>
                   <h5 style={{ color: '#059669', marginBottom: '10px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Graded ({students.filter(s => examSubmissions.some(sub => sub.student_id === s.user_id)).length})
                   </h5>
