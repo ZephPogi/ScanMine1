@@ -11,6 +11,8 @@ const StudentViewClass = () => {
   
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const [exams, setExams] = useState([]);
+  const [assessments, setAssessments] = useState([]);
+  const [loadingGrades, setLoadingGrades] = useState(true);
   
   // Scan Modal State
   const [showScanModal, setShowScanModal] = useState(false);
@@ -28,8 +30,24 @@ const StudentViewClass = () => {
     if (section?.id) {
       localStorage.setItem('currentSection', JSON.stringify(section));
       fetchExams();
+      fetchGrades();
     }
   }, [section]);
+
+  const fetchGrades = async () => {
+    if (!user.id || !section?.id) return;
+    try {
+      const res = await fetch(`/api/student/${user.id}/grades/${section.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAssessments(data);
+      }
+    } catch (err) {
+      console.error('Error fetching grades:', err);
+    } finally {
+      setLoadingGrades(false);
+    }
+  };
 
   const fetchExams = async () => {
     try {
@@ -176,20 +194,52 @@ const StudentViewClass = () => {
               
               <button 
                 className="btn-action primary" 
-                style={{ padding: '18px', fontSize: '1.15rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', width: '100%', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' }}
+                style={{ padding: '18px', fontSize: '1.15rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', width: '100%', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)', marginBottom: '30px' }}
                 onClick={() => setShowScanModal(true)}
               >
                 <Camera size={20} />
                 Scan / Upload My Answer Sheet
               </button>
 
-              <button 
-                className="btn-action success" 
-                style={{ padding: '18px', fontSize: '1.15rem', marginTop: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: 'white', color: '#10b981', border: '2px solid #10b981', borderRadius: '12px', cursor: 'pointer', width: '100%', transition: 'all 0.2s' }}
-                onClick={() => navigate(`/student/grades/${section.id}`, { state: { section } })}
-              >
-                View Auto-Grading Results (My Grades)
-              </button>
+              <div className="smg-table-card" style={{ marginTop: '30px', textAlign: 'left' }}>
+                <h3 className="smg-table-title" style={{ fontSize: '1.2rem', marginBottom: '15px', color: '#1e293b', fontWeight: '700' }}>Detailed Assessment Results</h3>
+                <div className="table-responsive-wrapper">
+                  <table className="smg-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
+                        <th style={{ padding: '12px', textAlign: 'left', color: '#64748b', fontSize: '0.8rem', fontWeight: '600', textTransform: 'uppercase' }}>Assessment</th>
+                        <th style={{ padding: '12px', textAlign: 'left', color: '#64748b', fontSize: '0.8rem', fontWeight: '600', textTransform: 'uppercase' }}>Date Submitted</th>
+                        <th style={{ padding: '12px', textAlign: 'left', color: '#64748b', fontSize: '0.8rem', fontWeight: '600', textTransform: 'uppercase' }}>Score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loadingGrades ? (
+                        <tr>
+                          <td colSpan="3" style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
+                            Loading grades...
+                          </td>
+                        </tr>
+                      ) : assessments.length === 0 ? (
+                        <tr>
+                          <td colSpan="3" style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
+                            No submissions found for this class.
+                          </td>
+                        </tr>
+                      ) : (
+                        assessments.map(a => (
+                          <tr key={a.id} style={{ borderBottom: '1px solid #f8fafc' }}>
+                            <td style={{ padding: '12px', fontWeight: '600', color: '#1e293b' }}>{a.exam_title}</td>
+                            <td style={{ padding: '12px', color: '#64748b', fontSize: '0.88rem' }}>{new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                            <td style={{ padding: '12px', fontWeight: '700', color: '#334155' }}>
+                              {a.points_earned !== null ? `${a.points_earned} / ${a.total_items}` : (a.score !== null ? `${a.score} / ${a.total_questions || '—'}` : 'N/A')}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </aside>
         </div>

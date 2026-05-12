@@ -20,7 +20,6 @@ import AutoGradingResults from "./pages/AutoGradingResults";
 import StudentDashboard    from "./pages/StudentDashboard";
 import StudentClasses      from "./pages/StudentClasses";
 import StudentProfile      from "./pages/StudentProfile";
-import StudentMyGrades     from "./pages/StudentMyGrades";
 import StudentUpcomingExams from "./pages/StudentUpcomingExams";
 import StudentViewClass    from "./pages/StudentViewClass";
 import StudentLayout       from "./pages/StudentLayout";
@@ -50,7 +49,6 @@ function App() {
           <Route path="/student-dashboard"      element={<StudentDashboard />} />
           <Route path="/student-classes"        element={<StudentClasses />} />
           <Route path="/student-profile"        element={<StudentProfile />} />
-          <Route path="/student/grades/:classId" element={<StudentMyGrades />} />
           <Route path="/student-upcoming-exams" element={<StudentUpcomingExams />} />
           <Route path="/student-view-class"     element={<StudentViewClass />} />
         </Route>
