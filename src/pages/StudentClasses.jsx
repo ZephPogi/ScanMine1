@@ -99,21 +99,21 @@ const StudentClasses = () => {
               </div>
               <div className="invites-grid">
                 {pendingInvites.map(cls => (
-                  <div key={cls.id} className="invite-card">
-                    <div className="invite-card-top">
-                      <span className="subject-label">{cls.subject || 'No Subject'}</span>
-                      <span className="invite-status-pill">
-                        <Clock size={12} />
-                        Pending
-                      </span>
-                    </div>
-                    <div className="invite-meta">
-                      <h3>{cls.name}</h3>
-                      <p>
-                        <Users size={14} />
-                        {cls.professor || 'Unknown Teacher'}
-                      </p>
-                    </div>
+                    <div key={cls.id} className="invite-card">
+                      <div className="invite-card-top">
+                        <span className="subject-label">{cls.name || 'No Section'}</span>
+                        <span className="invite-status-pill">
+                          <Clock size={12} />
+                          Pending
+                        </span>
+                      </div>
+                      <div className="invite-meta">
+                        <h3>{cls.subject || 'No Subject'}</h3>
+                        <p>
+                          <Users size={14} />
+                          {cls.professor || 'Unknown Teacher'}
+                        </p>
+                      </div>
                     <div className="invite-actions">
                       <button
                         className="accept-btn"
@@ -150,10 +150,10 @@ const StudentClasses = () => {
               {enrolledClasses.map((item) => (
                 <div key={item.id} className="class-card">
                   <div className="card-top">
-                    <span className="subject-label">{item.subject || 'No Subject'}</span>
+                    <span className="subject-label">{item.name || 'No Section'}</span>
                   </div>
                   <div className="card-info">
-                    <h3>{item.name}</h3>
+                    <h3>{item.subject || 'No Subject'}</h3>
                     <p><Users size={16} /> Professor: {item.professor || 'Unknown'}</p>
                   </div>
                   <button className="view-btn" onClick={() => handleViewClass(item)}>

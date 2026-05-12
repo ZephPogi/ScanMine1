@@ -164,8 +164,8 @@ const StudentViewClass = () => {
         <header className="minimal-header">
           <button className="back-btn" onClick={() => navigate('/student-classes')}>← Back to Classes</button>
           <div className="subject-title">
-            <h1>{section?.name || 'Class Details'}</h1>
-            <p>{section?.subject || ''} • Professor: {section?.professor || 'Unknown'}</p>
+            <h1>{section?.subject || 'No Subject'}</h1>
+            <p>{section?.name || 'No Section'} • Professor: {section?.professor || 'Unknown'}</p>
           </div>
         </header>
 
