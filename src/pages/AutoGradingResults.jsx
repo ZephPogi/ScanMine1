@@ -412,12 +412,12 @@ const handleScanRecord = async () => {
                 <span className={`status-badge ${showFeedback.status.toLowerCase()}`}>{showFeedback.status}</span>
               </div>
               {showFeedback.feedback ? showFeedback.feedback.split('\n').filter(Boolean).map((line, i) => {
-                const isCorrect = line.includes('Correct');
+                const isWrong = line.includes('Wrong') || line.includes('❌');
                 // Extract only "Q1: Student answered 'X'"
                 const displayLine = line.split('|')[0].trim();
                 
                 return (
-                  <div key={i} className={`feedback-row ${isCorrect ? 'correct' : 'wrong'}`}>
+                  <div key={i} className={`feedback-row ${isWrong ? 'wrong' : 'correct'}`}>
                     {displayLine}
                   </div>
                 );
