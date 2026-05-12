@@ -67,6 +67,8 @@ const SectionDetails = ({ section, onBack }) => {
   const [generatedQuestions, setGeneratedQuestions] = useState([]);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
   const [examSubmissions, setExamSubmissions] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [studentSubmissions, setStudentSubmissions] = useState([]);
 
   // ── Invite search state ────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -134,6 +136,21 @@ const SectionDetails = ({ section, onBack }) => {
       }
     } catch (error) {
       console.error('Error fetching exam details:', error);
+    }
+  };
+
+  const handleViewStudent = async (student) => {
+    if (!student) return;
+    setSelectedStudent(student);
+    setStudentSubmissions([]);
+    try {
+      const response = await fetch(`/api/student/${student.user_id}/grades/${section.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setStudentSubmissions(data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching student grades:', error);
     }
   };
 
@@ -546,7 +563,12 @@ const SectionDetails = ({ section, onBack }) => {
                 <tbody>
                   {students && students.length > 0 ? (
                     students.map((s, idx) => s ? (
-                      <tr key={s.user_id || `student-${idx}`}>
+                      <tr 
+                        key={s.user_id || `student-${idx}`} 
+                        onClick={() => handleViewStudent(s)}
+                        style={{ cursor: 'pointer' }}
+                        className="roster-row-hover"
+                      >
                         <td className="student-name">{s.name || 'Unknown'}</td>
                         <td>{s.email || 'N/A'}</td>
                         <td>
@@ -558,7 +580,10 @@ const SectionDetails = ({ section, onBack }) => {
                           <button
                             className="kick-btn"
                             title="Remove student"
-                            onClick={() => handleKickStudent(s)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleKickStudent(s);
+                            }}
                           >
                             <UserMinus size={15} />
                           </button>
@@ -825,6 +850,58 @@ const SectionDetails = ({ section, onBack }) => {
                         </div>
                       ))}
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedStudent && (
+        <div className="modal-overlay" onClick={() => setSelectedStudent(null)}>
+          <div className="modal-content" style={{ maxWidth: '600px', width: '90%', pointerEvents: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '15px', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0, color: '#1e293b' }}>Student Details: {selectedStudent.name}</h2>
+              <button className="close-btn" onClick={() => setSelectedStudent(null)}>×</button>
+            </div>
+
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div>
+                <h4 style={{ color: '#059669', marginBottom: '12px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Completed Assessments ({studentSubmissions.length})
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {studentSubmissions.length > 0 ? (
+                    studentSubmissions.map(sub => (
+                      <div key={sub.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                        <span style={{ fontWeight: '600', color: '#334155' }}>{sub.exam_title}</span>
+                        <span style={{ background: '#dcfce7', color: '#15803d', padding: '4px 10px', borderRadius: '6px', fontSize: '13px', fontWeight: '700' }}>
+                          {sub.points_earned ?? sub.score ?? 0} / {sub.total_items ?? sub.total_questions ?? '?'}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p style={{ color: '#94a3b8', fontSize: '14px', fontStyle: 'italic' }}>No completed assessments found.</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h4 style={{ color: '#64748b', marginBottom: '12px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Pending Assessments ({exams.filter(e => !studentSubmissions.some(sub => sub.exam_title === e.title)).length})
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {exams
+                    .filter(e => !studentSubmissions.some(sub => sub.exam_title === e.title))
+                    .map(e => (
+                      <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#ffffff', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                        <span style={{ color: '#64748b' }}>{e.title}</span>
+                        <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase' }}>Pending</span>
+                      </div>
+                    ))}
+                  {exams.filter(e => !studentSubmissions.some(sub => sub.exam_title === e.title)).length === 0 && (
+                    <p style={{ color: '#94a3b8', fontSize: '14px', fontStyle: 'italic' }}>All assigned assessments are complete.</p>
+                  )}
                 </div>
               </div>
             </div>
