@@ -13,7 +13,7 @@ class OCRSpaceService {
     this.apiKey = process.env.OCR_SPACE_API_KEY || '';
     this.apiUrl = 'https://api.ocr.space/parse/image';
   }
-  
+
   /**
    * Sends image to OCR.space API for handwritten text recognition
    * @param {string} imagePath - Path to the image file
@@ -43,9 +43,9 @@ class OCRSpaceService {
       const formData = new FormData();
 
       // 1. Detect File Type
-      const isPdfBuffer = imageBuffer.length > 4 && 
-                          imageBuffer[0] === 0x25 && 
-                          imageBuffer[1] === 0x50;
+      const isPdfBuffer = imageBuffer.length > 4 &&
+        imageBuffer[0] === 0x25 &&
+        imageBuffer[1] === 0x50;
 
       // 2. THE CRITICAL CHANGE: Use 'file' instead of 'base64Image'
       // This sends raw bytes, which Engine 3 handles much more reliably
@@ -63,6 +63,7 @@ class OCRSpaceService {
 
       console.log(`Uploading Binary to OCR.space (Engine: ${engine})...`);
 
+      /*
       const response = await axios.post(this.apiUrl, formData, {
         headers: {
           ...formData.getHeaders() // Necessary for multi-part binary data
@@ -75,17 +76,41 @@ class OCRSpaceService {
       }
 
       return response.data.ParsedResults?.map(r => r.ParsedText).join('\n') || "";
+      */
+
+      // --- NEW HUGGING FACE TROCR MICROSERVICE ---
+      const hfFormData = new FormData();
+      hfFormData.append('file', imageBuffer, {
+        filename: isPdfBuffer ? 'document.pdf' : 'captured_paper.jpg',
+        contentType: isPdfBuffer ? 'application/pdf' : 'image/jpeg',
+      });
+
+      console.log('Sending to Hugging Face TrOCR Microservice...');
+      const hfResponse = await axios.post('https://zephpogi-scanmine-trocr.hf.space/extract-text', hfFormData, {
+        headers: {
+          ...hfFormData.getHeaders()
+        },
+        timeout: 60000
+      });
+
+      const extractedText = hfResponse.data.text || "";
+      console.log("Hugging Face AI Output: \n", extractedText); // <--- PUT IT EXACTLY HERE
+      return extractedText;
+
+
+
     } catch (error) {
       // THIS IS THE MAGIC DEBUG LOG
       if (error.response) {
-        console.error('OCR.space Detailed Error:', JSON.stringify(error.response.data, null, 2));
+        console.error('API Detailed Error:', JSON.stringify(error.response.data, null, 2));
       } else {
-        console.error('OCR.space Network Error:', error.message);
+        console.error('API Network Error:', error.message);
       }
-      throw new Error("OCR.space processing failed.");
+      throw new Error("OCR processing failed.");
     }
-    
+
   }
+
 
   async recognizeHandwritingFileUpload(imagePath) {
     if (!this.apiKey) {
@@ -95,12 +120,12 @@ class OCRSpaceService {
     try {
       const imageBuffer = fs.readFileSync(imagePath);
       const formData = new FormData();
-      
+
       formData.append('file', imageBuffer, {
         filename: path.basename(imagePath),
         contentType: 'image/png'
       });
-      
+
       // Use OCREngine=3 (handwriting engine) - NOTE: 'engine' parameter is invalid, only 'OCREngine'
       formData.append('apikey', this.apiKey);
       formData.append('language', 'eng');
@@ -134,7 +159,7 @@ class OCRSpaceService {
 
       const parsedResults = response.data.ParsedResults || [];
       let extractedText = '';
-      
+
       for (const result of parsedResults) {
         extractedText += result.ParsedText || '';
       }
@@ -169,12 +194,12 @@ class OCRSpaceService {
     try {
       const imageBuffer = fs.readFileSync(imagePath);
       const formData = new FormData();
-      
+
       formData.append('file', imageBuffer, {
         filename: path.basename(imagePath),
         contentType: 'image/png'
       });
-      
+
       // Try Engine 2 (mixed content)
       formData.append('apikey', this.apiKey);
       formData.append('language', 'eng');
@@ -202,7 +227,7 @@ class OCRSpaceService {
 
       const parsedResults = response.data.ParsedResults || [];
       let extractedText = '';
-      
+
       for (const result of parsedResults) {
         extractedText += result.ParsedText || '';
       }
@@ -262,7 +287,7 @@ class OCRSpaceService {
 
       const parsedResults = response.data.ParsedResults || [];
       let extractedText = '';
-      
+
       for (const result of parsedResults) {
         extractedText += result.ParsedText || '';
       }
@@ -316,7 +341,7 @@ class OCRSpaceService {
 
       const parsedResults = response.data.ParsedResults || [];
       let extractedText = '';
-      
+
       for (const result of parsedResults) {
         extractedText += result.ParsedText || '';
       }
