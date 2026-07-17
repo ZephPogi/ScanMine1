@@ -108,68 +108,101 @@ async function extractTextFromImageLegacy(imagePath, imageBuffer = null) {
 }
 
 /**
- * Extracts answers from OCR text using line-by-line approach.
- * Handles formats: "1. C", "1) C", "1 C", "1.C", "(C) 1", etc.
- * Also handles markdown table format from OCR.space
+ * Parses student answers from OCR text produced by the HF YOLOv8+TrOCR hybrid
+ * service (or any legacy OCR fallback).
+ *
+ * The Hugging Face model returns one answer token per detected bounding box,
+ * separated by newlines.  Two formats are supported:
+ *
+ *   Sequential (bare) — one token per line, mapped to Q1, Q2 … in order:
+ *     B
+ *     C
+ *     C
+ *     B
+ *
+ *   Numbered — explicit question number on each line (either format):
+ *     1. B
+ *     2. C
+ *     1) Mercury
+ *
+ * The function also handles legacy formats (markdown tables, answer-then-number)
+ * so older submissions keep working.
+ *
+ * @param {string} ocrText   Raw text returned by the OCR/HF service
+ * @param {number} [totalQuestions=0]  When provided, gaps are pre-filled with '?'
+ * @returns {{ [questionNumber: number]: string }}
  */
-function parseStudentAnswers(ocrText) {
+function parseStudentAnswers(ocrText, totalQuestions = 0) {
   const answers = {};
+  const sequentialTokens = []; // Collect bare tokens for sequential fallback
+
   const lines = ocrText.split(/\r?\n/);
-  
+
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    
-    // Handle markdown table format: "| 1. | C |"
-    const tableMatch = trimmed.match(/^\|\s*(\d+)[\.\)]?\s*\|\s*([A-Za-z0-9]+)\s*\|$/);
+
+    // ── Priority 1: Numbered formats ──────────────────────────────────────
+
+    // Markdown table: "| 1. | C |" or "| 1 | B |"
+    const tableMatch = trimmed.match(/^\|\s*(\d+)[\.\)]?\s*\|\s*([A-Za-z0-9]+(?:\s+[A-Za-z0-9]+)*)\s*\|/);
     if (tableMatch) {
-      answers[parseInt(tableMatch[1])] = tableMatch[2].trim();
-      continue;
-    }
-    
-    // Handle table format without pipe: "1. | C"
-    const tableMatch2 = trimmed.match(/^(\d+)[\.\)]?\s*\|\s*([A-Za-z0-9]+)\s*$/);
-    if (tableMatch2) {
-      answers[parseInt(tableMatch2[1])] = tableMatch2[2].trim();
-      continue;
-    }
-    
-    // Format: "1. C", "1) C", "1. Mercury", "1 Mercury" (number then answer)
-    const m1 = trimmed.match(/^(\d+)[\.\):\s]+\s*([A-Za-z\s]+)$/);
-    if (m1) {
-      answers[parseInt(m1[1])] = m1[2].trim();
-      continue;
-    }
-    
-    // Format: "C. 1" or "C) 1" or "( Mercury ) 1." (answer then number)
-    const m2 = trimmed.match(/^(?:\(\s*)?([A-Za-z\s]+)(?:\s*\))?\s*(\d+)[\.\)]/);
-    if (m2) {
-      answers[parseInt(m2[2])] = m2[1].trim();
+      answers[parseInt(tableMatch[1], 10)] = tableMatch[2].trim().toUpperCase();
       continue;
     }
 
-    // Just a letter on a line by itself (sequential)
-    const m3 = trimmed.match(/^([A-Da-d])\.?$/);
-    if (m3) {
-      // We can't reliably map this to a question number without context
-      // So we collect them in order later
+    // Table without outer pipes: "1. | C"
+    const tableMatch2 = trimmed.match(/^(\d+)[\.\)]?\s*\|\s*([A-Za-z0-9]+(?:\s+[A-Za-z0-9]+)*)\s*$/);
+    if (tableMatch2) {
+      answers[parseInt(tableMatch2[1], 10)] = tableMatch2[2].trim().toUpperCase();
+      continue;
+    }
+
+    // Number-first: "1. B", "1) C", "2. Mercury", "3 D"
+    const numbered = trimmed.match(/^(\d+)[\.\):\s]\s*([A-Za-z][A-Za-z\s]*)$/);
+    if (numbered) {
+      answers[parseInt(numbered[1], 10)] = numbered[2].trim().toUpperCase();
+      continue;
+    }
+
+    // Answer-first: "C. 1" or "( Mercury ) 1."
+    const answerFirst = trimmed.match(/^(?:\(?\s*)?([A-Za-z][A-Za-z\s]*)(?:\s*\))?\s+(\d+)[\.\)]/);
+    if (answerFirst) {
+      answers[parseInt(answerFirst[2], 10)] = answerFirst[1].trim().toUpperCase();
+      continue;
+    }
+
+    // ── Priority 2: Sequential (bare) tokens ─────────────────────────────
+    // These are the primary output of the YOLOv8+TrOCR pipeline:
+    //   a single letter (A-D) or a short identification word on its own line.
+    // We collect them here and map them to Q1, Q2 … after the loop.
+    const isMultipleChoice = /^[A-Da-d]\.?$/.test(trimmed);
+    const isIdentification = /^[A-Za-z]{2,30}$/.test(trimmed);
+
+    if (isMultipleChoice || isIdentification) {
+      sequentialTokens.push(trimmed.replace(/\.$/, '').toUpperCase());
     }
   }
-  
-  // Fallback: if we found nothing numbered, extract all single letters in order
-  if (Object.keys(answers).length === 0) {
-    console.log('No numbered answers found, extracting letters in order...');
-    let qNum = 1;
-    for (const line of lines) {
-      const m = line.trim().match(/^([A-Da-d])\.?$/i);
-      if (m) {
-        answers[qNum] = m[1].toUpperCase();
-        qNum++;
-      }
+
+  // ── Merge sequential tokens if no numbered answers were parsed ─────────
+  if (Object.keys(answers).length === 0 && sequentialTokens.length > 0) {
+    console.log(
+      `[Parser] No numbered answers found. Mapping ${sequentialTokens.length} ` +
+      'sequential token(s) from HF output to Q1, Q2 …'
+    );
+    sequentialTokens.forEach((token, idx) => {
+      answers[idx + 1] = token;
+    });
+  }
+
+  // ── Fill missing question slots with '?' ──────────────────────────────
+  if (totalQuestions > 0) {
+    for (let q = 1; q <= totalQuestions; q++) {
+      if (!answers[q]) answers[q] = '?';
     }
   }
-  
-  console.log('Parsed student answers:', answers);
+
+  console.log('[Parser] Parsed student answers:', answers);
   return answers;
 }
 
@@ -197,8 +230,10 @@ async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null,
     // 2. OCR - extract text from paper
     const ocrText = await extractTextFromImage(imagePath, imageBuffer);
 
-    // 3. Parse student answers from OCR text
-    const studentAnswers = parseStudentAnswers(ocrText);
+    // 3. Parse student answers from OCR text.
+    //    Pass the answer-key count so the parser pre-fills missing slots with '?'
+    //    instead of leaving them undefined — ensures every question is graded.
+    const studentAnswers = parseStudentAnswers(ocrText, answerKeys.length);
 
     let correctCount = 0;
     const feedbackLines = [];

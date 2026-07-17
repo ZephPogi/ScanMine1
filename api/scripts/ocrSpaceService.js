@@ -61,52 +61,54 @@ class OCRSpaceService {
       formData.append('OCREngine', engine); // This will be '3' for student papers
       formData.append('isTable', 'false');
 
-      console.log(`Uploading Binary to OCR.space (Engine: ${engine})...`);
+      console.log('Sending image to Hugging Face YOLOv8+TrOCR Hybrid Service...');
 
-      /*
-      const response = await axios.post(this.apiUrl, formData, {
-        headers: {
-          ...formData.getHeaders() // Necessary for multi-part binary data
-        },
-        timeout: 45000 // Give Engine 3 more time to "think"
-      });
-
-      if (response.data.IsErroredOnProcessing) {
-        throw new Error(response.data.ErrorMessage || 'OCR API Error');
-      }
-
-      return response.data.ParsedResults?.map(r => r.ParsedText).join('\n') || "";
-      */
-
-      // --- NEW HUGGING FACE TROCR MICROSERVICE ---
+      // ── Hugging Face YOLOv8 + TrOCR Hybrid Service ────────────────────────
+      // Build a fresh FormData with the image buffer keyed as 'file'.
+      // FastAPI's UploadFile parameter expects exactly this field name.
       const hfFormData = new FormData();
       hfFormData.append('file', imageBuffer, {
         filename: isPdfBuffer ? 'document.pdf' : 'captured_paper.jpg',
         contentType: isPdfBuffer ? 'application/pdf' : 'image/jpeg',
       });
 
-      console.log('Sending to Hugging Face TrOCR Microservice...');
-      const hfResponse = await axios.post('https://zephpogi-scanmine-trocr.hf.space/extract-text', hfFormData, {
-        headers: {
-          ...hfFormData.getHeaders()
-        },
-        timeout: 60000
-      });
+      const hfResponse = await axios.post(
+        'https://YOUR-HF-SPACE-URL/extract-text',
+        hfFormData,
+        {
+          headers: { ...hfFormData.getHeaders() },
+          // 120 s gives Hugging Face Spaces time to wake up from a cold start
+          // without hanging the Express process indefinitely.
+          timeout: 120000,
+        }
+      );
 
-      const extractedText = hfResponse.data.text || "";
-      console.log("Hugging Face AI Output: \n", extractedText); // <--- PUT IT EXACTLY HERE
+      const extractedText = hfResponse.data.text || '';
+      console.log('Hugging Face AI Output:\n', extractedText);
       return extractedText;
 
 
 
     } catch (error) {
-      // THIS IS THE MAGIC DEBUG LOG
-      if (error.response) {
-        console.error('API Detailed Error:', JSON.stringify(error.response.data, null, 2));
-      } else {
-        console.error('API Network Error:', error.message);
+      // Distinguish timeout/network issues from actual API errors so callers
+      // can surface a meaningful message instead of crashing the server.
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        console.error(
+          '[HF Service] Request timed out — the Space may still be waking up. ' +
+          'Please retry in a few seconds.'
+        );
+        throw new Error(
+          'The Hugging Face OCR service timed out. It may be waking up from a cold start — please try again shortly.'
+        );
       }
-      throw new Error("OCR processing failed.");
+
+      if (error.response) {
+        console.error('[HF Service] API error response:', JSON.stringify(error.response.data, null, 2));
+      } else {
+        console.error('[HF Service] Network error:', error.message);
+      }
+
+      throw new Error('OCR processing failed: ' + error.message);
     }
 
   }
