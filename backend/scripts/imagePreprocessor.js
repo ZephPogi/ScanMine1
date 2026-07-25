@@ -1,5 +1,5 @@
 const cv = require('opencv-wasm');
-const { createCanvas, loadImage } = require('canvas');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const fs = require('fs');
 const path = require('path');
 

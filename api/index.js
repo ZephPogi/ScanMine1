@@ -5,22 +5,22 @@ const multer = require('multer');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
-const db = require('./db');
+const db = require('../backend/db');
 
 // Only load dotenv in local development. 
 if (process.env.NODE_ENV !== 'production') {
-  require('dotenv').config();
+  require('dotenv').config({ path: path.join(__dirname, '../backend/.env') });
 }
 
 // Fixed import for Vercel Linux compatibility
 const { createCanvas, loadImage } = require('@napi-rs/canvas');
 
-const { extractText, generateQuizFromText } = require('./scripts/generateQuestions');
-const { gradeSubmission } = require('./scripts/autoGradeSubmission');
-const OCRSpaceService = require('./scripts/ocrSpaceService');
-const { parseFullQuestions } = require('./scripts/ocrAnswerParser');
-const { uploadFile, deleteFile } = require('./supabaseClient');
-const { BUCKET_NAME } = require('./supabaseClient');
+const { extractText, generateQuizFromText } = require('../backend/scripts/generateQuestions');
+const { gradeSubmission } = require('../backend/scripts/autoGradeSubmission');
+const OCRSpaceService = require('../backend/scripts/ocrSpaceService');
+const { parseFullQuestions } = require('../backend/scripts/ocrAnswerParser');
+const { uploadFile, deleteFile } = require('../backend/supabaseClient');
+const { BUCKET_NAME } = require('../backend/supabaseClient');
 
 const app = express();
 const port = process.env.PORT || 5000;

@@ -40,7 +40,7 @@ async function extractTextFromImage(imagePath, imageBuffer = null) {
  */
 async function extractTextFromImageLegacy(imagePath, imageBuffer = null) {
   try {
-    const { createCanvas, loadImage } = require('canvas');
+    const { createCanvas, loadImage } = require('@napi-rs/canvas');
     const fs = require('fs');
 
     const img = imageBuffer ? await loadImage(imageBuffer) : await loadImage(imagePath);

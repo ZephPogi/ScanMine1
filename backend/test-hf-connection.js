@@ -49,9 +49,9 @@ function resolveDefaultImage() {
 
   // Fall back to a known upload from the uploads directory
   const candidates = [
-    path.join(__dirname, '..', 'uploads', '1777603143826-994306566.jpg'),
-    path.join(__dirname, '..', 'uploads', '1777603297486-919829552.jpg'),
-    path.join(__dirname, '..', 'uploads', '1777603555690-521061651.jpg'),
+    path.join(__dirname, 'uploads', '1777603143826-994306566.jpg'),
+    path.join(__dirname, 'uploads', '1777603297486-919829552.jpg'),
+    path.join(__dirname, 'uploads', '1777603555690-521061651.jpg'),
   ];
 
   for (const c of candidates) {
@@ -59,7 +59,7 @@ function resolveDefaultImage() {
   }
 
   // Last resort: grab any .jpg in uploads/
-  const uploadsDir = path.join(__dirname, '..', 'uploads');
+  const uploadsDir = path.join(__dirname, 'uploads');
   if (fs.existsSync(uploadsDir)) {
     const jpg = fs.readdirSync(uploadsDir).find(f => f.endsWith('.jpg'));
     if (jpg) return path.join(uploadsDir, jpg);

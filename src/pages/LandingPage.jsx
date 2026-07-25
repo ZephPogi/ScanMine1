@@ -421,7 +421,7 @@ export default function LandingPage() {
             transition={{ duration: 0.5, delay: 0.1 }}
           >
             <Zap size={11} />
-            Powered by Computer Vision
+            Powered by ScanMine
           </motion.div>
 
           {/* Headline */}
