@@ -328,8 +328,9 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
     if (garbledQNums.length > 0) {
       // Emit the correct log message based on which detector(s) fired
       if (invalidChoiceQNums.length > 0) {
+        const sampleGarbled = invalidChoiceQNums.map(q => `${q}:'${answers[q]}'`).join(', ');
         console.log(
-          "[Parser] Detected garbled OCR tokens ('VE', 'AY'). Triggering Gemini Vision fallback..."
+          `[Parser] Detected garbled OCR tokens (${sampleGarbled}). Triggering Gemini Vision fallback...`
         );
       } else {
         console.log(
@@ -369,6 +370,7 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
         // Pass the original image so Gemini can read the bubble/handwriting
         // directly instead of relying on already-corrupted OCR text.
         if (invalidChoiceQNums.length > 0 && _imageBuffer) {
+          console.log('[Parser] Executing gemini-2.0-flash Vision fallback with image buffer...');
           const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
           const imagePart = {
             inlineData: {
@@ -384,6 +386,7 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
           result = await model.generateContent([visionPrompt, imagePart]);
         } else {
           // ── Text path: fall back to OCR text when no image is available ──
+          console.log('[Parser] Executing gemini-2.0-flash Text fallback with OCR text...');
           const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
           const textPrompt = basePrompt + '\n\nOCR TEXT:\n' + ocrText;
           result = await model.generateContent(textPrompt);
