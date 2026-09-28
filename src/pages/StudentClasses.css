@@ -452,6 +452,158 @@
   color: #4483f2;
 }
 
+/* ── Join Class button (student header) ─────────────────────────────────── */
+.join-code-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.join-code-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.4);
+}
+
+.join-code-btn:active {
+  transform: translateY(0);
+  opacity: 0.9;
+}
+
+/* ── Join with Code Modal ───────────────────────────────────────────────── */
+.join-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+  animation: createFadeIn 0.2s ease;
+}
+
+.join-modal-content {
+  background: #f8fafc;
+  border-radius: 18px;
+  width: 420px;
+  max-width: 94vw;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  animation: createSlideUp 0.3s ease;
+}
+
+.join-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.join-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.join-modal-title svg {
+  color: #10b981;
+}
+
+.join-modal-body {
+  padding: 20px 24px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.join-modal-hint {
+  font-size: 0.88rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.join-code-input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 6px;
+  text-align: center;
+  color: #1e293b;
+  background: white;
+  text-transform: uppercase;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.join-code-input:focus {
+  outline: none;
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+}
+
+.join-code-input::placeholder {
+  color: #cbd5e1;
+  letter-spacing: 4px;
+  font-size: 1.1rem;
+}
+
+.join-error-msg {
+  font-size: 0.83rem;
+  color: #ef4444;
+  margin: 0;
+  font-weight: 600;
+}
+
+.join-modal-footer {
+  padding: 16px 24px 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.join-submit-btn {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border: none;
+  padding: 13px 52px;
+  border-radius: 30px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
+}
+
+.join-submit-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(16, 185, 129, 0.5);
+}
+
+.join-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* Mobile */
 @media (max-width: 768px) {
   .invites-grid {
@@ -465,5 +617,15 @@
   .accept-btn,
   .decline-btn {
     width: 100%;
+  }
+
+  .join-code-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .join-modal-content {
+    width: 95%;
+    max-width: 95vw;
   }
 }

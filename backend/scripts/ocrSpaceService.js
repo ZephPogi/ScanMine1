@@ -64,6 +64,29 @@ class OCRSpaceService {
       console.log('Sending image to Hugging Face YOLOv8+TrOCR Hybrid Service...');
 
       // ── Hugging Face YOLOv8 + TrOCR Hybrid Service ────────────────────────
+      // Sanitize the env var: strip any accidental 'HF_SPACE_URL=' prefix or
+      // surrounding quotes that some deployment tools inject.
+      let targetUrl = (process.env.HF_SPACE_URL || '')
+        .replace(/^HF_SPACE_URL=/, '')
+        .replace(/^['"]|['"]$/g, '')
+        .trim();
+
+      // Idempotent /extract-text suffix: append only when not already present.
+      if (targetUrl && !targetUrl.endsWith('/extract-text')) {
+        targetUrl = `${targetUrl.replace(/\/+$/, '')}/extract-text`;
+      }
+
+      // Guard: stop early if the URL is missing or still a placeholder.
+      if (!targetUrl || !targetUrl.startsWith('http')) {
+        console.error(
+          '[HF Service] HF_SPACE_URL is not configured or is invalid. ' +
+          'Set a valid URL in your .env to enable the Hugging Face OCR service.'
+        );
+        throw new Error(
+          'HF_SPACE_URL is not configured. Please set a valid Hugging Face Space URL in your environment variables.'
+        );
+      }
+
       // Build a fresh FormData with the image buffer keyed as 'file'.
       // FastAPI's UploadFile parameter expects exactly this field name.
       const hfFormData = new FormData();
@@ -72,16 +95,51 @@ class OCRSpaceService {
         contentType: isPdfBuffer ? 'application/pdf' : 'image/jpeg',
       });
 
-      const hfResponse = await axios.post(
-        'https://YOUR-HF-SPACE-URL/extract-text',
-        hfFormData,
-        {
-          headers: { ...hfFormData.getHeaders() },
-          // 120 s gives Hugging Face Spaces time to wake up from a cold start
-          // without hanging the Express process indefinitely.
-          timeout: 120000,
+      console.log('[HF Service] Target URL:', targetUrl);
+
+      let hfResponse;
+      try {
+        hfResponse = await axios.post(
+          targetUrl,
+          hfFormData,
+          {
+            headers: { ...hfFormData.getHeaders() },
+            // ── Strict 15-second timeout ──────────────────────────────────
+            // Vercel serverless functions are hard-killed after 45 seconds.
+            // Hugging Face Spaces can take 30–60 s to cold-start, so a 120 s
+            // timeout would always let Vercel kill the function first.
+            // 15 s gives HF a reasonable window for a warm response while
+            // leaving 30+ seconds for Gemini fallback + DB writes.
+            // On timeout the catch block below re-throws with code HF_TIMEOUT
+            // so ocrRouter's Tesseract fallback is triggered correctly.
+            timeout: 15000,
+          }
+        );
+      } catch (hfErr) {
+        const isTimeout =
+          hfErr.code === 'ECONNABORTED' ||
+          (hfErr.message && hfErr.message.toLowerCase().includes('timeout'));
+
+        if (isTimeout) {
+          console.warn(
+            '[HF Service] Request timed out after 15 s — the Space may be cold-starting. ' +
+            'Falling through to Tesseract/Gemini fallback.'
+          );
+          const timeoutErr = new Error(
+            'Hugging Face OCR service timed out (15 s). Falling back to local OCR.'
+          );
+          timeoutErr.code = 'HF_TIMEOUT';
+          throw timeoutErr;
         }
-      );
+
+        // Non-timeout HF errors: log and re-throw for the outer catch below.
+        if (hfErr.response) {
+          console.error('[HF Service] API error response:', JSON.stringify(hfErr.response.data, null, 2));
+        } else {
+          console.error('[HF Service] Network error:', hfErr.message);
+        }
+        throw new Error('HF OCR processing failed: ' + hfErr.message);
+      }
 
       const extractedText = hfResponse.data.text || '';
       console.log('Hugging Face AI Output:\n', extractedText);
@@ -92,14 +150,11 @@ class OCRSpaceService {
     } catch (error) {
       // Distinguish timeout/network issues from actual API errors so callers
       // can surface a meaningful message instead of crashing the server.
-      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-        console.error(
-          '[HF Service] Request timed out — the Space may still be waking up. ' +
-          'Please retry in a few seconds.'
+      if (error.code === 'HF_TIMEOUT' || error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'))) {
+        console.warn(
+          '[HF Service] Propagating timeout to caller — OCR router will use Tesseract fallback.'
         );
-        throw new Error(
-          'The Hugging Face OCR service timed out. It may be waking up from a cold start — please try again shortly.'
-        );
+        throw error;
       }
 
       if (error.response) {

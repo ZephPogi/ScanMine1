@@ -1,7 +1,9 @@
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const db = require('../db');
 const OCRRouter = require('./ocrRouter');
-const nlp = require('compromise');
+const { GoogleGenAI } = require('@google/genai');
 
 /**
  * Extracts text from a file buffer (PDF or plain text)
@@ -9,10 +11,9 @@ const nlp = require('compromise');
  */
 async function extractText(filePath, mimetype, fileBuffer = null) {
   if (mimetype === 'application/pdf') {
+    // ── Primary path: OCR Router (Tesseract + OCR.space) ──────────────────
     try {
       const ocrRouter = new OCRRouter();
-
-      // Use OCR router for PDF processing (Tesseract with LSTM)
       const text = await ocrRouter.processAnswerKey(filePath, mimetype, fileBuffer);
 
       console.log('--- PDF EXTRACTED TEXT (Dual-OCR) ---');
@@ -22,21 +23,70 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
       return text || "PDF Content (Empty or unreadable)";
     } catch (e) {
       console.error("PDF Extraction failed:", e.message);
-      // Fallback to pdf-parse if OCR router fails
-      try {
-        const { PDFParse } = require('pdf-parse');
-        const dataBuffer = fileBuffer || fs.readFileSync(filePath);
-        const parser = new PDFParse({ data: dataBuffer });
-        const result = await parser.getText();
-        await parser.destroy();
-        return result.text || "PDF Content (Empty or unreadable)";
-      } catch (fallbackError) {
-        console.error("Fallback PDF extraction also failed:", fallbackError.message);
-        return "PDF Content (Extraction failed. Please enter the answer key manually.)";
+    }
+
+    // ── HF fallback guard (prevent ENOTFOUND when URL is unset/placeholder) ──
+    const hfUrl = process.env.HF_SPACE_URL;
+    const hfReady = hfUrl && !hfUrl.includes('your-hf-space-url');
+    if (!hfReady) {
+      console.warn('[extractText] HF_SPACE_URL is not configured or is a placeholder — skipping HF OCR fallback to prevent ENOTFOUND errors.');
+    }
+
+    // ── Secondary path: pdf-parse → scanned-PDF OCR via temp file ─────────
+    // pdf-parse exports a plain async function — never instantiate it as a class.
+    // If it returns empty text (scanned/image PDF), fall through to temp-file OCR.
+    let tempPath = null;
+    try {
+      const pdfParse = require('pdf-parse');
+      // Guard: filePath may itself be a Buffer (Supabase/Multer memory storage).
+      // Never pass a Buffer object to fs.readFileSync — use it directly instead.
+      const dataBuffer = fileBuffer
+        || (Buffer.isBuffer(filePath) ? filePath : fs.readFileSync(filePath));
+      const data = await pdfParse(dataBuffer);
+      const extractedText = (data.text || '').trim();
+
+      if (extractedText.length > 0) {
+        // Digital PDF — text layer found, return immediately.
+        return extractedText;
+      }
+
+      // Empty text = scanned/image PDF. Attempt OCR via a real temp file.
+      // NEVER pass a raw Buffer as a file path to fs.* or OCR functions.
+      console.warn('[extractText] pdf-parse returned empty text (scanned PDF). Attempting temp-file OCR fallback.');
+
+      const bufferToWrite = fileBuffer || dataBuffer;
+      if (!Buffer.isBuffer(bufferToWrite)) {
+        throw new Error('No valid buffer available for scanned-PDF OCR fallback.');
+      }
+
+      // Write the buffer to a real temporary file.
+      tempPath = path.join(os.tmpdir(), `scanmine_ocr_${Date.now()}.pdf`);
+      fs.writeFileSync(tempPath, bufferToWrite);
+
+      // Run OCR on the real file path (not a Buffer).
+      const ocrRouter = new OCRRouter();
+      const ocrText = await ocrRouter.processAnswerKey(tempPath, mimetype, null);
+      const finalText = (ocrText || '').trim();
+
+      if (finalText.length === 0) {
+        console.warn('[extractText] Scanned PDF OCR fallback also returned empty text.');
+        return "PDF Content (Scanned image could not be read. Please enter the answer key manually.)";
+      }
+
+      return finalText;
+
+    } catch (fallbackError) {
+      console.error("Fallback PDF extraction also failed:", fallbackError.message);
+      return "PDF Content (Extraction failed. Please enter the answer key manually.)";
+    } finally {
+      // Always clean up the temp file, even if OCR or downstream code throws.
+      if (tempPath) {
+        try { fs.unlinkSync(tempPath); } catch (_) { /* ignore cleanup errors */ }
       }
     }
+
   } else {
-    // Fallback to plain text - if buffer provided, convert to string
+    // Plain text — if buffer provided, convert directly; otherwise read from disk.
     if (fileBuffer) {
       return fileBuffer.toString('utf8');
     }
@@ -45,61 +95,122 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
 }
 
 /**
- * Applies compromise NLP to generate fill-in-the-blank questions
+ * Returns an initialised GoogleGenAI client.
+ * Throws a descriptive error early if the API key is absent.
+ */
+function getGenAIClient() {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error(
+      'GEMINI_API_KEY is not set. Add it to your .env file before using AI question generation.'
+    );
+  }
+  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+}
+
+// JSON schema that Gemini must conform to for each question
+const QUESTION_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      question:      { type: 'string' },
+      options:       { type: 'array', items: { type: 'string' } },
+      correctAnswer: { type: 'string' },
+      type:          { type: 'string', enum: ['multiple_choice', 'true_false', 'identification'] }
+    },
+    required: ['question', 'correctAnswer', 'type']
+  }
+};
+
+/**
+ * Uses Google Gemini (gemini-3.6-flash) to generate quiz questions from text.
+ *
+ * Signature is identical to the previous compromise-based implementation so
+ * that the calling route in api/index.js requires NO changes.
+ *
+ * @param {string} text              - Source passage to generate questions from
+ * @param {string|number|null} examId - DB exam ID (used to persist questions)
+ * @param {number} numberOfQuestions  - How many questions to request
+ * @returns {Promise<Array>}          - Array of question objects
  */
 async function generateQuizFromText(text, examId, numberOfQuestions = 10) {
+  // ── Guard: API key must be present ──────────────────────────────────────
+  if (!process.env.GEMINI_API_KEY) {
+    console.error('[generateQuizFromText] GEMINI_API_KEY is missing. Returning empty question list.');
+    return [];
+  }
+
   try {
-    const doc = nlp(text);
-    const sentences = doc.sentences().out('array');
+    const genai = getGenAIClient();
 
-    const generatedQuestions = [];
+    const prompt = `You are an expert quiz maker.
 
-    for (const sentence of sentences) {
-      if (generatedQuestions.length >= numberOfQuestions) break;
+Analyze the following passage and generate exactly ${numberOfQuestions} quiz questions.
+Vary the question types: use a mix of multiple_choice, true_false, and identification questions.
 
-      const trimmedSentence = sentence.trim();
-      const wordCount = trimmedSentence.split(/\s+/).length;
+Rules:
+- For multiple_choice: provide exactly 4 options (A, B, C, D) and set correctAnswer to the correct option text.
+- For true_false: set options to ["True", "False"] and correctAnswer to either "True" or "False".
+- For identification: leave options as an empty array [] and set correctAnswer to the exact answer word or phrase.
+- All questions must be directly answerable from the passage.
+- Return ONLY a JSON array — no markdown, no extra text.
 
-      // Skip sentences that are too short or too long
-      if (wordCount < 5 || wordCount > 20) continue;
+Passage:
+"""
+${text.slice(0, 12000)}
+"""
 
-      // Find the most prominent noun or entity
-      const sentenceDoc = nlp(trimmedSentence);
-      const nouns = sentenceDoc.nouns().out('array');
-      const topics = sentenceDoc.topics().out('array');
+JSON output:`;
 
-      // Use topics first, then fall back to nouns
-      const candidates = [...topics, ...nouns];
-
-      if (candidates.length === 0) continue;
-
-      // Take the first major noun/entity as the answer
-      const answerText = candidates[0].trim();
-
-      // Replace the answer with "__________" to create the question
-      const questionText = trimmedSentence.replace(answerText, '__________');
-
-      const question = {
-        type: 'identification',
-        answer_text: answerText,
-        question_text: questionText
-      };
-
-      // Save to DB if examId is provided
-      if (examId) {
-        await db.query(
-          'INSERT INTO Generated_Questions (exam_id, question_text, correct_answer) VALUES ($1, $2, $3)',
-          [examId, questionText, answerText]
-        );
+    const response = await genai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema:   QUESTION_SCHEMA,
+        temperature:      0.4,
       }
+    });
 
-      generatedQuestions.push(question);
+    // ── Parse response ───────────────────────────────────────────────────
+    const rawText = response.text?.trim() ?? '';
+    let parsed;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch (parseErr) {
+      console.error('[generateQuizFromText] Failed to parse Gemini JSON response:', rawText.slice(0, 500));
+      throw new Error('Gemini returned malformed JSON.');
     }
 
-    return generatedQuestions;
+    if (!Array.isArray(parsed)) {
+      throw new Error('Gemini response is not a JSON array.');
+    }
+
+    // Clamp to requested number
+    const questions = parsed.slice(0, numberOfQuestions);
+
+    // ── Persist to DB if examId is provided ──────────────────────────────
+    for (const q of questions) {
+      if (examId) {
+        try {
+          await db.query(
+            'INSERT INTO Generated_Questions (exam_id, question_text, correct_answer) VALUES ($1, $2, $3)',
+            [examId, q.question, q.correctAnswer]
+          );
+        } catch (dbErr) {
+          // Non-fatal: log and continue
+          console.warn('[generateQuizFromText] DB insert skipped for question:', q.question, dbErr.message);
+        }
+      }
+    }
+
+    console.log(`[generateQuizFromText] Generated ${questions.length} questions via Gemini AI.`);
+    return questions;
+
   } catch (error) {
-    console.error('Error generating questions:', error);
-    throw error;
+    console.error('[generateQuizFromText] AI question generation failed:', error.message);
+    // Return empty array so the route can still respond (exam is already saved)
+    return [];
   }
 }
 

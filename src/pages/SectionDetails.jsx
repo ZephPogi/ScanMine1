@@ -70,6 +70,9 @@ const SectionDetails = ({ section, onBack }) => {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentSubmissions, setStudentSubmissions] = useState([]);
 
+  // ── Selected exam highlight (tap/active state) ─────────────────────────
+  const [selectedExamId, setSelectedExamId] = useState(null);
+
   // ── Invite search state ────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -615,7 +618,14 @@ const SectionDetails = ({ section, onBack }) => {
               <div className="exam-list">
                 {exams && exams.length > 0 ? (
                   exams.map((exam, idx) => exam ? (
-                    <div key={exam.id || `exam-${idx}`} className="exam-card" onClick={() => handleViewExam(exam)}>
+                    <div
+                      key={exam.id || `exam-${idx}`}
+                      className={`exam-card${selectedExamId === exam.id ? ' active' : ''}`}
+                      onClick={() => {
+                        setSelectedExamId(exam.id);
+                        handleViewExam(exam);
+                      }}
+                    >
                       <div className="exam-icon">📄</div>
                       <div className="exam-info">
                         <h4>{exam.title || 'Untitled Exam'}</h4>

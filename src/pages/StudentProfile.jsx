@@ -19,6 +19,7 @@ const StudentProfile = () => {
   // ── Profile data state ────────────────────────────────────────────────────
   const [profile, setProfile] = useState({
     firstName: '',
+    middleInitial: '',
     lastName: '',
     email: '',
     role: '',
@@ -28,7 +29,7 @@ const StudentProfile = () => {
 
   // ── Edit mode state ───────────────────────────────────────────────────────
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ firstName: '', lastName: '' });
+  const [editForm, setEditForm] = useState({ firstName: '', middleInitial: '', lastName: '' });
   const [saving, setSaving] = useState(false);
 
   // ── Password modal state ──────────────────────────────────────────────────
@@ -55,11 +56,12 @@ const StudentProfile = () => {
 
       if (profileRes.ok) {
         const data = await profileRes.json();
-        const nameParts = (data.name || '').trim().split(' ');
-        const firstName = nameParts[0] || '';
-        const lastName = nameParts.slice(1).join(' ') || '';
-        setProfile({ firstName, lastName, email: data.email, role: data.role });
-        setEditForm({ firstName, lastName });
+        // Prefer explicit columns; fall back to splitting the composite name
+        const fn = data.first_name || (data.name || '').trim().split(' ')[0] || '';
+        const mi = data.middle_initial || '';
+        const ln = data.last_name || (data.name || '').trim().split(' ').slice(1).join(' ') || '';
+        setProfile({ firstName: fn, middleInitial: mi, lastName: ln, email: data.email, role: data.role });
+        setEditForm({ firstName: fn, middleInitial: mi, lastName: ln });
       }
 
       if (dashRes.ok) {
@@ -81,6 +83,9 @@ const StudentProfile = () => {
   // ── Computed avatar initials ──────────────────────────────────────────────
   const initials = `${profile.firstName?.[0] || ''}${profile.lastName?.[0] || ''}`.toUpperCase() || 'S';
 
+  // ── Computed display name ─────────────────────────────────────────────────
+  const displayName = [profile.firstName, profile.middleInitial ? `${profile.middleInitial.toUpperCase()}.` : '', profile.lastName].filter(Boolean).join(' ');
+
   // ── Save name ─────────────────────────────────────────────────────────────
   const handleSaveName = async () => {
     if (!editForm.firstName.trim() || !editForm.lastName.trim()) {
@@ -93,9 +98,10 @@ const StudentProfile = () => {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: storedUser.id,
-          firstName: editForm.firstName.trim(),
-          lastName: editForm.lastName.trim(),
+          userId:        storedUser.id,
+          firstName:     editForm.firstName.trim(),
+          middleInitial: editForm.middleInitial.trim().toUpperCase().slice(0, 1),
+          lastName:      editForm.lastName.trim(),
         }),
       });
       const data = await res.json();
@@ -104,7 +110,7 @@ const StudentProfile = () => {
       const updated = { ...storedUser, name: data.user.name };
       localStorage.setItem('user', JSON.stringify(updated));
 
-      setProfile(prev => ({ ...prev, firstName: editForm.firstName.trim(), lastName: editForm.lastName.trim() }));
+      setProfile(prev => ({ ...prev, firstName: editForm.firstName.trim(), middleInitial: editForm.middleInitial.trim().toUpperCase().slice(0,1), lastName: editForm.lastName.trim() }));
       setIsEditing(false);
       showToast('Name updated successfully!', 'success');
     } catch (err) {
@@ -115,7 +121,7 @@ const StudentProfile = () => {
   };
 
   const handleCancelEdit = () => {
-    setEditForm({ firstName: profile.firstName, lastName: profile.lastName });
+    setEditForm({ firstName: profile.firstName, middleInitial: profile.middleInitial, lastName: profile.lastName });
     setIsEditing(false);
   };
 
@@ -181,7 +187,7 @@ const StudentProfile = () => {
               <div className="avatar-section">
                 <div className="profile-avatar">{initials}</div>
                 <div className="profile-name-display">
-                  <strong>{profile.firstName} {profile.lastName}</strong>
+                  <strong>{displayName}</strong>
                   <span className="profile-role-badge">{profile.role}</span>
                 </div>
               </div>
@@ -210,7 +216,7 @@ const StudentProfile = () => {
                 <h3>Personal Information</h3>
               </div>
 
-              {/* Editable: First / Last Name */}
+              {/* Editable: First / Middle Initial / Last Name */}
               <div className="form-group-row">
                 <div className="form-item">
                   <label>First Name</label>
@@ -222,6 +228,20 @@ const StudentProfile = () => {
                     className={isEditing ? 'input-active' : 'input-readonly'}
                     onChange={e => setEditForm(prev => ({ ...prev, firstName: e.target.value }))}
                     placeholder="First Name"
+                  />
+                </div>
+                <div className="form-item" style={{ maxWidth: '90px' }}>
+                  <label>M.I.</label>
+                  <input
+                    type="text"
+                    value={isEditing ? editForm.middleInitial : profile.middleInitial}
+                    readOnly={!isEditing}
+                    disabled={!isEditing}
+                    className={isEditing ? 'input-active' : 'input-readonly'}
+                    onChange={e => setEditForm(prev => ({ ...prev, middleInitial: e.target.value.toUpperCase().slice(0,1) }))}
+                    placeholder="Z"
+                    maxLength={1}
+                    style={{ textAlign: 'center', textTransform: 'uppercase' }}
                   />
                 </div>
                 <div className="form-item">

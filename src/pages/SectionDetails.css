@@ -2,12 +2,17 @@
     margin-left: 260px; /* Adjust based on Sidebar width */
     padding: 30px;
     background-color: #f8fafc;
-    min-height: 100vh;
+    /* ── Layout: fixed-height flex column for inner scroll ── */
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
     flex: 1;
 }
 
 .minimal-header {
     margin-bottom: 30px;
+    flex-shrink: 0; /* stays fixed while grid scrolls */
 }
 
 .back-btn {
@@ -37,7 +42,12 @@
     display: grid;
     grid-template-columns: 2fr 1fr;
     gap: 25px;
-    min-width: 0;
+    /* ── Scrollable flex child ── */
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+    padding-right: 8px; /* prevent scrollbar overlap */
 }
 
 /* Roster Table Styles */
@@ -1058,21 +1068,47 @@
     font-size: 0.9rem;
 }
 
+/* ── Exam List scroll container ── */
+.exam-list {
+    max-height: 320px;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+    padding-right: 6px;
+}
+
 .exam-card {
     display: flex;
     align-items: center;
-    gap: 15px;
-    padding: 12px;
-    border-radius: 12px;
-    background: #f8fafc;
+    gap: 14px;
+    padding: 14px;
+    border-radius: 14px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
     cursor: pointer;
-    transition: 0.2s;
+    transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease, background 150ms ease;
     margin-bottom: 10px;
 }
 
 .exam-card:hover {
+    border-color: #6366f1;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+    background: #fafafe;
+    transform: none; /* remove old slide-in; use border highlight instead */
+}
+
+.exam-card:active {
+    transform: scale(0.98);
+    transition-duration: 100ms;
+}
+
+/* Selected / tapped exam highlight */
+.exam-card.active {
+    border-color: #6366f1;
     background: #eef2ff;
-    transform: translateX(5px);
+    outline: 2px solid #6366f1;
+    outline-offset: 1px;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
 
 .exam-icon {

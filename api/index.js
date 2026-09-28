@@ -28,8 +28,15 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// ── Idempotent migration: add 'status' column to Students if missing ──────
-(async () => {
+// ── Startup migrations (local dev only) ──────────────────────────────────
+// These idempotent ALTER TABLE statements run ONLY in local development.
+// On Vercel (process.env.VERCEL === '1') or any production environment they
+// are skipped entirely — each DB round-trip during a cold start adds latency
+// that compounds towards the 45-second serverless timeout.
+// To apply schema changes in production, run `node backend/run_migration.js`
+// or execute the SQL directly in the Supabase dashboard.
+async function runStartupMigrations() {
+  // 1. Add 'status' column to Students
   try {
     await db.query(`
       ALTER TABLE Students
@@ -39,12 +46,10 @@ app.use(express.json());
   } catch (err) {
     console.error('Migration warning:', err.message);
   }
-})();
 
-// ── Idempotent migration: add 'supabase_id' column to Users if missing ────
-// This UUID links the PostgreSQL profile row to the Supabase Auth user,
-// enabling password reset emails and Supabase session management.
-(async () => {
+  // 2. Add 'supabase_id' column to Users
+  // This UUID links the PostgreSQL profile row to the Supabase Auth user,
+  // enabling password reset emails and Supabase session management.
   try {
     await db.query(`
       ALTER TABLE Users
@@ -54,12 +59,10 @@ app.use(express.json());
   } catch (err) {
     console.error('Migration warning (supabase_id):', err.message);
   }
-})();
 
-// ── Idempotent migration: make password_hash nullable ─────────────────────
-// New users registered via Supabase Auth don't have a local password hash;
-// Supabase owns the credential. Existing users are unaffected.
-(async () => {
+  // 3. Make password_hash nullable
+  // New users registered via Supabase Auth don't have a local password hash;
+  // Supabase owns the credential. Existing users are unaffected.
   try {
     await db.query(`
       ALTER TABLE Users
@@ -70,10 +73,8 @@ app.use(express.json());
     // Postgres throws if the column is already nullable — that's fine.
     console.log('Migration note (password_hash):', err.message);
   }
-})();
 
-// ── Idempotent migration: add raw score columns to Student_Submissions ───
-(async () => {
+  // 4. Add raw score columns to Student_Submissions
   try {
     await db.query(`
       ALTER TABLE Student_Submissions 
@@ -84,7 +85,87 @@ app.use(express.json());
   } catch (err) {
     console.error('Migration warning (raw scores):', err.message);
   }
-})();
+
+  // 5a. Add class_code column to Classes (check information_schema first to
+  //     avoid a table lock if the column is already present)
+  try {
+    const { rows } = await db.query(`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'classes' AND column_name = 'class_code'
+    `);
+    if (rows.length === 0) {
+      await db.query(`ALTER TABLE Classes ADD COLUMN class_code VARCHAR(10) UNIQUE`);
+      console.log('Migration OK: Classes.class_code column added');
+    } else {
+      console.log('Migration OK: Classes.class_code already exists — skipping ALTER');
+    }
+  } catch (err) {
+    console.error('Migration warning (class_code add):', err.message);
+  }
+
+  // 5b. Backfill class_code for existing rows (WHERE guard makes this a no-op
+  //     once all rows have a code)
+  try {
+    await db.query(`
+      UPDATE Classes
+      SET class_code = UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 6))
+      WHERE class_code IS NULL
+    `);
+    console.log('Migration OK: Classes.class_code backfill complete');
+  } catch (err) {
+    console.error('Migration warning (class_code backfill):', err.message);
+  }
+
+  // 5c. Enforce NOT NULL on class_code (only after backfill; checks
+  //     is_nullable so repeated runs don't re-acquire the lock)
+  try {
+    const { rows } = await db.query(`
+      SELECT is_nullable FROM information_schema.columns
+      WHERE table_name = 'classes' AND column_name = 'class_code'
+    `);
+    if (rows.length > 0 && rows[0].is_nullable === 'YES') {
+      await db.query(`ALTER TABLE Classes ALTER COLUMN class_code SET NOT NULL`);
+      console.log('Migration OK: Classes.class_code set NOT NULL');
+    } else {
+      console.log('Migration OK: Classes.class_code NOT NULL already enforced — skipping');
+    }
+  } catch (err) {
+    console.error('Migration warning (class_code not null):', err.message);
+  }
+
+  // 6. Add first_name, middle_initial, last_name columns to Users
+  try {
+    await db.query(`
+      ALTER TABLE Users
+        ADD COLUMN IF NOT EXISTS first_name    VARCHAR(100),
+        ADD COLUMN IF NOT EXISTS middle_initial CHAR(1),
+        ADD COLUMN IF NOT EXISTS last_name     VARCHAR(100)
+    `);
+    console.log('Migration OK: Users first_name / middle_initial / last_name columns ready');
+  } catch (err) {
+    console.error('Migration warning (name columns):', err.message);
+  }
+
+  // 6b. Backfill first_name / last_name from composite name column
+  try {
+    await db.query(`
+      UPDATE Users
+      SET
+        first_name = TRIM(SPLIT_PART(name, ' ', 1)),
+        last_name  = TRIM(SUBSTRING(name FROM POSITION(' ' IN name) + 1))
+      WHERE first_name IS NULL AND name IS NOT NULL AND POSITION(' ' IN name) > 0
+    `);
+    console.log('Migration OK: Users first_name/last_name backfill complete');
+  } catch (err) {
+    console.error('Migration warning (name backfill):', err.message);
+  }
+}
+
+// Guard: NEVER run migrations during a Vercel serverless cold start.
+// process.env.VERCEL is set to '1' automatically by the Vercel runtime.
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  runStartupMigrations();
+}
 
 
 const storage = multer.memoryStorage();
@@ -103,9 +184,14 @@ const upload = multer({
 // --- AUTHENTICATION ---
 app.post('/api/register', async (req, res) => {
   try {
-    const { supabaseId, name, email, role } = req.body;
+    const { supabaseId, name, firstName, middleInitial, lastName, email, role } = req.body;
 
-    if (!name || !email || !role) {
+    // Build the composite full_name (supports both old and new callers)
+    const computedFullName = firstName
+      ? [firstName.trim(), middleInitial ? `${middleInitial.trim().toUpperCase()}.` : '', lastName ? lastName.trim() : ''].filter(Boolean).join(' ')
+      : name;
+
+    if (!computedFullName || !email || !role) {
       return res.status(400).json({ error: 'Missing required fields: name, email, role' });
     }
 
@@ -113,28 +199,18 @@ app.post('/api/register', async (req, res) => {
 
     if (supabaseId) {
       // ── New flow: Supabase Auth manages the password ──────────────────────
-      // We insert the profile using the Supabase UUID as the primary key so
-      // both systems reference the same user ID. The id column must accept
-      // UUIDs — if it's currently SERIAL/integer, see note below.
-      //
-      // NOTE: If your Users table uses a SERIAL integer id, you may need to
-      // run this migration in Supabase SQL editor first:
-      //   ALTER TABLE Users ADD COLUMN IF NOT EXISTS supabase_id UUID UNIQUE;
-      //   UPDATE Users SET supabase_id = gen_random_uuid() WHERE supabase_id IS NULL;
-      //
-      // For new projects, change the id column to UUID:
-      //   ALTER TABLE Users ALTER COLUMN id TYPE UUID USING id::text::uuid;
-      //
-      // For now, we store supabaseId in a separate column if the id is SERIAL:
       result = await db.query(
-        `INSERT INTO Users (name, email, role, supabase_id)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO Users (name, first_name, middle_initial, last_name, email, role, supabase_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (email) DO UPDATE
-           SET supabase_id = EXCLUDED.supabase_id,
-               name = EXCLUDED.name,
-               role = EXCLUDED.role
-         RETURNING id, name, email, role, supabase_id`,
-        [name, email, role, supabaseId]
+           SET supabase_id    = EXCLUDED.supabase_id,
+               name           = EXCLUDED.name,
+               first_name     = EXCLUDED.first_name,
+               middle_initial = EXCLUDED.middle_initial,
+               last_name      = EXCLUDED.last_name,
+               role           = EXCLUDED.role
+         RETURNING id, name, first_name, middle_initial, last_name, email, role, supabase_id`,
+        [computedFullName, firstName ? firstName.trim() : null, middleInitial ? middleInitial.trim().toUpperCase() : null, lastName ? lastName.trim() : null, email, role, supabaseId]
       );
     } else {
       // ── Legacy fallback: no Supabase ID provided ──────────────────────────
@@ -142,8 +218,10 @@ app.post('/api/register', async (req, res) => {
       if (!password) return res.status(400).json({ error: 'Missing password for legacy registration' });
       const hashedPassword = await bcrypt.hash(password, 10);
       result = await db.query(
-        'INSERT INTO Users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
-        [name, email, hashedPassword, role]
+        `INSERT INTO Users (name, first_name, middle_initial, last_name, email, password_hash, role)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, name, first_name, middle_initial, last_name, email, role`,
+        [computedFullName, firstName ? firstName.trim() : null, middleInitial ? middleInitial.trim().toUpperCase() : null, lastName ? lastName.trim() : null, email, hashedPassword, role]
       );
     }
 
@@ -173,7 +251,7 @@ app.post('/api/login', async (req, res) => {
 
     if (result.rows.length === 0) return res.status(401).json({ error: 'User not found' });
     
-    const user = result.rows[0];
+    let user = result.rows[0];
     
     // If authenticated via Supabase on the frontend, skip local password check
     if (!isSupabaseAuth) {
@@ -183,8 +261,28 @@ app.post('/api/login', async (req, res) => {
       const match = await bcrypt.compare(password, user.password_hash);
       if (!match) return res.status(401).json({ error: 'Invalid password' });
     }
+
+    // If first_name or last_name is missing in DB but provided in request (e.g. immediately after signup)
+    const { firstName, middleInitial, lastName } = req.body;
+    if ((!user.first_name || !user.last_name) && (firstName || lastName)) {
+      try {
+        const fn = firstName ? firstName.trim() : user.first_name;
+        const mi = middleInitial ? middleInitial.trim().toUpperCase().slice(0, 1) : user.middle_initial;
+        const ln = lastName ? lastName.trim() : user.last_name;
+        const compName = [fn, mi ? `${mi}.` : '', ln].filter(Boolean).join(' ') || user.name;
+        const updated = await db.query(
+          `UPDATE Users SET first_name = $1, middle_initial = $2, last_name = $3, name = $4 WHERE id = $5 RETURNING *`,
+          [fn, mi, ln, compName, user.id]
+        );
+        if (updated.rows.length > 0) {
+          user = updated.rows[0];
+        }
+      } catch (patchErr) {
+        console.warn('Non-fatal: could not backfill user name fields during login:', patchErr.message);
+      }
+    }
     
-    res.json({ user: { id: user.id, name: user.name, role: user.role, email: user.email, supabase_id: user.supabase_id } });
+    res.json({ user: { id: user.id, name: user.name, first_name: user.first_name, middle_initial: user.middle_initial, last_name: user.last_name, role: user.role, email: user.email, supabase_id: user.supabase_id } });
   } catch (error) {
     console.error('LOGIN ERROR:', error);
     res.status(500).json({ error: 'Server error during login' });
@@ -192,6 +290,24 @@ app.post('/api/login', async (req, res) => {
 });
 
 // --- CLASSES & STUDENTS ---
+
+// ── Class code generator ──────────────────────────────────────────────────
+// Generates a unique 6-character alphanumeric code (uppercase).
+// Retries up to 10 times to avoid (extremely rare) collisions.
+const CLASS_CODE_CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+async function generateUniqueClassCode() {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const code = Array.from({ length: 6 }, () =>
+      CLASS_CODE_CHARSET[Math.floor(Math.random() * CLASS_CODE_CHARSET.length)]
+    ).join('');
+    const { rows } = await db.query(
+      'SELECT 1 FROM Classes WHERE class_code = $1', [code]
+    );
+    if (rows.length === 0) return code;
+  }
+  throw new Error('Could not generate a unique class code after 10 attempts');
+}
+
 app.get('/api/classes', async (req, res) => {
   try {
     const { teacherId } = req.query;
@@ -207,14 +323,67 @@ app.get('/api/classes', async (req, res) => {
 app.post('/api/classes', async (req, res) => {
   try {
     const { teacherId, name, subject } = req.body;
+    const classCode = await generateUniqueClassCode();
     const result = await db.query(
-      'INSERT INTO Classes (teacher_id, name, subject) VALUES ($1, $2, $3) RETURNING *',
-      [teacherId, name, subject]
+      'INSERT INTO Classes (teacher_id, name, subject, class_code) VALUES ($1, $2, $3, $4) RETURNING *',
+      [teacherId, name, subject, classCode]
     );
     res.json(result.rows[0]);
   } catch (error) {
     console.error('CREATE CLASS ERROR:', error);
     res.status(500).json({ error: 'Failed to create class' });
+  }
+});
+
+// POST /api/classes/join  { code, userId }
+// Students join a class using a 6-character code.
+// Placed BEFORE DELETE /api/classes/:id so Express doesn't match 'join' as :id.
+app.post('/api/classes/join', async (req, res) => {
+  try {
+    const { code, userId } = req.body;
+    if (!code || !userId) return res.status(400).json({ error: 'Missing code or userId' });
+
+    const codeUpper = code.trim().toUpperCase();
+
+    // 1. Resolve the class by code
+    const classRes = await db.query(
+      'SELECT id, name, subject FROM Classes WHERE class_code = $1', [codeUpper]
+    );
+    if (classRes.rows.length === 0) {
+      return res.status(404).json({ error: 'No class found with that code. Please check and try again.' });
+    }
+    const cls = classRes.rows[0];
+
+    // 2. Check for an existing enrollment record (graceful duplicate handling)
+    const existing = await db.query(
+      'SELECT status FROM Students WHERE class_id = $1 AND user_id = $2',
+      [cls.id, userId]
+    );
+    if (existing.rows.length > 0) {
+      const status = existing.rows[0].status;
+      if (status === 'enrolled') {
+        return res.status(409).json({ error: 'You are already enrolled in this class.' });
+      }
+      // Pending invite exists — upgrade to enrolled immediately
+      await db.query(
+        "UPDATE Students SET status = 'enrolled' WHERE class_id = $1 AND user_id = $2",
+        [cls.id, userId]
+      );
+      return res.json({ message: 'Enrollment confirmed!', class: cls });
+    }
+
+    // 3. Fresh enrollment — insert as enrolled directly
+    await db.query(
+      "INSERT INTO Students (class_id, user_id, status) VALUES ($1, $2, 'enrolled')",
+      [cls.id, userId]
+    );
+    res.json({ message: `Successfully joined ${cls.name}!`, class: cls });
+  } catch (error) {
+    console.error('JOIN CLASS ERROR:', error);
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'You are already enrolled in this class.' });
+    }
+    res.status(500).json({ error: 'Failed to join class' });
   }
 });
 
@@ -874,7 +1043,7 @@ app.get('/api/user/profile', async (req, res) => {
       return res.status(400).json({ error: 'Missing userId' });
     }
     const result = await db.query(
-      'SELECT id, name, email, role FROM Users WHERE id = $1',
+      'SELECT id, name, first_name, middle_initial, last_name, email, role FROM Users WHERE id = $1',
       [userId]
     );
     if (result.rows.length === 0) {
@@ -890,14 +1059,18 @@ app.get('/api/user/profile', async (req, res) => {
 // PUT /api/user/update-name
 app.put('/api/user/update-name', async (req, res) => {
   try {
-    const { userId, firstName, lastName } = req.body;
+    const { userId, firstName, middleInitial, lastName } = req.body;
     if (!userId || !firstName || !lastName) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-    const newName = `${firstName.trim()} ${lastName.trim()}`;
+    const mi = (middleInitial || '').trim().toUpperCase().slice(0, 1);
+    const newName = [firstName.trim(), mi ? `${mi}.` : '', lastName.trim()].filter(Boolean).join(' ');
     const result = await db.query(
-      'UPDATE Users SET name = $1 WHERE id = $2 RETURNING id, name, email, role',
-      [newName, userId]
+      `UPDATE Users
+       SET name = $1, first_name = $2, middle_initial = $3, last_name = $4
+       WHERE id = $5
+       RETURNING id, name, first_name, middle_initial, last_name, email, role`,
+      [newName, firstName.trim(), mi || null, lastName.trim(), userId]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });

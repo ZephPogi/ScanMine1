@@ -11,8 +11,7 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const [showPrivacy, setShowPrivacy] = useState(false);
-  const [showTerms, setShowTerms] = useState(false);
+  const [showLegal, setShowLegal] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -98,6 +97,17 @@ const Login = () => {
       {/* RIGHT SIDE: Login Form */}
       <div className="login-right">
         <div className="form-wrapper">
+          {/* Logo */}
+          <div className="form-logo">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <path d="M7 8h10M7 12h6M7 16h8"/>
+              <line x1="16" y1="14" x2="20" y2="18"/>
+              <circle cx="18" cy="16" r="2"/>
+            </svg>
+            <span>ScanMine</span>
+          </div>
+
           <div className="form-header">
             <h2>Welcome Back</h2>
             <p>Please log in to your account.</p>
@@ -107,16 +117,7 @@ const Login = () => {
 
           <form onSubmit={handleLogin}>
             {error && (
-              <div style={{
-                color: '#dc2626',
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
-                borderRadius: '8px',
-                padding: '10px 14px',
-                marginBottom: '12px',
-                textAlign: 'center',
-                fontSize: '0.9rem',
-              }}>
+              <div className="error-banner">
                 {error}
               </div>
             )}
@@ -161,38 +162,26 @@ const Login = () => {
 
           <p className="login-legal">
             By logging in, you agree to our{' '}
-            <span onClick={() => setShowPrivacy(true)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>
-              Privacy Policy
-            </span>{' '}
-            &{' '}
-            <span onClick={() => setShowTerms(true)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>
-              Terms of Use
+            <span onClick={() => setShowLegal(true)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>
+              Privacy Policy & Terms of Use
             </span>.
           </p>
         </div>
       </div>
 
-      {showPrivacy && (
-        <div className="legal-modal-overlay" onClick={() => setShowPrivacy(false)}>
+      {showLegal && (
+        <div className="legal-modal-overlay" onClick={() => setShowLegal(false)}>
           <div className="legal-modal-content" onClick={e => e.stopPropagation()}>
-            <button className="close-btn" onClick={() => setShowPrivacy(false)}>×</button>
-            <h2>ScanMine Privacy Policy</h2>
-            <div className="modal-body">
+            <button className="close-btn" onClick={() => setShowLegal(false)}>×</button>
+            <h2>Privacy Policy & Terms of Use</h2>
+            <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+              <h3 style={{ marginTop: 0 }}>ScanMine Privacy Policy</h3>
               <p><strong>1. Data Collection:</strong> ScanMine (developed by JoJu Informatics) collects user information including names, faculty emails, and student rosters to facilitate automated grading. When using the scanner, images of physical answer sheets are processed using our Optical Recognition (OCR) engine.</p>
               <p><strong>2. Data Usage:</strong> Extracted data is strictly used to evaluate student performance, generate quizzes via our rule-based algorithm, and maintain class records.</p>
               <p><strong>3. Data Storage & Security:</strong> Authentication and database records are securely managed via Supabase and PostgreSQL. We do not sell your personal data or student records to third parties.</p>
               <p><strong>4. User Rights:</strong> Educators may delete exam records, OCR scans, and student data from their dashboards at any time.</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showTerms && (
-        <div className="legal-modal-overlay" onClick={() => setShowTerms(false)}>
-          <div className="legal-modal-content" onClick={e => e.stopPropagation()}>
-            <button className="close-btn" onClick={() => setShowTerms(false)}>×</button>
-            <h2>ScanMine Terms of Use</h2>
-            <div className="modal-body">
+              <hr style={{ margin: '20px 0', border: 'none', borderTop: '1px solid #ccc' }} />
+              <h3>ScanMine Terms of Use</h3>
               <p><strong>1. Acceptance of Terms:</strong> By registering as a Teacher or Student, you agree to these terms. ScanMine is an educational utility designed to assist with grading workflow.</p>
               <p><strong>2. System Accuracy:</strong> While our OCR and Computer Vision engines are highly optimized, physical document damage, poor lighting, or illegible handwriting may affect extraction accuracy. Educators are responsible for reviewing auto-graded results before finalizing them.</p>
               <p><strong>3. Intellectual Property:</strong> The ScanMine system architecture, UI/UX, and rule-based generation algorithms are the intellectual property of JoJu Informatics.</p>

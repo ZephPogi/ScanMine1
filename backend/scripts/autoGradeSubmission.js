@@ -3,6 +3,73 @@ const db = require('../db');
 const ScannerLogic = require('./scannerLogic');
 const OCRRouter = require('./ocrRouter');
 
+// Lazy-loaded only when Gemini fallback is triggered
+let _GoogleGenerativeAI = null;
+function getGoogleGenerativeAI() {
+  if (!_GoogleGenerativeAI) {
+    _GoogleGenerativeAI = require('@google/generative-ai').GoogleGenerativeAI;
+  }
+  return _GoogleGenerativeAI;
+}
+
+/**
+ * Determines whether a student answer looks garbled / unreadable
+ * relative to the expected answer format from the answer key.
+ *
+ * @param {string} studentAns   Raw answer extracted by OCR
+ * @param {string|number} expectedAns  Correct answer from the answer key
+ * @returns {boolean} true if the answer appears garbled and needs Gemini re-parse
+ */
+function isGarbledAnswer(studentAns, expectedAns) {
+  if (!studentAns || studentAns.trim() === '' || studentAns === '?') return true;
+
+  const student  = studentAns.trim().toUpperCase();
+  const expected = String(expectedAns).trim().toUpperCase();
+
+  // Case A: Multiple Choice — expected is a single letter A-E or digit 1-5
+  if (/^[A-E1-5]$/.test(expected)) {
+    // Any student answer that isn't also a single A-E/1-5 token is garbage
+    return !/^[A-E1-5]$/.test(student);
+  }
+
+  // Case B: True / False
+  if (['TRUE', 'FALSE', 'T', 'F'].includes(expected)) {
+    return !['TRUE', 'FALSE', 'T', 'F'].includes(student);
+  }
+
+  // Case C: Identification — accept any non-empty alphanumeric string
+  // (fuzzy matching later handles partial correctness)
+  return false;
+}
+
+/**
+ * Detects invalid / garbled multiple-choice answers.
+ *
+ * For questions whose correct answer is a single letter (A-E) or digit (1-5),
+ * any student answer longer than one character is treated as garbled OCR text
+ * (e.g. "VE", "AY", "FAIATL").
+ *
+ * @param {string}        studentAns  Raw answer token extracted by OCR
+ * @param {string|number} correctAns  Correct answer from the answer key
+ * @returns {boolean} true if the answer looks garbled and should trigger re-parse
+ */
+function isInvalidChoice(studentAns, correctAns) {
+  if (!studentAns || studentAns === '?') return true;
+
+  // Strip optional "Answer: " prefix that some answer-key formats include
+  const isSingleLetterKey = /^[A-E1-5]$/i.test(
+    String(correctAns).replace(/Answer:\s*/i, '').trim()
+  );
+
+  // If the expected answer is a single-letter MC key, any token longer than
+  // one character is garbled OCR output.
+  if (isSingleLetterKey && studentAns.trim().length > 1) {
+    return true; // Mark as garbled
+  }
+
+  return false;
+}
+
 /**
  * Runs OCR with a specific page segmentation mode
  */
@@ -132,22 +199,44 @@ async function extractTextFromImageLegacy(imagePath, imageBuffer = null) {
  * @param {number} [totalQuestions=0]  When provided, gaps are pre-filled with '?'
  * @returns {{ [questionNumber: number]: string }}
  */
-function parseStudentAnswers(ocrText, totalQuestions = 0) {
+/**
+ * parseStudentAnswers — dual-parser system
+ *
+ * STAGE 1: Pure JS (fast & free)
+ *   a) Try explicit numbered regex matching (e.g. "1. A", "Q2: B", "1) C").
+ *   b) If no numbered answers found, fall back to sequential mapping:
+ *      clean each non-empty line with /[^A-Za-z0-9]/g and map to Q1, Q2…
+ *
+ * STAGE 2: Gemini 3.6 Flash fallback (optional / conditional)
+ *   Triggered only when ALL slots are '?' AND ENABLE_GEMINI_FALLBACK=true
+ *   AND GEMINI_API_KEY is set.
+ */
+/**
+ * @param {string}      ocrText            Raw OCR text
+ * @param {number}      [totalQuestions=0]  Number of questions (fills gaps with '?')
+ * @param {Object}      [correctAnswers={}] Map of { [qNum]: expectedAnswer } used for
+ *                                          answer-key-aware garble detection
+ * @param {Buffer|null} [imageBuffer=null]  Raw image buffer — passed to Gemini Vision
+ *                                          when garbled MC tokens are detected
+ */
+async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers = {}, imageBuffer = null) {
+  // Expose imageBuffer under _imageBuffer so the STAGE 2 closure can access it
+  const _imageBuffer = imageBuffer;
   const answers = {};
-  const sequentialTokens = []; // Collect bare tokens for sequential fallback
 
+  // ── STAGE 1a: Explicit numbered regex matching ────────────────────────
   const lines = ocrText.split(/\r?\n/);
+  let numberedFound = false;
 
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    // ── Priority 1: Numbered formats ──────────────────────────────────────
-
     // Markdown table: "| 1. | C |" or "| 1 | B |"
     const tableMatch = trimmed.match(/^\|\s*(\d+)[\.\)]?\s*\|\s*([A-Za-z0-9]+(?:\s+[A-Za-z0-9]+)*)\s*\|/);
     if (tableMatch) {
       answers[parseInt(tableMatch[1], 10)] = tableMatch[2].trim().toUpperCase();
+      numberedFound = true;
       continue;
     }
 
@@ -155,13 +244,15 @@ function parseStudentAnswers(ocrText, totalQuestions = 0) {
     const tableMatch2 = trimmed.match(/^(\d+)[\.\)]?\s*\|\s*([A-Za-z0-9]+(?:\s+[A-Za-z0-9]+)*)\s*$/);
     if (tableMatch2) {
       answers[parseInt(tableMatch2[1], 10)] = tableMatch2[2].trim().toUpperCase();
+      numberedFound = true;
       continue;
     }
 
-    // Number-first: "1. B", "1) C", "2. Mercury", "3 D"
-    const numbered = trimmed.match(/^(\d+)[\.\):\s]\s*([A-Za-z][A-Za-z\s]*)$/);
+    // Number-first: "1. B", "1) C", "Q2: B", "2. Mercury", "3 D"
+    const numbered = trimmed.match(/^(?:Q|q)?(\d+)[\.\):\s]\s*([A-Za-z][A-Za-z\s]*)$/);
     if (numbered) {
       answers[parseInt(numbered[1], 10)] = numbered[2].trim().toUpperCase();
+      numberedFound = true;
       continue;
     }
 
@@ -169,40 +260,157 @@ function parseStudentAnswers(ocrText, totalQuestions = 0) {
     const answerFirst = trimmed.match(/^(?:\(?\s*)?([A-Za-z][A-Za-z\s]*)(?:\s*\))?\s+(\d+)[\.\)]/);
     if (answerFirst) {
       answers[parseInt(answerFirst[2], 10)] = answerFirst[1].trim().toUpperCase();
+      numberedFound = true;
       continue;
     }
+  }
 
-    // ── Priority 2: Sequential (bare) tokens ─────────────────────────────
-    // These are the primary output of the YOLOv8+TrOCR pipeline:
-    //   a single letter (A-D) or a short identification word on its own line.
-    // We collect them here and map them to Q1, Q2 … after the loop.
-    const isMultipleChoice = /^[A-Da-d]\.?$/.test(trimmed);
-    const isIdentification = /^[A-Za-z]{2,30}$/.test(trimmed);
+  // ── STAGE 1b: Pure JS sequential fallback ────────────────────────────
+  if (!numberedFound) {
+    const cleanLines = lines
+      .map(l => l.replace(/[^A-Za-z0-9]/g, '').trim())
+      .filter(Boolean);
 
-    if (isMultipleChoice || isIdentification) {
-      sequentialTokens.push(trimmed.replace(/\.$/, '').toUpperCase());
+    if (cleanLines.length > 0) {
+      console.log(
+        `[Parser] No numbered answers found. Mapping ${cleanLines.length} ` +
+        'sequential token(s) to Q1, Q2 …'
+      );
+      const limit = totalQuestions > 0 ? Math.min(cleanLines.length, totalQuestions) : cleanLines.length;
+      for (let i = 0; i < limit; i++) {
+        answers[i + 1] = cleanLines[i].toUpperCase();
+      }
     }
   }
 
-  // ── Merge sequential tokens if no numbered answers were parsed ─────────
-  if (Object.keys(answers).length === 0 && sequentialTokens.length > 0) {
-    console.log(
-      `[Parser] No numbered answers found. Mapping ${sequentialTokens.length} ` +
-      'sequential token(s) from HF output to Q1, Q2 …'
-    );
-    sequentialTokens.forEach((token, idx) => {
-      answers[idx + 1] = token;
-    });
-  }
-
-  // ── Fill missing question slots with '?' ──────────────────────────────
+  // ── Fill missing question slots with '?' ─────────────────────────────
   if (totalQuestions > 0) {
     for (let q = 1; q <= totalQuestions; q++) {
       if (!answers[q]) answers[q] = '?';
     }
   }
 
-  console.log('[Parser] Parsed student answers:', answers);
+  // ── STAGE 2: Answer-Key-Aware Gemini fallback (conditional) ──────────
+  //
+  // Two checks are combined:
+  //   • isGarbledAnswer — broad format check (also catches TF, Identification)
+  //   • isInvalidChoice — targeted check for multi-char tokens on MC questions
+  //     (e.g. "VE", "AY", "FAIATL") that would otherwise slip through
+  //
+  // When ENABLE_GEMINI_FALLBACK=true, any question that fails either check
+  // triggers Gemini Flash Vision to re-parse the original image.
+  if (
+    process.env.ENABLE_GEMINI_FALLBACK === 'true' &&
+    process.env.GEMINI_API_KEY
+  ) {
+    const questionNums = totalQuestions > 0
+      ? Array.from({ length: totalQuestions }, (_, i) => i + 1)
+      : Object.keys(answers).map(Number);
+
+    // Separate garbled-choice answers from other garbled answers so we can
+    // emit the right log message and choose the correct Gemini call path.
+    const invalidChoiceQNums = [];
+    const otherGarbledQNums  = [];
+
+    for (const qNum of questionNums) {
+      const studentAns  = answers[qNum] || '?';
+      const expectedAns = correctAnswers[qNum]; // may be undefined for Identification
+
+      if (isInvalidChoice(studentAns, expectedAns ?? studentAns)) {
+        invalidChoiceQNums.push(qNum);
+      } else if (isGarbledAnswer(studentAns, expectedAns ?? studentAns)) {
+        otherGarbledQNums.push(qNum);
+      }
+    }
+
+    const garbledQNums = [...new Set([...invalidChoiceQNums, ...otherGarbledQNums])];
+
+    if (garbledQNums.length > 0) {
+      // Emit the correct log message based on which detector(s) fired
+      if (invalidChoiceQNums.length > 0) {
+        console.log(
+          "[Parser] Detected garbled OCR tokens ('VE', 'AY'). Triggering Gemini Vision fallback..."
+        );
+      } else {
+        console.log(
+          `[Parser] Garbled answers detected for Q${otherGarbledQNums.join(', Q')}. ` +
+          'Attempting Gemini 2.0 Flash fallback...'
+        );
+      }
+
+      try {
+        const GoogleGenerativeAI = getGoogleGenerativeAI();
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+        // Build a structured description of each question's expected format
+        // so Gemini knows exactly what kind of answer to look for.
+        const questionHints = questionNums.map(qNum => {
+          const expected = correctAnswers[qNum];
+          let type = 'Identification';
+          if (expected !== undefined) {
+            const exp = String(expected).trim().toUpperCase();
+            if (/^[A-E1-5]$/.test(exp))                     type = 'Multiple Choice (single letter A-E)';
+            else if (['TRUE','FALSE','T','F'].includes(exp)) type = 'True/False';
+          }
+          return `  Q${qNum}: ${type}`;
+        }).join('\n');
+
+        const basePrompt =
+          'You are an answer sheet parser. ' +
+          'Extract each student answer for the questions listed below. ' +
+          'Use the question type hints to decide what a valid answer looks like. ' +
+          'Return ONLY a raw JSON object like {"1": "A", "2": "TRUE", "3": "Mercury"} ' +
+          'with no markdown, no explanation, and no extra keys.\n\n' +
+          'QUESTION TYPE HINTS:\n' + questionHints;
+
+        let result;
+
+        // ── Vision path: triggered when garbled-choice tokens are detected ──
+        // Pass the original image so Gemini can read the bubble/handwriting
+        // directly instead of relying on already-corrupted OCR text.
+        if (invalidChoiceQNums.length > 0 && _imageBuffer) {
+          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+          const imagePart = {
+            inlineData: {
+              data: Buffer.isBuffer(_imageBuffer)
+                ? _imageBuffer.toString('base64')
+                : Buffer.from(_imageBuffer).toString('base64'),
+              mimeType: 'image/jpeg',
+            },
+          };
+          const visionPrompt =
+            basePrompt + '\n\nThe student answer sheet image is attached. ' +
+            'Read the handwritten or bubble answers directly from the image.';
+          result = await model.generateContent([visionPrompt, imagePart]);
+        } else {
+          // ── Text path: fall back to OCR text when no image is available ──
+          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+          const textPrompt = basePrompt + '\n\nOCR TEXT:\n' + ocrText;
+          result = await model.generateContent(textPrompt);
+        }
+
+        const rawText = result.response.text().trim();
+
+        // Strip markdown fences if Gemini wraps in ```json ... ```
+        const jsonStr = rawText.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '').trim();
+        const geminiAnswers = JSON.parse(jsonStr);
+
+        for (const [qStr, ans] of Object.entries(geminiAnswers)) {
+          const qNum = parseInt(qStr, 10);
+          if (!isNaN(qNum) && qNum >= 1) {
+            answers[qNum] = String(ans).trim().toUpperCase();
+          }
+        }
+        console.log('[Parser] Gemini fallback answers applied:', answers);
+      } catch (geminiErr) {
+        console.warn('[Parser] Gemini fallback failed:', geminiErr.message);
+      }
+    } else {
+      console.log('[Parser] All answers passed garble check — Gemini fallback not needed.');
+    }
+  }
+
+  console.log('[Parser] Final parsed student answers:', answers);
   return answers;
 }
 
@@ -233,7 +441,14 @@ async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null,
     // 3. Parse student answers from OCR text.
     //    Pass the answer-key count so the parser pre-fills missing slots with '?'
     //    instead of leaving them undefined — ensures every question is graded.
-    const studentAnswers = parseStudentAnswers(ocrText, answerKeys.length);
+    // Build correctAnswers map so parseStudentAnswers can do format-aware
+    // garble detection (MC expects "A", TF expects "TRUE"/"FALSE", etc.)
+    const correctAnswers = {};
+    answerKeys.forEach((key, idx) => {
+      correctAnswers[idx + 1] = key.answer_text?.toString().trim();
+    });
+
+    const studentAnswers = await parseStudentAnswers(ocrText, answerKeys.length, correctAnswers, imageBuffer);
 
     let correctCount = 0;
     const feedbackLines = [];

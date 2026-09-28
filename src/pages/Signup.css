@@ -139,6 +139,41 @@
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
 }
 
+/* Name Fields Row: First Name (flex 1) + M.I. (fixed narrow) */
+.name-fields-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 0; /* children .input-box add their own margin */
+}
+
+.name-fields-row .input-box {
+  margin-bottom: 18px;
+}
+
+.name-first {
+  flex: 1;
+}
+
+.name-mi {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.name-mi input {
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+/* Required field star */
+.req-star {
+  color: #e53e3e;
+  margin-left: 2px;
+  font-size: 0.8rem;
+}
+
 /* Inputs */
 .input-group {
   display: grid;

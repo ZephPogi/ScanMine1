@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, Users, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { BookOpen, Users, CheckCircle, XCircle, Clock, LogIn } from 'lucide-react';
 import './StudentClasses.css';
 
 const StudentClasses = () => {
@@ -9,6 +9,10 @@ const StudentClasses = () => {
   const [enrolledClasses, setEnrolledClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null); // stores classId being acted on
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinCode, setJoinCode]           = useState('');
+  const [joinLoading, setJoinLoading]     = useState(false);
+  const [joinError, setJoinError]         = useState('');
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -74,6 +78,45 @@ const StudentClasses = () => {
     navigate('/student-view-class', { state: { section: cls } });
   };
 
+  const openJoinModal = () => {
+    setJoinCode('');
+    setJoinError('');
+    setShowJoinModal(true);
+  };
+
+  const closeJoinModal = () => {
+    setShowJoinModal(false);
+    setJoinCode('');
+    setJoinError('');
+  };
+
+  const handleJoinClass = async () => {
+    if (joinCode.trim().length !== 6) {
+      setJoinError('Please enter a valid 6-character class code.');
+      return;
+    }
+    setJoinLoading(true);
+    setJoinError('');
+    try {
+      const res = await fetch('/api/classes/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: joinCode.trim(), userId: user.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setJoinError(data.error || 'Failed to join class.');
+      } else {
+        closeJoinModal();
+        fetchClasses();
+      }
+    } catch {
+      setJoinError('Network error. Please try again.');
+    } finally {
+      setJoinLoading(false);
+    }
+  };
+
   return (
     <div className="main-content">
       <header className="page-header">
@@ -83,6 +126,10 @@ const StudentClasses = () => {
             View your enrolled classes and respond to pending invitations.
           </p>
         </div>
+        <button className="join-code-btn" onClick={openJoinModal}>
+          <LogIn size={16} />
+          Join with Code
+        </button>
       </header>
 
       {loading ? (
@@ -174,6 +221,50 @@ const StudentClasses = () => {
             </div>
           </section>
         </>
+      )}
+
+      {/* ── Join with Code Modal ── */}
+      {showJoinModal && (
+        <div className="join-modal-overlay" onClick={closeJoinModal}>
+          <div className="join-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="join-modal-header">
+              <div className="join-modal-title">
+                <LogIn size={20} />
+                <span>Join a Class</span>
+              </div>
+              <button className="create-close-btn" onClick={closeJoinModal}>✕</button>
+            </div>
+            <div className="join-modal-body">
+              <p className="join-modal-hint">
+                Ask your teacher for the 6-character class code.
+              </p>
+              <input
+                id="join-code-input"
+                type="text"
+                className="join-code-input"
+                placeholder="e.g. AB12CD"
+                maxLength={6}
+                value={joinCode}
+                onChange={(e) => {
+                  setJoinCode(e.target.value.toUpperCase());
+                  setJoinError('');
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && handleJoinClass()}
+                autoFocus
+              />
+              {joinError && <p className="join-error-msg">{joinError}</p>}
+            </div>
+            <div className="join-modal-footer">
+              <button
+                className="join-submit-btn"
+                onClick={handleJoinClass}
+                disabled={joinLoading}
+              >
+                {joinLoading ? 'Joining…' : 'Join Class'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

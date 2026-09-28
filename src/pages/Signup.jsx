@@ -9,12 +9,21 @@ const Signup = () => {
   const [activeRole, setActiveRole] = useState('teacher');
   const navigate = useNavigate();
 
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [middleInitial, setMiddleInitial] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Computed full name: "Jon Z. Glodoviza" or "Jon Glodoviza" if no MI
+  const fullName = [
+    firstName.trim(),
+    middleInitial.trim() ? `${middleInitial.trim().toUpperCase()}.` : '',
+    lastName.trim(),
+  ].filter(Boolean).join(' ');
 
   const handleSignup = async (e) => {
     e.preventDefault();
@@ -40,8 +49,11 @@ const Signup = () => {
         password: password,
         options: {
           data: {
-            name: name,       // Full name from the form — passed to the DB trigger
-            role: activeRole, // 'teacher' or 'student' — passed to the DB trigger
+            first_name:     firstName.trim(),
+            middle_initial: middleInitial.trim().toUpperCase(),
+            last_name:      lastName.trim(),
+            name:           fullName, // Kept for backward compat with DB trigger
+            role:           activeRole,
           },
         },
       });
@@ -63,23 +75,43 @@ const Signup = () => {
         headers: { 'Content-Type': 'application/json' },
         // Pass isSupabaseAuth: true and the supabaseId so the backend matches by UUID
         body: JSON.stringify({ 
-          email: email, 
-          password: password, 
-          role: activeRole, 
+          email:          email, 
+          password:       password, 
+          role:           activeRole, 
           isSupabaseAuth: true,
-          supabaseId: data.user.id
+          supabaseId:     data.user.id,
+          firstName:      firstName.trim(),
+          middleInitial:  middleInitial.trim().toUpperCase(),
+          lastName:       lastName.trim(),
+          name:           fullName,
         }),
       });
 
       if (response.ok) {
-        const userData = await response.json();
-        localStorage.setItem('user', JSON.stringify(userData));
+        const data = await response.json();
+        // Support response shape { user: ... } or raw user object
+        const profile = data.user || data;
+        localStorage.setItem('user', JSON.stringify({
+          ...profile,
+          first_name:     profile.first_name || firstName.trim(),
+          middle_initial: profile.middle_initial || middleInitial.trim().toUpperCase().slice(0, 1),
+          last_name:      profile.last_name || lastName.trim(),
+          name:           profile.name || fullName,
+          role:           profile.role || activeRole,
+          email:          profile.email || email,
+        }));
       } else {
         // If the trigger was slightly delayed or failed, provide a fallback.
         console.warn('Could not fetch user profile immediately after signup.');
-        // We could sign them out, but we'll try to just let them proceed for now.
-        // Or better, set a fallback object so the dashboard doesn't completely crash.
-        localStorage.setItem('user', JSON.stringify({ name: name, role: activeRole, email: email }));
+        // Fallback object with split and composite name fields
+        localStorage.setItem('user', JSON.stringify({
+          name:           fullName,
+          first_name:     firstName.trim(),
+          middle_initial: middleInitial.trim().toUpperCase().slice(0, 1),
+          last_name:      lastName.trim(),
+          role:           activeRole,
+          email:          email
+        }));
       }
 
       if (activeRole === 'teacher') {
@@ -158,27 +190,56 @@ const Signup = () => {
               </div>
             )}
 
-            <div className="input-group">
-              <div className="input-box">
-                <label>Full Name</label>
+            {/* ── Row 1: First Name + Middle Initial ── */}
+            <div className="name-fields-row">
+              <div className="input-box name-first">
+                <label>First Name <span className="req-star">*</span></label>
                 <input
+                  id="signup-first-name"
                   type="text"
-                  placeholder="Juan Dela Cruz"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
+                  placeholder="Juan"
+                  value={firstName}
+                  onChange={e => setFirstName(e.target.value)}
                   required
                 />
               </div>
-              <div className="input-box">
-                <label>Email Address</label>
+              <div className="input-box name-mi">
+                <label>M.I.</label>
                 <input
-                  type="email"
-                  placeholder="juan@school.edu"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
+                  id="signup-middle-initial"
+                  type="text"
+                  placeholder="D"
+                  maxLength={1}
+                  value={middleInitial}
+                  onChange={e => setMiddleInitial(e.target.value.toUpperCase())}
                 />
               </div>
+            </div>
+
+            {/* ── Row 2: Last Name ── */}
+            <div className="input-box">
+              <label>Last Name <span className="req-star">*</span></label>
+              <input
+                id="signup-last-name"
+                type="text"
+                placeholder="Dela Cruz"
+                value={lastName}
+                onChange={e => setLastName(e.target.value)}
+                required
+              />
+            </div>
+
+            {/* ── Row 3: Email ── */}
+            <div className="input-box">
+              <label>Email Address <span className="req-star">*</span></label>
+              <input
+                id="signup-email"
+                type="email"
+                placeholder="juan@school.edu"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+              />
             </div>
 
             <div className="input-box">
