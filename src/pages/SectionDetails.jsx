@@ -1,13 +1,19 @@
 /* eslint-disable */
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Search, UserPlus, UserMinus, Download } from 'lucide-react';
+import { Trash2, Search, UserPlus, UserMinus, Download, CheckSquare, Square, MessageSquare, Camera, Edit, Sparkles } from 'lucide-react';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import './SectionDetails.css';
 import Sidebar from './Sidebar';
 
 // --- THE SMART PARSER ---
+// --- HELPER: Strip duplicated "Answer:" prefixes (e.g. "Answer: Answer: C" -> "C") ---
+const cleanAnswer = (ans) => {
+  if (!ans) return '';
+  return String(ans).replace(/^(?:Answer:\s*)+/i, '').trim();
+};
+
 const parseScanMineText = (rawText) => {
   if (!rawText) return [];
   let currentCandidate = null;
@@ -29,11 +35,12 @@ const parseScanMineText = (rawText) => {
     if (anchorMatch) {
       const questionNum = parseInt(anchorMatch[1], 10);
       const questionText = anchorMatch[2].trim();
-      const leftSideText = line.substring(0, anchorMatch.index).trim();
+      const rawAnswer = line.substring(0, anchorMatch.index).trim();
+      const resolvedAnswer = rawAnswer ? rawAnswer : (currentCandidate || "?");
 
       parsedQuestions.push({
         questionText: questionText,
-        correctAnswer: leftSideText ? leftSideText : (currentCandidate || "?")
+        correctAnswer: cleanAnswer(resolvedAnswer)
       });
 
       currentCandidate = null;
@@ -66,6 +73,8 @@ const SectionDetails = ({ section, onBack }) => {
   const [numberOfQuestions, setNumberOfQuestions] = useState(10);
   const [generatedQuestions, setGeneratedQuestions] = useState([]);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [questionTypes, setQuestionTypes] = useState(['multiple_choice', 'true_false', 'identification']);
+  const [customPrompt, setCustomPrompt] = useState('');
   const [examSubmissions, setExamSubmissions] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentSubmissions, setStudentSubmissions] = useState([]);
@@ -384,6 +393,7 @@ const SectionDetails = ({ section, onBack }) => {
   const handleGenerateQuiz = async () => {
     if (!quizLessonFile) return alert('Please select a lesson PDF file first');
     if (!examTitle) return alert('Please enter an exam title');
+    if (questionTypes.length === 0) return alert('Please select at least one question type.');
 
     setIsGeneratingQuiz(true);
     try {
@@ -393,6 +403,8 @@ const SectionDetails = ({ section, onBack }) => {
       formData.append('classId', section?.id || '');
       formData.append('title', examTitle);
       formData.append('numberOfQuestions', numberOfQuestions);
+      formData.append('questionTypes', JSON.stringify(questionTypes));
+      formData.append('customPrompt', customPrompt.trim());
 
       const response = await fetch('/api/generate-quiz', {
         method: 'POST',
@@ -414,6 +426,12 @@ const SectionDetails = ({ section, onBack }) => {
     }
   };
 
+  const toggleQuestionType = (type) => {
+    setQuestionTypes(prev =>
+      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+    );
+  };
+
   const handleDownloadAnswerKey = () => {
     if (generatedQuestions.length === 0) return alert('No questions to download');
 
@@ -424,7 +442,9 @@ const SectionDetails = ({ section, onBack }) => {
 
     let yPosition = 40;
     generatedQuestions.forEach((q, index) => {
-      const line = `${q.answer_text.padEnd(15)} ${index + 1}. ${q.question_text}`;
+      const ans = cleanAnswer(q.correctAnswer || q.answer_text || '');
+      const qText = q.question || q.question_text || `Question ${index + 1}`;
+      const line = `${ans.padEnd(15)} ${index + 1}. ${qText}`;
       doc.text(line, 20, yPosition);
       yPosition += 10;
 
@@ -716,9 +736,71 @@ const SectionDetails = ({ section, onBack }) => {
       {showExamDetails && (
         <div className="modal-overlay" onClick={() => setShowExamDetails(null)}>
           <div className="modal-content details-modal" style={{ pointerEvents: 'auto', maxHeight: '90vh', overflowY: 'auto', width: '95%', maxWidth: '1000px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Exam Details: {showExamDetails?.title || 'Untitled'}</h2>
-              <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h2 style={{ margin: 0 }}>Exam Details: {showExamDetails?.title || 'Untitled'}</h2>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <button
+                  className="btn-action"
+                  onClick={() => {
+                    navigate('/auto-grading-results', {
+                      state: {
+                        section,
+                        examId: showExamDetails.id,
+                        openScanModal: true
+                      }
+                    });
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 16px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.25)',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="Scan student papers for this exam"
+                >
+                  <Camera size={16} />
+                  Scan Papers
+                </button>
+
+                <button
+                  className="btn-action"
+                  onClick={() => {
+                    const currentAnswers = examQuestions?.manual?.map(a => cleanAnswer(a.correct_answer)).filter(Boolean).join(', ') || '';
+                    setExamTitle(showExamDetails?.title || '');
+                    setManualAnswers(currentAnswers);
+                    setShowAttachModal(true);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 16px',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    background: '#f1f5f9',
+                    color: '#334155',
+                    border: '1.5px solid #cbd5e1',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="Edit or manually enter answer key"
+                >
+                  <Edit size={15} />
+                  Edit/Manual Key
+                </button>
+
                 {showExamDetails?.file_path && (
                   <button
                     className="btn-action success"
@@ -742,7 +824,9 @@ const SectionDetails = ({ section, onBack }) => {
                       examQuestions.manual.map((a, idx) => a ? (
                         <div key={a.id || `manual-${idx}`} className="question-item">
                           <p><strong>{idx + 1}. {a.question_text || `Question ${idx + 1}`}</strong></p>
-                          <p className="ans-text" style={{ color: '#059669', fontWeight: 'bold' }}>Answer: {a.correct_answer || 'N/A'}</p>
+                          <p className="ans-text" style={{ color: '#059669', fontWeight: 'bold' }}>
+                            Answer: {cleanAnswer(a.correct_answer) || 'N/A'}
+                          </p>
                         </div>
                       ) : null)
                     ) : (
@@ -783,7 +867,7 @@ const SectionDetails = ({ section, onBack }) => {
                         {parsedOCRData.map((item, i) => item ? (
                           <div key={`parsed-${i}`} style={{ marginBottom: '8px', fontSize: '13px', display: 'flex', justifyContent: 'space-between' }}>
                             <span style={{ color: '#475569' }}>{item?.questionText ? item.questionText.substring(0, 30) : 'Question'}...</span>
-                            <strong style={{ color: '#16a34a' }}>{item?.correctAnswer || '?'}</strong>
+                            <strong style={{ color: '#16a34a' }}>{cleanAnswer(item?.correctAnswer) || '?'}</strong>
                           </div>
                         ) : null)}
                       </div>
@@ -990,16 +1074,19 @@ const SectionDetails = ({ section, onBack }) => {
 
       {showQuizGeneratorModal && (
         <div className="modal-overlay" onClick={() => setShowQuizGeneratorModal(false)}>
-          <div className="modal-content attach-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content attach-modal quiz-gen-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-bar">
-              <span className="modal-prof-label">ScanMine Professor Console</span>
+              <span className="modal-prof-label">🧠 ScanMine AI Quiz Generator</span>
               <button className="modal-close-btn" onClick={() => setShowQuizGeneratorModal(false)}>×</button>
             </div>
 
-            <div className="modal-title-banner">Generate Quiz from Lesson</div>
+            <div className="modal-title-banner" style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)', boxShadow: '0 10px 15px -3px rgba(124, 58, 237, 0.35)' }}>
+              ✨ Generate Quiz from Lesson
+            </div>
 
+            {/* Exam Title */}
             <div className="upload-section">
-              <label className="upload-label">Exam Title</label>
+              <label className="upload-label">📝 Exam Title</label>
               <input
                 type="text"
                 className="create-input"
@@ -1009,6 +1096,7 @@ const SectionDetails = ({ section, onBack }) => {
               />
             </div>
 
+            {/* Lesson PDF */}
             <div className="upload-section">
               <label className="upload-label">📄 Lesson PDF File</label>
               <div className="upload-row" onClick={() => quizFileRef.current && quizFileRef.current.click()}>
@@ -1026,8 +1114,9 @@ const SectionDetails = ({ section, onBack }) => {
               </div>
             </div>
 
+            {/* Question Count */}
             <div className="upload-section">
-              <label className="upload-label">Number of Questions</label>
+              <label className="upload-label">🔢 Number of Questions</label>
               <input
                 type="number"
                 className="create-input"
@@ -1039,37 +1128,88 @@ const SectionDetails = ({ section, onBack }) => {
               />
             </div>
 
+            {/* Question Types Toggle */}
+            <div className="upload-section">
+              <label className="upload-label">🎯 Question Types</label>
+              <div className="qtype-toggle-row">
+                {[
+                  { key: 'multiple_choice', label: '🔤 Multiple Choice' },
+                  { key: 'true_false',      label: '✅ True / False'   },
+                  { key: 'identification', label: '✏️ Identification'  },
+                ].map(({ key, label }) => {
+                  const active = questionTypes.includes(key);
+                  return (
+                    <button
+                      key={key}
+                      className={`qtype-toggle-btn${active ? ' qtype-active' : ''}`}
+                      onClick={() => toggleQuestionType(key)}
+                      type="button"
+                    >
+                      {active ? <CheckSquare size={15} /> : <Square size={15} />}
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              {questionTypes.length === 0 && (
+                <p className="qtype-warn">⚠️ Select at least one question type.</p>
+              )}
+            </div>
+
+            {/* Custom AI Prompt */}
+            <div className="upload-section">
+              <label className="upload-label">
+                <MessageSquare size={14} style={{ marginRight: 4 }} />
+                Custom AI Instructions <span style={{ color: '#94a3b8', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <textarea
+                className="manual-textarea quiz-custom-prompt"
+                placeholder="e.g. Focus on Chapter 3 definitions. Avoid timeline questions. Make items tricky."
+                value={customPrompt}
+                onChange={(e) => setCustomPrompt(e.target.value)}
+                rows={3}
+              />
+              <p className="manual-hint">These instructions are passed directly to the AI for extra control.</p>
+            </div>
+
             <div className="modal-footer">
               <button
                 className="save-assign-btn"
+                style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)', boxShadow: '0 10px 15px -3px rgba(124, 58, 237, 0.35)' }}
                 onClick={handleGenerateQuiz}
-                disabled={isGeneratingQuiz}
+                disabled={isGeneratingQuiz || questionTypes.length === 0}
               >
-                {isGeneratingQuiz ? 'Generating...' : 'Generate Quiz'}
+                {isGeneratingQuiz ? '⏳ Generating...' : '✨ Generate Quiz'}
               </button>
             </div>
 
             {generatedQuestions.length > 0 && (
-              <div style={{ marginTop: '20px', background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <h4 style={{ margin: '0 0 15px 0' }}>Generated Questions Preview ({generatedQuestions.length})</h4>
-                <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: '15px' }}>
+              <div className="quiz-preview-box">
+                <h4 className="quiz-preview-title">📋 Generated Questions Preview ({generatedQuestions.length})</h4>
+                <div className="quiz-preview-list">
                   {generatedQuestions.map((q, index) => (
-                    <div key={index} style={{ marginBottom: '10px', padding: '10px', background: '#ffffff', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                      <p style={{ margin: '0 0 5px 0', fontWeight: 'bold', color: '#16a34a' }}>
-                        Answer: {q.answer_text}
-                      </p>
-                      <p style={{ margin: 0, color: '#475569' }}>
-                        {index + 1}. {q.question_text}
-                      </p>
+                    <div key={index} className="quiz-preview-item">
+                      <span className="quiz-preview-type">{q.type?.replace('_', ' ')}</span>
+                      <p className="quiz-preview-q">{index + 1}. {q.question || q.question_text}</p>
+                      <p className="quiz-preview-ans">✓ {q.correctAnswer || q.answer_text}</p>
+                      {q.options?.length > 0 && (
+                        <div className="quiz-preview-opts">
+                          {q.options.map((opt, i) => (
+                            <span key={i} className={`quiz-opt-chip${opt === (q.correctAnswer || q.answer_text) ? ' quiz-opt-correct' : ''}`}>
+                              {opt}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
                 <button
                   className="save-assign-btn"
                   onClick={handleDownloadAnswerKey}
-                  style={{ background: '#059669' }}
+                  style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', marginTop: '16px' }}
                 >
-                  Download ScanMine Answer Key
+                  📥 Download ScanMine Answer Key
                 </button>
               </div>
             )}

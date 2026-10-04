@@ -18,11 +18,11 @@ const AutoGradingResults = () => {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const [showScanModal, setShowScanModal] = useState(false);
+  const [showScanModal, setShowScanModal] = useState(() => !!location.state?.openScanModal);
   
   // Selection state
   const [selectedStudentId, setSelectedStudentId] = useState('');
-  const [selectedExamId, setSelectedExamId] = useState('');
+  const [selectedExamId, setSelectedExamId] = useState(() => location.state?.examId ? String(location.state.examId) : '');
   const [students, setStudents] = useState([]);
   const [exams, setExams] = useState([]);
 

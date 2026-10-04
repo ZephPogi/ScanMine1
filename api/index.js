@@ -600,7 +600,17 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
   try {
     const file = req.file;
     // Keys match your frontend FormData
-    const { title, teacherId, classId, numberOfQuestions } = req.body;
+    const { title, teacherId, classId, numberOfQuestions, customPrompt } = req.body;
+
+    // questionTypes arrives as a JSON string: '["multiple_choice","true_false"]'
+    let questionTypes = ['multiple_choice', 'true_false', 'identification'];
+    try {
+      if (req.body.questionTypes) {
+        const parsed = JSON.parse(req.body.questionTypes);
+        if (Array.isArray(parsed) && parsed.length > 0) questionTypes = parsed;
+      }
+    } catch (_) { /* keep default if parsing fails */ }
+
     let text = '';
     let fileUrl = null;
 
@@ -617,13 +627,14 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
     const examId = examRes.rows[0].id;
 
     let questions = [];
-    if (text) questions = await generateQuizFromText(text, examId, parseInt(numberOfQuestions) || 10);
+    if (text) questions = await generateQuizFromText(text, examId, parseInt(numberOfQuestions) || 10, questionTypes, customPrompt || '');
     res.json({ message: 'Exam created successfully', examId, questions });
   } catch (error) {
     console.error('QUIZ GENERATION ERROR:', error);
     res.status(500).json({ error: 'Failed to create exam' });
   }
 });
+
 
 // --- UPLOAD ANSWER KEY FILE ---
 app.post('/api/upload-answer-key-file', upload.single('file'), async (req, res) => {

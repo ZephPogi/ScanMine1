@@ -125,15 +125,14 @@ const QUESTION_SCHEMA = {
 /**
  * Uses Google Gemini (gemini-3.6-flash) to generate quiz questions from text.
  *
- * Signature is identical to the previous compromise-based implementation so
- * that the calling route in api/index.js requires NO changes.
- *
  * @param {string} text              - Source passage to generate questions from
  * @param {string|number|null} examId - DB exam ID (used to persist questions)
  * @param {number} numberOfQuestions  - How many questions to request
+ * @param {string[]} questionTypes    - Subset of: ['multiple_choice','true_false','identification']
+ * @param {string} customPrompt       - Optional extra instructions for the AI
  * @returns {Promise<Array>}          - Array of question objects
  */
-async function generateQuizFromText(text, examId, numberOfQuestions = 10) {
+async function generateQuizFromText(text, examId, numberOfQuestions = 10, questionTypes = ['multiple_choice', 'true_false', 'identification'], customPrompt = '') {
   // ── Guard: API key must be present ──────────────────────────────────────
   if (!process.env.GEMINI_API_KEY) {
     console.error('[generateQuizFromText] GEMINI_API_KEY is missing. Returning empty question list.');
@@ -143,15 +142,36 @@ async function generateQuizFromText(text, examId, numberOfQuestions = 10) {
   try {
     const genai = getGenAIClient();
 
+    // Build question type rules based on the requested types
+    const allowedTypes = Array.isArray(questionTypes) && questionTypes.length > 0
+      ? questionTypes
+      : ['multiple_choice', 'true_false', 'identification'];
+
+    const typeLabels = {
+      multiple_choice: 'multiple_choice',
+      true_false:      'true_false',
+      identification:  'identification',
+    };
+    const allowedTypeNames = allowedTypes.map(t => typeLabels[t] || t).join(', ');
+
+    const typeRules = [
+      allowedTypes.includes('multiple_choice') && '- For multiple_choice: provide exactly 4 options (A, B, C, D) and set correctAnswer to the correct option text.',
+      allowedTypes.includes('true_false')      && '- For true_false: set options to ["True", "False"] and correctAnswer to either "True" or "False".',
+      allowedTypes.includes('identification')  && '- For identification: leave options as an empty array [] and set correctAnswer to the exact answer word or phrase.',
+    ].filter(Boolean).join('\n');
+
+    const customInstructions = customPrompt?.trim()
+      ? `\nAdditional instructions from the teacher:\n"${customPrompt.trim()}"\n`
+      : '';
+
     const prompt = `You are an expert quiz maker.
 
 Analyze the following passage and generate exactly ${numberOfQuestions} quiz questions.
-Vary the question types: use a mix of multiple_choice, true_false, and identification questions.
-
+Only use these question types: ${allowedTypeNames}.
+Distribute the questions evenly across the allowed types.
+${customInstructions}
 Rules:
-- For multiple_choice: provide exactly 4 options (A, B, C, D) and set correctAnswer to the correct option text.
-- For true_false: set options to ["True", "False"] and correctAnswer to either "True" or "False".
-- For identification: leave options as an empty array [] and set correctAnswer to the exact answer word or phrase.
+${typeRules}
 - All questions must be directly answerable from the passage.
 - Return ONLY a JSON array — no markdown, no extra text.
 
