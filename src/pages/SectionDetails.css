@@ -1,5 +1,6 @@
 .section-container {
-    margin-left: 260px; /* Adjust based on Sidebar width */
+    margin-left: 260px;
+    /* Adjust based on Sidebar width */
     padding: 30px;
     background-color: #f8fafc;
     /* ── Layout: fixed-height flex column for inner scroll ── */
@@ -12,7 +13,8 @@
 
 .minimal-header {
     margin-bottom: 30px;
-    flex-shrink: 0; /* stays fixed while grid scrolls */
+    flex-shrink: 0;
+    /* stays fixed while grid scrolls */
 }
 
 .back-btn {
@@ -47,7 +49,8 @@
     min-height: 0;
     overflow-y: auto;
     scroll-behavior: smooth;
-    padding-right: 8px; /* prevent scrollbar overlap */
+    padding-right: 8px;
+    /* prevent scrollbar overlap */
 }
 
 /* Roster Table Styles */
@@ -94,7 +97,6 @@
     border-bottom: 1px solid #f1f5f9;
     white-space: nowrap;
 }
-
 
 .student-name {
     font-weight: 600;
@@ -154,7 +156,9 @@
     font-family: inherit;
 }
 
-.invite-search-input::placeholder { color: #cbd5e1; }
+.invite-search-input::placeholder {
+    color: #cbd5e1;
+}
 
 .search-clear-btn {
     background: none;
@@ -166,7 +170,10 @@
     padding: 0 2px;
     transition: color 0.15s;
 }
-.search-clear-btn:hover { color: #334155; }
+
+.search-clear-btn:hover {
+    color: #334155;
+}
 
 /* ── Search Results Dropdown ── */
 .search-results-dropdown {
@@ -184,8 +191,15 @@
 }
 
 @keyframes dropdownFade {
-    from { opacity: 0; transform: translateY(-6px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .search-result-item {
@@ -197,8 +211,13 @@
     transition: background 0.15s;
 }
 
-.search-result-item:last-child { border-bottom: none; }
-.search-result-item:hover { background: #f8fafc; }
+.search-result-item:last-child {
+    border-bottom: none;
+}
+
+.search-result-item:hover {
+    background: #f8fafc;
+}
 
 .search-result-info {
     display: flex;
@@ -294,7 +313,6 @@
     color: #dc2626;
 }
 
-
 /* Management Cards Styles */
 .actions-sidebar {
     display: flex;
@@ -343,13 +361,36 @@
     margin-bottom: 0;
 }
 
-.btn-action.primary { background: #4483f2; color: white; }
-.btn-action.secondary { background: #8b5cf6; color: white; }
-.btn-action.outline { background: white; border: 1px solid #e2e8f0; color: #64748b; }
-.btn-action.success { background: #10b981; color: white; }
-.btn-action.info { background: #0ea5e9; color: white; }
+.btn-action.primary {
+    background: #4483f2;
+    color: white;
+}
 
-.btn-action:hover { opacity: 0.9; transform: translateY(-2px); }
+.btn-action.secondary {
+    background: #8b5cf6;
+    color: white;
+}
+
+.btn-action.outline {
+    background: white;
+    border: 1px solid #e2e8f0;
+    color: #64748b;
+}
+
+.btn-action.success {
+    background: #10b981;
+    color: white;
+}
+
+.btn-action.info {
+    background: #0ea5e9;
+    color: white;
+}
+
+.btn-action:hover {
+    opacity: 0.9;
+    transform: translateY(-2px);
+}
 
 /* ===== PREMIUM ATTACH EXAM MODAL ===== */
 .modal-overlay {
@@ -362,6 +403,8 @@
     align-items: center;
     z-index: 2000;
     animation: fadeIn 0.3s ease;
+    padding: 20px;
+    overflow-y: auto;
 }
 
 .modal-content.attach-modal {
@@ -523,7 +566,7 @@
 }
 
 .modal-footer {
-    padding: 32px;
+    padding: 24px 32px 32px;
     display: flex;
     justify-content: center;
 }
@@ -550,6 +593,18 @@
     transform: translateY(0) scale(0.98);
 }
 
+.save-assign-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.save-assign-btn:disabled:hover {
+    transform: none;
+    box-shadow: none;
+}
+
 .manual-hint {
     color: #94a3b8;
     font-size: 0.75rem;
@@ -568,12 +623,15 @@
     animation: slideUp 0.3s ease;
 }
 
-/* Wider modal variant for the enhanced generator */
+/* Scrollable container for the AI Quiz Generator */
 .modal-content.quiz-gen-modal {
-    max-height: 90vh;
+    max-height: 85vh;
     overflow-y: auto;
     width: 560px;
     max-width: 96vw;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 24px;
 }
 
 /* ── Question Type Toggles ── */
@@ -712,6 +770,50 @@
     color: #16a34a;
     border-color: #86efac;
     font-weight: 700;
+}
+
+.quiz-error-banner {
+    margin: 0 32px 8px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: #fef2f2;
+    border: 1.5px solid #fecaca;
+    color: #b91c1c;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.quiz-btn-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.quiz-gen-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2.5px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    animation: quizSpin 0.7s linear infinite;
+}
+
+@keyframes quizSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.quiz-preview-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.quiz-preview-actions .save-assign-btn {
+    width: 100%;
 }
 
 .quiz-steps {
@@ -1240,7 +1342,7 @@
     border-color: #6366f1;
     box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
     background: #fafafe;
-    transform: none; /* remove old slide-in; use border highlight instead */
+    transform: none;
 }
 
 .exam-card:active {
@@ -1266,7 +1368,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .exam-info h4 {
@@ -1319,53 +1421,51 @@
 
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
-  .section-container {
-    margin-left: 0;
-    width: 100%;
-    box-sizing: border-box;
-    padding: 20px;
-    padding-bottom: 90px;
-  }
+    .section-container {
+        margin-left: 0;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 20px;
+        padding-bottom: 90px;
+    }
 
-  .section-grid {
-    grid-template-columns: 1fr;
-  }
+    .section-grid {
+        grid-template-columns: 1fr;
+    }
 
-  .roster-section {
-    padding: 16px; /* Reduced from 25px to 16px */
-  }
+    .roster-section {
+        padding: 16px;
+    }
 
-  .actions-sidebar {
-    gap: 15px;
-  }
+    .actions-sidebar {
+        gap: 15px;
+    }
 
-  /* Reduce inner padding on cards for more breathing room */
-  .action-card {
-    padding: 16px; /* Reduced from 20px to 16px */
-  }
+    .action-card {
+        padding: 16px;
+    }
 
-  /* Exam management buttons: full-width with gap */
-  .action-card.exam-management .btn-action {
-    width: 100%;
-    margin-bottom: 12px;
-  }
+    .action-card.exam-management .btn-action {
+        width: 100%;
+        margin-bottom: 12px;
+    }
 
-  .modal-content.attach-modal,
-  .modal-content.quiz-modal,
-  .modal-content.qa-modal,
-  .modal-content.quiz-taking-modal,
-  .details-modal {
-    width: 95%;
-    max-width: 95vw;
-    margin: 0 auto;
-  }
+    .modal-content.attach-modal,
+    .modal-content.quiz-modal,
+    .modal-content.qa-modal,
+    .modal-content.quiz-taking-modal,
+    .details-modal {
+        width: 95%;
+        max-width: 95vw;
+        margin: 0 auto;
+    }
 }
 
 /* Exam Management Button Resizing */
 .exam-management {
     display: flex;
     flex-direction: column;
-    width: 100%;
+    a width: 100%;
     overflow: hidden;
 }
 
@@ -1373,7 +1473,7 @@
     width: 100% !important;
     min-width: 0 !important;
     max-width: 100%;
-    white-space: normal; /* Allows long text to wrap to a second line */
+    white-space: normal;
     height: auto;
     padding: 12px 10px;
     box-sizing: border-box;

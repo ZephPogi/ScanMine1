@@ -72,7 +72,10 @@ const SectionDetails = ({ section, onBack }) => {
   const [quizLessonFile, setQuizLessonFile] = useState(null);
   const [numberOfQuestions, setNumberOfQuestions] = useState(10);
   const [generatedQuestions, setGeneratedQuestions] = useState([]);
+  const [generatedExamId, setGeneratedExamId] = useState(null);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [isSavingQuiz, setIsSavingQuiz] = useState(false);
+  const [quizError, setQuizError] = useState('');
   const [questionTypes, setQuestionTypes] = useState(['multiple_choice', 'true_false', 'identification']);
   const [customPrompt, setCustomPrompt] = useState('');
   const [examSubmissions, setExamSubmissions] = useState([]);
@@ -169,7 +172,7 @@ const SectionDetails = ({ section, onBack }) => {
   const handleDeleteExam = async (e, examId) => {
     e.stopPropagation();
     if (!window.confirm('Are you sure you want to delete this exam? All student results for this exam will also be deleted.')) return;
-    
+
     try {
       const response = await fetch(`/api/exams/${examId}`, { method: 'DELETE' });
       if (response.ok) {
@@ -276,10 +279,10 @@ const SectionDetails = ({ section, onBack }) => {
     }
   };
 
- const handleSaveOCRToDatabase = async () => {
+  const handleSaveOCRToDatabase = async () => {
     // CHANGE: Check for parsedOCRData instead of formattedAnswersToSave
     if (!parsedOCRData || parsedOCRData.length === 0 || !showExamDetails?.id) {
-        return alert('No valid OCR data to save');
+      return alert('No valid OCR data to save');
     }
 
     try {
@@ -336,22 +339,22 @@ const SectionDetails = ({ section, onBack }) => {
 
   const handleSaveAndAssign = async () => {
     if (!examTitle) return alert('Please enter an exam title');
-    
+
     setIsSaving(true);
     try {
       const formData = new FormData();
       formData.append('teacherId', user?.id || '');
       formData.append('classId', section?.id || '');
       formData.append('title', examTitle);
-      if (examFile) formData.append('lessonFile', examFile); 
-      
+      if (examFile) formData.append('lessonFile', examFile);
+
       const examResponse = await fetch('/api/generate-quiz', {
         method: 'POST',
         body: formData
       });
-      
+
       const examData = await examResponse.json();
-      
+
       if (!examResponse.ok) {
         throw new Error(examData?.error || 'Failed to save exam');
       }
@@ -362,11 +365,11 @@ const SectionDetails = ({ section, onBack }) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             examId: examData.examId,
-            answers: manualAnswers 
+            answers: manualAnswers
           })
         });
       }
-      
+
       alert('Exam and Key saved successfully!');
       fetchExams();
       closeModal();
@@ -390,11 +393,44 @@ const SectionDetails = ({ section, onBack }) => {
     if (e.target.files && e.target.files[0]) setQuizLessonFile(e.target.files[0]);
   };
 
-  const handleGenerateQuiz = async () => {
-    if (!quizLessonFile) return alert('Please select a lesson PDF file first');
-    if (!examTitle) return alert('Please enter an exam title');
-    if (questionTypes.length === 0) return alert('Please select at least one question type.');
+  const closeQuizGeneratorModal = () => {
+    if (isGeneratingQuiz || isSavingQuiz) return;
+    setShowQuizGeneratorModal(false);
+    setQuizLessonFile(null);
+    setGeneratedQuestions([]);
+    setGeneratedExamId(null);
+    setQuizError('');
+    setCustomPrompt('');
+    setNumberOfQuestions(10);
+    setQuestionTypes(['multiple_choice', 'true_false', 'identification']);
+    if (quizFileRef.current) quizFileRef.current.value = '';
+  };
 
+  const parseJsonSafe = async (response) => {
+    try {
+      return await response.json();
+    } catch {
+      return {};
+    }
+  };
+
+  const handleGenerateQuiz = async () => {
+    if (!quizLessonFile) {
+      setQuizError('Please select a lesson PDF file first.');
+      return;
+    }
+    if (!examTitle) {
+      setQuizError('Please enter an exam title.');
+      return;
+    }
+    if (questionTypes.length === 0) {
+      setQuizError('Please select at least one question type.');
+      return;
+    }
+
+    setQuizError('');
+    setGeneratedQuestions([]);
+    setGeneratedExamId(null);
     setIsGeneratingQuiz(true);
     try {
       const formData = new FormData();
@@ -402,7 +438,7 @@ const SectionDetails = ({ section, onBack }) => {
       formData.append('teacherId', user?.id || '');
       formData.append('classId', section?.id || '');
       formData.append('title', examTitle);
-      formData.append('numberOfQuestions', numberOfQuestions);
+      formData.append('numberOfQuestions', String(numberOfQuestions));
       formData.append('questionTypes', JSON.stringify(questionTypes));
       formData.append('customPrompt', customPrompt.trim());
 
@@ -411,18 +447,84 @@ const SectionDetails = ({ section, onBack }) => {
         body: formData
       });
 
-      const data = await response.json();
-      if (response.ok && data?.questions) {
-        setGeneratedQuestions(data.questions);
-        alert('Quiz generated successfully!');
-      } else {
-        alert('Quiz generation failed: ' + (data?.error || 'Unknown error'));
+      const data = await parseJsonSafe(response);
+      if (!response.ok) {
+        throw new Error(data?.error || 'Quiz generation failed. Please try again.');
       }
+
+      const questions = Array.isArray(data?.questions) ? data.questions : [];
+      if (questions.length === 0) {
+        throw new Error('No questions were generated. Try a different PDF or prompt.');
+      }
+
+      setGeneratedQuestions(questions);
+      setGeneratedExamId(data?.examId || null);
     } catch (error) {
       console.error('Quiz generation error:', error);
-      alert('Error generating quiz: ' + (error?.message || 'Unknown error'));
+      setQuizError(error?.message || 'Error generating quiz.');
     } finally {
       setIsGeneratingQuiz(false);
+    }
+  };
+
+  const handleSaveAndAssignQuiz = async () => {
+    if (generatedQuestions.length === 0) {
+      setQuizError('Generate a quiz before saving and assigning it to the class.');
+      return;
+    }
+
+    setQuizError('');
+    setIsSavingQuiz(true);
+    try {
+      const answers = generatedQuestions.map((q, i) => ({
+        questionText: q.question || q.question_text || `Question ${i + 1}`,
+        correctAnswer: q.correctAnswer || q.answer_text || ''
+      }));
+
+      const payload = {
+        examId: generatedExamId,
+        teacherId: user?.id || '',
+        classId: section?.id || '',
+        title: examTitle,
+        questions: generatedQuestions,
+        answers
+      };
+
+      let response = await fetch('/api/save-quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.status === 404) {
+        if (!generatedExamId) {
+          throw new Error('Missing exam ID. Generate the quiz again before saving.');
+        }
+        response = await fetch('/api/upload-answer-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ examId: generatedExamId, answers })
+        });
+      }
+
+      const data = await parseJsonSafe(response);
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to save and assign quiz.');
+      }
+
+      await fetchExams();
+      setShowQuizGeneratorModal(false);
+      setQuizLessonFile(null);
+      setGeneratedQuestions([]);
+      setGeneratedExamId(null);
+      setQuizError('');
+      setCustomPrompt('');
+      if (quizFileRef.current) quizFileRef.current.value = '';
+    } catch (error) {
+      console.error('Save quiz error:', error);
+      setQuizError(error?.message || 'Error saving quiz.');
+    } finally {
+      setIsSavingQuiz(false);
     }
   };
 
@@ -456,17 +558,17 @@ const SectionDetails = ({ section, onBack }) => {
 
     doc.save('ScanMine-Answer-Key.pdf');
   };
-  
+
   const handleExportExcel = () => {
     if (!showExamDetails || !students.length) return;
 
-    const gradedStudents = students.filter(s => 
-      s.status === 'enrolled' && 
+    const gradedStudents = students.filter(s =>
+      s.status === 'enrolled' &&
       examSubmissions.some(sub => sub.student_id === s.user_id)
     );
-    
-    const pendingStudents = students.filter(s => 
-      s.status === 'enrolled' && 
+
+    const pendingStudents = students.filter(s =>
+      s.status === 'enrolled' &&
       !examSubmissions.some(sub => sub.student_id === s.user_id)
     );
 
@@ -499,7 +601,7 @@ const SectionDetails = ({ section, onBack }) => {
     const worksheet = XLSX.utils.json_to_sheet(excelData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Grades");
-    
+
     // Auto-size columns (rough approximation)
     const maxWidths = excelData.reduce((acc, row) => {
       Object.keys(row).forEach((key, i) => {
@@ -586,8 +688,8 @@ const SectionDetails = ({ section, onBack }) => {
                 <tbody>
                   {students && students.length > 0 ? (
                     students.map((s, idx) => s ? (
-                      <tr 
-                        key={s.user_id || `student-${idx}`} 
+                      <tr
+                        key={s.user_id || `student-${idx}`}
                         onClick={() => handleViewStudent(s)}
                         style={{ cursor: 'pointer' }}
                         className="roster-row-hover"
@@ -614,7 +716,7 @@ const SectionDetails = ({ section, onBack }) => {
                       </tr>
                     ) : null)
                   ) : (
-                    <tr><td colSpan="4" style={{textAlign:'center', color:'#94a3b8', padding:'20px'}}>No students yet. Use the search bar above to invite them.</td></tr>
+                    <tr><td colSpan="4" style={{ textAlign: 'center', color: '#94a3b8', padding: '20px' }}>No students yet. Use the search bar above to invite them.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -661,7 +763,7 @@ const SectionDetails = ({ section, onBack }) => {
                     </div>
                   ) : null)
                 ) : (
-                  <p style={{fontSize: '14px', color: '#666'}}>No exams posted yet.</p>
+                  <p style={{ fontSize: '14px', color: '#666' }}>No exams posted yet.</p>
                 )}
               </div>
             </div>
@@ -670,7 +772,7 @@ const SectionDetails = ({ section, onBack }) => {
       </div>
 
       {/* MODALS BELOW */}
-      
+
       {/* Old Add-Student modal removed — replaced by inline search */}
 
       {showAttachModal && (
@@ -685,10 +787,10 @@ const SectionDetails = ({ section, onBack }) => {
 
             <div className="upload-section">
               <label className="upload-label">Exam Title</label>
-              <input 
-                type="text" 
-                className="create-input" 
-                placeholder="e.g. Algebra Midterm" 
+              <input
+                type="text"
+                className="create-input"
+                placeholder="e.g. Algebra Midterm"
                 value={examTitle}
                 onChange={(e) => setExamTitle(e.target.value)}
               />
@@ -721,8 +823,8 @@ const SectionDetails = ({ section, onBack }) => {
             </div>
 
             <div className="modal-footer">
-              <button 
-                className="save-assign-btn" 
+              <button
+                className="save-assign-btn"
                 onClick={handleSaveAndAssign}
                 disabled={isSaving}
               >
@@ -813,7 +915,7 @@ const SectionDetails = ({ section, onBack }) => {
                 <button className="close-btn" onClick={() => setShowExamDetails(null)}>×</button>
               </div>
             </div>
-            
+
             <div className="modal-body" style={{ display: 'flex', gap: '24px', padding: '20px' }}>
               {/* Left Column: Answer Keys & OCR */}
               <div style={{ flex: '1.2' }}>
@@ -850,9 +952,9 @@ const SectionDetails = ({ section, onBack }) => {
                     />
                     <button className="browse-btn exam-browse">Browse</button>
                   </div>
-                  
-                  <button 
-                    className="save-assign-btn" 
+
+                  <button
+                    className="save-assign-btn"
                     onClick={() => handleProcessOCR(showExamDetails.id)}
                     disabled={isProcessingOCR || !answerKeyImage}
                     style={{ width: '100%', marginBottom: '10px' }}
@@ -871,7 +973,7 @@ const SectionDetails = ({ section, onBack }) => {
                           </div>
                         ) : null)}
                       </div>
-                      
+
                       <button
                         onClick={handleSaveOCRToDatabase}
                         style={{
@@ -898,7 +1000,7 @@ const SectionDetails = ({ section, onBack }) => {
               <div style={{ flex: '1', background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                   <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#1e293b' }}>Student Progress</h3>
-                  <button 
+                  <button
                     onClick={handleExportExcel}
                     className="btn-action success"
                     style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -907,7 +1009,7 @@ const SectionDetails = ({ section, onBack }) => {
                     Export to Excel
                   </button>
                 </div>
-                
+
                 <div style={{ marginBottom: '25px', flex: 1, overflowY: 'auto' }}>
                   <h5 style={{ color: '#059669', marginBottom: '10px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Graded ({students.filter(s => examSubmissions.some(sub => sub.student_id === s.user_id)).length})
@@ -953,30 +1055,30 @@ const SectionDetails = ({ section, onBack }) => {
 
       {selectedStudent && (
         <div className="modal-overlay" onClick={() => setSelectedStudent(null)} style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="modal-content" style={{ 
-            backgroundColor: '#ffffff', 
-            borderRadius: '16px', 
-            padding: '32px', 
-            width: '100%', 
-            maxWidth: '600px', 
+          <div className="modal-content" style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            padding: '32px',
+            width: '100%',
+            maxWidth: '600px',
             position: 'relative',
             boxShadow: '0 20px 40px rgba(0, 0, 0, 0.15)',
             pointerEvents: 'auto',
             maxHeight: '85vh',
             overflowY: 'auto'
           }} onClick={e => e.stopPropagation()}>
-            
-            <button 
-              className="modal-close-btn" 
+
+            <button
+              className="modal-close-btn"
               onClick={() => setSelectedStudent(null)}
-              style={{ 
-                position: 'absolute', 
-                top: '20px', 
-                right: '20px', 
-                background: 'none', 
-                border: 'none', 
-                fontSize: '24px', 
-                color: '#94a3b8', 
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                background: 'none',
+                border: 'none',
+                fontSize: '24px',
+                color: '#94a3b8',
                 cursor: 'pointer',
                 lineHeight: 1
               }}
@@ -1000,22 +1102,22 @@ const SectionDetails = ({ section, onBack }) => {
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
                   {studentSubmissions.length > 0 ? (
                     studentSubmissions.map((sub, idx) => (
-                      <div key={sub.id} style={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between', 
-                        alignItems: 'center', 
-                        padding: '16px', 
+                      <div key={sub.id} style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '16px',
                         backgroundColor: '#ffffff',
                         borderBottom: idx === studentSubmissions.length - 1 ? 'none' : '1px solid #e2e8f0'
                       }}>
                         <span style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.95rem' }}>{sub.exam_title}</span>
-                        <span style={{ 
-                          backgroundColor: '#dcfce7', 
-                          color: '#166534', 
-                          padding: '4px 12px', 
-                          borderRadius: '9999px', 
-                          fontSize: '13px', 
-                          fontWeight: '700' 
+                        <span style={{
+                          backgroundColor: '#dcfce7',
+                          color: '#166534',
+                          padding: '4px 12px',
+                          borderRadius: '9999px',
+                          fontSize: '13px',
+                          fontWeight: '700'
                         }}>
                           {sub.points_earned ?? sub.score ?? 0} / {sub.total_items ?? sub.total_questions ?? '?'}
                         </span>
@@ -1038,21 +1140,21 @@ const SectionDetails = ({ section, onBack }) => {
                   {exams
                     .filter(e => !studentSubmissions.some(sub => sub.exam_title === e.title))
                     .map((e, idx, arr) => (
-                      <div key={e.id} style={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between', 
-                        alignItems: 'center', 
-                        padding: '16px', 
+                      <div key={e.id} style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '16px',
                         backgroundColor: '#ffffff',
                         borderBottom: idx === arr.length - 1 ? 'none' : '1px solid #e2e8f0'
                       }}>
                         <span style={{ color: '#475569', fontSize: '0.95rem', fontWeight: '500' }}>{e.title}</span>
-                        <span style={{ 
-                          backgroundColor: '#f1f5f9', 
-                          color: '#475569', 
-                          padding: '4px 12px', 
-                          borderRadius: '9999px', 
-                          fontSize: '11px', 
+                        <span style={{
+                          backgroundColor: '#f1f5f9',
+                          color: '#475569',
+                          padding: '4px 12px',
+                          borderRadius: '9999px',
+                          fontSize: '11px',
                           fontWeight: '700',
                           textTransform: 'uppercase'
                         }}>
@@ -1073,11 +1175,11 @@ const SectionDetails = ({ section, onBack }) => {
       )}
 
       {showQuizGeneratorModal && (
-        <div className="modal-overlay" onClick={() => setShowQuizGeneratorModal(false)}>
+        <div className="modal-overlay" onClick={closeQuizGeneratorModal}>
           <div className="modal-content attach-modal quiz-gen-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-bar">
               <span className="modal-prof-label">🧠 ScanMine AI Quiz Generator</span>
-              <button className="modal-close-btn" onClick={() => setShowQuizGeneratorModal(false)}>×</button>
+              <button className="modal-close-btn" onClick={closeQuizGeneratorModal} disabled={isGeneratingQuiz || isSavingQuiz}>×</button>
             </div>
 
             <div className="modal-title-banner" style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)', boxShadow: '0 10px 15px -3px rgba(124, 58, 237, 0.35)' }}>
@@ -1134,8 +1236,8 @@ const SectionDetails = ({ section, onBack }) => {
               <div className="qtype-toggle-row">
                 {[
                   { key: 'multiple_choice', label: '🔤 Multiple Choice' },
-                  { key: 'true_false',      label: '✅ True / False'   },
-                  { key: 'identification', label: '✏️ Identification'  },
+                  { key: 'true_false', label: '✅ True / False' },
+                  { key: 'identification', label: '✏️ Identification' },
                 ].map(({ key, label }) => {
                   const active = questionTypes.includes(key);
                   return (
@@ -1172,14 +1274,23 @@ const SectionDetails = ({ section, onBack }) => {
               <p className="manual-hint">These instructions are passed directly to the AI for extra control.</p>
             </div>
 
+            {quizError && (
+              <p className="quiz-error-banner" role="alert">{quizError}</p>
+            )}
+
             <div className="modal-footer">
               <button
                 className="save-assign-btn"
                 style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)', boxShadow: '0 10px 15px -3px rgba(124, 58, 237, 0.35)' }}
                 onClick={handleGenerateQuiz}
-                disabled={isGeneratingQuiz || questionTypes.length === 0}
+                disabled={isGeneratingQuiz || isSavingQuiz || questionTypes.length === 0}
               >
-                {isGeneratingQuiz ? '⏳ Generating...' : '✨ Generate Quiz'}
+                {isGeneratingQuiz ? (
+                  <span className="quiz-btn-loading">
+                    <span className="quiz-gen-spinner" aria-hidden="true" />
+                    Generating...
+                  </span>
+                ) : '✨ Generate Quiz'}
               </button>
             </div>
 
@@ -1204,13 +1315,28 @@ const SectionDetails = ({ section, onBack }) => {
                     </div>
                   ))}
                 </div>
-                <button
-                  className="save-assign-btn"
-                  onClick={handleDownloadAnswerKey}
-                  style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', marginTop: '16px' }}
-                >
-                  📥 Download ScanMine Answer Key
-                </button>
+                <div className="quiz-preview-actions">
+                  <button
+                    className="save-assign-btn"
+                    onClick={handleSaveAndAssignQuiz}
+                    disabled={isSavingQuiz || isGeneratingQuiz}
+                  >
+                    {isSavingQuiz ? (
+                      <span className="quiz-btn-loading">
+                        <span className="quiz-gen-spinner" aria-hidden="true" />
+                        Saving...
+                      </span>
+                    ) : 'Save & Assign to Class'}
+                  </button>
+                  <button
+                    className="save-assign-btn quiz-download-btn"
+                    onClick={handleDownloadAnswerKey}
+                    disabled={isSavingQuiz || isGeneratingQuiz}
+                    style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                  >
+                    📥 Download ScanMine Answer Key
+                  </button>
+                </div>
               </div>
             )}
           </div>

@@ -635,6 +635,59 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
   }
 });
 
+// --- TEACHER: SAVE GENERATED QUIZ AND ASSIGN TO CLASS ---
+app.post('/api/save-quiz', async (req, res) => {
+  try {
+    const { examId, teacherId, classId, title, questions, answers } = req.body;
+    const items = Array.isArray(answers) && answers.length
+      ? answers
+      : (Array.isArray(questions)
+        ? questions.map((q) => ({
+            questionText: q.question || q.question_text,
+            correctAnswer: q.correctAnswer || q.answer_text
+          }))
+        : []);
+
+    if (!items.length) return res.status(400).json({ error: 'No questions to save' });
+
+    let id = examId;
+    if (!id) {
+      if (!teacherId || !classId) {
+        return res.status(400).json({ error: 'Missing examId or teacher/class' });
+      }
+      const examRes = await db.query(
+        'INSERT INTO Exams (teacher_id, class_id, title) VALUES ($1, $2, $3) RETURNING id',
+        [teacherId, classId, title || 'Generated Quiz']
+      );
+      id = examRes.rows[0].id;
+    }
+
+    await db.query('DELETE FROM answer_keys WHERE exam_id = $1', [id]);
+    await db.query('DELETE FROM generated_questions WHERE exam_id = $1', [id]);
+
+    let questionCount = 0;
+    for (const item of items) {
+      const correct = item.correctAnswer || item.answer_text;
+      const qText = item.questionText || item.question || item.question_text;
+      if (!correct) continue;
+      questionCount++;
+      await db.query(
+        'INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ($1, $2, $3)',
+        [id, correct, qText || `Question ${questionCount}`]
+      );
+      await db.query(
+        'INSERT INTO Generated_Questions (exam_id, question_text, correct_answer) VALUES ($1, $2, $3)',
+        [id, qText || `Question ${questionCount}`, correct]
+      );
+    }
+
+    res.json({ message: 'Quiz saved and assigned to class', examId: id, questionCount });
+  } catch (error) {
+    console.error('SAVE QUIZ ERROR:', error);
+    res.status(500).json({ error: 'Failed to save quiz' });
+  }
+});
+
 
 // --- UPLOAD ANSWER KEY FILE ---
 app.post('/api/upload-answer-key-file', upload.single('file'), async (req, res) => {
