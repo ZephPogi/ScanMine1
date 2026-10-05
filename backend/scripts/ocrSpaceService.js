@@ -7,10 +7,10 @@ const { createCanvas } = require('@napi-rs/canvas');
 
 function getPdfParse() {
   try {
-    const importedPdf = require('pdf-parse');
-    if (typeof importedPdf === 'function') return importedPdf;
-    if (importedPdf && typeof importedPdf.default === 'function') return importedPdf.default;
-    if (importedPdf && typeof importedPdf.pdfParse === 'function') return importedPdf.pdfParse;
+    const rawPdfParse = require('pdf-parse');
+    if (typeof rawPdfParse === 'function') return rawPdfParse;
+    if (rawPdfParse && typeof rawPdfParse.default === 'function') return rawPdfParse.default;
+    if (rawPdfParse && typeof rawPdfParse.pdfParse === 'function') return rawPdfParse.pdfParse;
     return null;
   } catch (error) {
     return null;
@@ -35,7 +35,8 @@ async function convertPdfToImageBuffers(pdfBuffer) {
   try {
     const pdfModule = await import('pdfjs-dist/legacy/build/pdf.mjs');
     const pdfjsLib = pdfModule.default || pdfModule;
-    const pdf = await pdfjsLib.getDocument({ data: pdfBuffer }).promise;
+    const uint8Array = new Uint8Array(pdfBuffer);
+    const pdf = await pdfjsLib.getDocument({ data: uint8Array }).promise;
     const pageBuffers = [];
 
     for (let pageNumber = 1; pageNumber <= Math.min(pdf.numPages, 10); pageNumber++) {

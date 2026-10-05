@@ -8,7 +8,11 @@ const path = require('path');
 let pdfParse;
 try {
   const rawPdfParse = require('pdf-parse');
-  pdfParse = typeof rawPdfParse === 'function' ? rawPdfParse : (rawPdfParse.default || rawPdfParse);
+  pdfParse = typeof rawPdfParse === 'function'
+    ? rawPdfParse
+    : (rawPdfParse && typeof rawPdfParse.default === 'function'
+      ? rawPdfParse.default
+      : (rawPdfParse && typeof rawPdfParse.pdfParse === 'function' ? rawPdfParse.pdfParse : null));
 } catch (e) {
   console.error('pdf-parse initialization failed:', e);
 }
@@ -33,7 +37,11 @@ class OCRRouter {
         const dataBuffer = Buffer.isBuffer(source) ? source : fs.readFileSync(source);
 
         // VERCEL FIX: Handle different export styles and guard against default-export issues.
-        const parseFunc = pdfParse;
+        const parseFunc = typeof pdfParse === 'function'
+          ? pdfParse
+          : (pdfParse && typeof pdfParse.default === 'function'
+            ? pdfParse.default
+            : (pdfParse && typeof pdfParse.pdfParse === 'function' ? pdfParse.pdfParse : null));
 
         if (parseFunc) {
           const data = await parseFunc(dataBuffer);

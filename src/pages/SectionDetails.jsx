@@ -14,6 +14,12 @@ const cleanAnswer = (ans) => {
   return String(ans).replace(/^(?:Answer:\s*)+/i, '').trim();
 };
 
+const wakeHuggingFaceSpace = () => {
+  fetch('https://zephpogi-scanmine-trocr.hf.space/', { mode: 'no-cors' })
+    .then(() => console.log('🔥 [Pre-Warm] Sent wakeup ping to Hugging Face Space'))
+    .catch((err) => console.log('🔥 [Pre-Warm] Ping initiated:', err.message));
+};
+
 const parseScanMineText = (rawText) => {
   if (!rawText) return [];
   let currentCandidate = null;
@@ -96,6 +102,13 @@ const SectionDetails = ({ section, onBack }) => {
   const quizFileRef = useRef(null);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+  useEffect(() => {
+    const anyModalOpen = showAttachModal || showExamDetails || showQuizGeneratorModal;
+    if (anyModalOpen) {
+      wakeHuggingFaceSpace();
+    }
+  }, [showAttachModal, showExamDetails, showQuizGeneratorModal]);
 
   const fetchStudents = useCallback(async () => {
     try {
@@ -726,10 +739,16 @@ const SectionDetails = ({ section, onBack }) => {
           <aside className="actions-sidebar">
             <div className="action-card exam-management">
               <h4>Exam Management</h4>
-              <button className="btn-action primary" onClick={() => setShowAttachModal(true)}>
+              <button className="btn-action primary" onClick={() => {
+                wakeHuggingFaceSpace();
+                setShowAttachModal(true);
+              }}>
                 Attach Exam & Key
               </button>
-              <button className="btn-action success" onClick={() => setShowQuizGeneratorModal(true)}>
+              <button className="btn-action success" onClick={() => {
+                wakeHuggingFaceSpace();
+                setShowQuizGeneratorModal(true);
+              }}>
                 Generate Quiz
               </button>
               <button className="btn-action success" onClick={() => navigate('/auto-grading-results', { state: { section } })}>Auto-Grading Results</button>
@@ -846,6 +865,7 @@ const SectionDetails = ({ section, onBack }) => {
                 <button
                   className="btn-action"
                   onClick={() => {
+                    wakeHuggingFaceSpace();
                     navigate('/auto-grading-results', {
                       state: {
                         section,
@@ -878,6 +898,7 @@ const SectionDetails = ({ section, onBack }) => {
                 <button
                   className="btn-action"
                   onClick={() => {
+                    wakeHuggingFaceSpace();
                     const currentAnswers = examQuestions?.manual?.map(a => cleanAnswer(a.correct_answer)).filter(Boolean).join(', ') || '';
                     setExamTitle(showExamDetails?.title || '');
                     setManualAnswers(currentAnswers);
