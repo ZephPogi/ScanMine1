@@ -7,7 +7,7 @@ const isVercelRuntime = () => process.env.VERCEL === 'true' || process.env.VERCE
 
 // Lazy-loaded only when Gemini fallback is triggered
 let _GoogleGenerativeAI = null;
-const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-1.5-flash'];
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
 
 function getGoogleGenerativeAI() {
   if (!_GoogleGenerativeAI) {
@@ -81,37 +81,71 @@ async function callGroqVisionFallback(imageBuffer) {
   const imageBase64 = Buffer.isBuffer(imageBuffer)
     ? imageBuffer.toString('base64')
     : Buffer.from(imageBuffer).toString('base64');
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'qwen/qwen3.8-27b',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: 'Extract student name from header if present, and all multiple-choice answers written on this paper. Return STRICT valid JSON: {"studentName": "...", "answers": {"1": "A", "2": "B", "3": "C"}}',
-            },
-            {
-              type: 'image_url',
-              image_url: { url: `data:image/jpeg;base64,${imageBase64}` },
-            },
-          ],
-        },
-      ],
-      temperature: 0.1,
-      response_format: { type: 'json_object' },
-    }),
+  const requestBody = JSON.stringify({
+    model: 'qwen/qwen3.8-27b',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: 'Extract student name from header if present, and all multiple-choice answers written on this paper. Return STRICT valid JSON: {"studentName": "...", "answers": {"1": "A", "2": "B", "3": "C"}}',
+          },
+          {
+            type: 'image_url',
+            image_url: { url: `data:image/jpeg;base64,${imageBase64}` },
+          },
+        ],
+      },
+    ],
+    temperature: 0.1,
+    response_format: { type: 'json_object' },
   });
+  const MAX_GROQ_ATTEMPTS = 3;
+  let response;
+  let lastError;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Groq Vision request failed (${response.status}): ${errorText}`);
+  for (let attempt = 1; attempt <= MAX_GROQ_ATTEMPTS; attempt++) {
+    try {
+      response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: requestBody,
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt === MAX_GROQ_ATTEMPTS) break;
+
+      const backoffMs = Math.min(1000 * Math.pow(1.5, attempt - 1), 5000);
+      console.warn(`[Groq Retry] Groq API error or rate limit (Attempt ${attempt}/3). Retrying in ${(backoffMs/1000).toFixed(1)}s...`);
+      await new Promise(r => setTimeout(r, backoffMs));
+      continue;
+    }
+
+    if (response.status === 429 || response.status === 503) {
+      const errorText = await response.text();
+      lastError = new Error(`Groq Vision request failed (${response.status}): ${errorText}`);
+      if (attempt === MAX_GROQ_ATTEMPTS) break;
+
+      const backoffMs = Math.min(1000 * Math.pow(1.5, attempt - 1), 5000);
+      console.warn(`[Groq Retry] Groq API error or rate limit (Attempt ${attempt}/3). Retrying in ${(backoffMs/1000).toFixed(1)}s...`);
+      await new Promise(r => setTimeout(r, backoffMs));
+      continue;
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Groq Vision request failed (${response.status}): ${errorText}`);
+    }
+    lastError = null;
+    break;
+  }
+
+  if (!response || lastError) {
+    throw lastError || new Error('Groq Vision request failed after 3 attempts.');
   }
 
   const result = await response.json();
