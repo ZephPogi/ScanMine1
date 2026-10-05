@@ -3,6 +3,8 @@ const db = require('../db');
 const ScannerLogic = require('./scannerLogic');
 const OCRRouter = require('./ocrRouter');
 
+const isVercelRuntime = () => process.env.VERCEL === 'true' || process.env.VERCEL === true || process.env.VERCEL === '1';
+
 // Lazy-loaded only when Gemini fallback is triggered
 let _GoogleGenerativeAI = null;
 function getGoogleGenerativeAI() {
@@ -82,10 +84,24 @@ function isInvalidChoice(studentAns, correctAns) {
  * Runs OCR with a specific page segmentation mode
  */
 async function runOCR(imageBuffer, psm) {
-  const result = await Tesseract.recognize(imageBuffer, 'eng', {
-    tessedit_pageseg_mode: psm,
-  });
-  return result.data.text || '';
+  if (isVercelRuntime()) {
+    console.warn('[OCR] Vercel detected: skipping local Tesseract entirely to avoid WASM ENOENT/Aborted crashes.');
+    return '';
+  }
+
+  try {
+    const result = await Tesseract.recognize(imageBuffer, 'eng', {
+      tessedit_pageseg_mode: psm,
+    });
+    return result.data.text || '';
+  } catch (error) {
+    const message = (error && (error.message || String(error))) || '';
+    if (/ENOENT|Aborted|tesseract\.wasm|Failed to fetch|fetch failed|wasm/i.test(message)) {
+      console.warn('[OCR] Tesseract WASM initialization failed safely; skipping local OCR and letting Gemini Vision handle the image.', message);
+      return '';
+    }
+    throw error;
+  }
 }
 
 /**
@@ -103,6 +119,13 @@ async function extractTextFromImage(imagePath, imageBuffer = null) {
 
     return text;
   } catch (error) {
+    const isBypass = error && (error.code === 'VERCEL_TESSERACT_BYPASS' || /Vercel bypass|bypass.*Tesseract/i.test(error.message || ''));
+
+    if (isBypass || isVercelRuntime()) {
+      console.warn('[OCR] Vercel bypass active: skipping local Tesseract. Returning empty OCR text so Gemini Vision fallback can parse the uploaded image buffer.');
+      return '';
+    }
+
     console.error('OCR Error:', error);
     // Fallback to legacy Tesseract approach if dual-OCR fails
     console.log('Falling back to legacy Tesseract approach...');

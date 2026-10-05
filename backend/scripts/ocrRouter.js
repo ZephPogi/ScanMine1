@@ -4,6 +4,8 @@ const OCRSpaceService = require('./ocrSpaceService');
 const fs = require('fs');
 const path = require('path');
 
+const isVercelRuntime = () => process.env.VERCEL === 'true' || process.env.VERCEL === true || process.env.VERCEL === '1';
+
 // VERCEL FIX: Use a robust pdf-parse import that supports ESM/CJS default exports.
 let pdfParse;
 try {
@@ -62,17 +64,43 @@ class OCRRouter {
     try {
       return await this.ocrSpaceService.recognizeHandwritingFromBuffer(source, engine);
     } catch (err) {
+      if (isVercelRuntime()) {
+        console.warn('[OCR Router] Vercel detected: skipping local Tesseract WASM fallback and letting the caller use Gemini Vision on the original image buffer.');
+
+        if (typeof options.onVisionFallback === 'function') {
+          return await options.onVisionFallback(source);
+        }
+
+        const skipErr = new Error('Vercel bypasses local Tesseract; Gemini Vision fallback must handle this image buffer.');
+        skipErr.code = 'VERCEL_TESSERACT_BYPASS';
+        throw skipErr;
+      }
+
       console.log('OCR.space failed, using local Tesseract fallback...');
       return await this.processWithTesseract(source);
     }
   }
 
   async processWithTesseract(imageSource) {
+    if (isVercelRuntime()) {
+      console.warn('[OCR Router] Skipping local Tesseract entirely on Vercel to avoid WASM ENOENT/Aborted crashes.');
+      return '';
+    }
+
     try {
       const { data: { text } } = await Tesseract.recognize(imageSource, 'eng');
-      return text || "";
+      return text || '';
     } catch (err) {
-      return "";
+      const message = (err && (err.message || String(err))) || '';
+      const isWasmInitFailure = /ENOENT|Aborted|tesseract\.wasm|Failed to fetch|fetch failed|wasm/i.test(message);
+
+      if (isWasmInitFailure) {
+        console.warn('[OCR Router] Tesseract WASM initialization failed safely; falling back to Gemini Vision instead of crashing the process.', message);
+      } else {
+        console.warn('[OCR Router] Local Tesseract failed safely:', message || 'unknown Tesseract error');
+      }
+
+      return '';
     }
   }
 

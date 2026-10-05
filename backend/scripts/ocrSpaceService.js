@@ -5,6 +5,8 @@ const path = require('path');
 const FormData = require('form-data');
 const { createCanvas } = require('@napi-rs/canvas');
 
+const isVercelRuntime = () => process.env.VERCEL === 'true' || process.env.VERCEL === true || process.env.VERCEL === '1';
+
 function getPdfParse() {
   try {
     const rawPdfParse = require('pdf-parse');
@@ -207,6 +209,13 @@ class OCRSpaceService {
         (hfErr.message && hfErr.message.toLowerCase().includes('timeout'));
 
       if (isTimeout) {
+        if (isVercelRuntime()) {
+          console.warn('[HF Service] Vercel detected. Bypassing local Tesseract because WASM OCR is unsafe in serverless mode. Gemini Vision must handle the image buffer next.');
+          const timeoutErr = new Error('Vercel bypasses local Tesseract; Gemini Vision fallback should handle this image.');
+          timeoutErr.code = 'VERCEL_TESSERACT_BYPASS';
+          throw timeoutErr;
+        }
+
         console.warn('[HF Service] Request timed out after 35 s — the Space may be cold-starting. Falling through to local OCR fallback.');
         const timeoutErr = new Error('Hugging Face OCR service timed out (35 s). Falling back to local OCR.');
         timeoutErr.code = 'HF_TIMEOUT';
@@ -218,6 +227,13 @@ class OCRSpaceService {
       } else {
         console.error('[HF Service] Network error:', hfErr.message);
       }
+
+      if (isVercelRuntime()) {
+        const bypassErr = new Error('Vercel runtime detected; local Tesseract fallback is disabled. Use Gemini Vision fallback for this image.');
+        bypassErr.code = 'VERCEL_TESSERACT_BYPASS';
+        throw bypassErr;
+      }
+
       throw new Error('HF OCR processing failed: ' + hfErr.message);
     }
   }
