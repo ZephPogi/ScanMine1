@@ -37,13 +37,23 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
     // If it returns empty text (scanned/image PDF), fall through to temp-file OCR.
     let tempPath = null;
     try {
-      const pdfParse = require('pdf-parse');
+      const importedPdf = require('pdf-parse');
+      const pdfParse = typeof importedPdf === 'function'
+        ? importedPdf
+        : (importedPdf && typeof importedPdf.default === 'function'
+          ? importedPdf.default
+          : (importedPdf && typeof importedPdf.pdfParse === 'function' ? importedPdf.pdfParse : null));
+
+      if (!pdfParse) {
+        throw new Error('pdf-parse export is unavailable in this runtime.');
+      }
+
       // Guard: filePath may itself be a Buffer (Supabase/Multer memory storage).
       // Never pass a Buffer object to fs.readFileSync — use it directly instead.
       const dataBuffer = fileBuffer
         || (Buffer.isBuffer(filePath) ? filePath : fs.readFileSync(filePath));
       const data = await pdfParse(dataBuffer);
-      const extractedText = (data.text || '').trim();
+      const extractedText = (data && data.text ? data.text : '').trim();
 
       if (extractedText.length > 0) {
         // Digital PDF — text layer found, return immediately.
@@ -182,15 +192,34 @@ ${text.slice(0, 12000)}
 
 JSON output:`;
 
-    const response = await genai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema:   QUESTION_SCHEMA,
-        temperature:      0.4,
+    let response;
+    let lastError;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        response = await genai.models.generateContent({
+          model: 'gemini-3.6-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema:   QUESTION_SCHEMA,
+            temperature:      0.4,
+          }
+        });
+        break;
+      } catch (error) {
+        lastError = error;
+        const message = (error?.message || '').toLowerCase();
+        const status = String(error?.status || error?.code || '');
+        const isRetryableGeminiError = status === '503' || /503|service unavailable|high demand|overloaded|rate limit|too many requests|429/.test(message);
+
+        if (attempt >= 3 || !isRetryableGeminiError) {
+          throw error;
+        }
+
+        console.warn(`[generateQuizFromText] Gemini temporarily unavailable (attempt ${attempt}/3). Retrying in 2s...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
-    });
+    }
 
     // ── Parse response ───────────────────────────────────────────────────
     const rawText = response.text?.trim() ?? '';

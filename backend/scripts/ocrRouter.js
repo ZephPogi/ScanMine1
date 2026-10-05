@@ -4,12 +4,17 @@ const OCRSpaceService = require('./ocrSpaceService');
 const fs = require('fs');
 const path = require('path');
 
-// VERCEL FIX: Use a more robust require for pdf-parse
-let pdf;
+// VERCEL FIX: Use a robust pdf-parse import that supports ESM/CJS default exports.
+let pdfParse;
 try {
-  pdf = require('pdf-parse');
+  const importedPdf = require('pdf-parse');
+  pdfParse = typeof importedPdf === 'function'
+    ? importedPdf
+    : (importedPdf && typeof importedPdf.default === 'function'
+      ? importedPdf.default
+      : (importedPdf && typeof importedPdf.pdfParse === 'function' ? importedPdf.pdfParse : null));
 } catch (e) {
-  console.error("Critical: pdf-parse could not be loaded");
+  console.error('Critical: pdf-parse could not be loaded', e.message);
 }
 
 class OCRRouter {
@@ -31,12 +36,12 @@ class OCRRouter {
         // Handle both Buffer and Path safely
         const dataBuffer = Buffer.isBuffer(source) ? source : fs.readFileSync(source);
 
-        // VERCEL FIX: Handle different export styles
-        const parseFunc = typeof pdf === 'function' ? pdf : (pdf?.default || null);
+        // VERCEL FIX: Handle different export styles and guard against default-export issues.
+        const parseFunc = pdfParse;
 
         if (parseFunc) {
           const data = await parseFunc(dataBuffer);
-          if (data.text && data.text.trim().length > 0) return data.text;
+          if (data && data.text && data.text.trim().length > 0) return data.text;
         }
 
         console.log('Digital parse empty or failed. Trying OCR.space...');

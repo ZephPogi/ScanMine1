@@ -3,6 +3,55 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const FormData = require('form-data');
+const { createCanvas } = require('@napi-rs/canvas');
+
+function getPdfParse() {
+  try {
+    const importedPdf = require('pdf-parse');
+    if (typeof importedPdf === 'function') return importedPdf;
+    if (importedPdf && typeof importedPdf.default === 'function') return importedPdf.default;
+    if (importedPdf && typeof importedPdf.pdfParse === 'function') return importedPdf.pdfParse;
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function extractDigitalPdfText(pdfBuffer) {
+  const pdfParse = getPdfParse();
+  if (!pdfParse || !Buffer.isBuffer(pdfBuffer)) return '';
+
+  try {
+    const data = await pdfParse(pdfBuffer);
+    const text = (data && typeof data.text === 'string' ? data.text : '').trim();
+    return text;
+  } catch (error) {
+    console.warn('[HF Service] PDF digital text parse failed:', error.message);
+    return '';
+  }
+}
+
+async function convertPdfToImageBuffers(pdfBuffer) {
+  try {
+    const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdf = await pdfjsLib.getDocument({ data: pdfBuffer }).promise;
+    const pageBuffers = [];
+
+    for (let pageNumber = 1; pageNumber <= Math.min(pdf.numPages, 10); pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      pageBuffers.push(canvas.toBuffer('image/png'));
+    }
+
+    return pageBuffers;
+  } catch (error) {
+    console.warn('[HF Service] PDF page rendering failed:', error.message);
+    return [];
+  }
+}
 
 /**
  * OCR.space Service for Handwritten Detection
@@ -35,17 +84,36 @@ class OCRSpaceService {
   }
 
   async recognizeHandwritingBufferUpload(imageBuffer, engine = '2') {
+    const isPdfBuffer = Buffer.isBuffer(imageBuffer) && imageBuffer.length > 4 &&
+      imageBuffer[0] === 0x25 &&
+      imageBuffer[1] === 0x50;
+    const hasHfConfig = !!(process.env.HF_SPACE_URL && process.env.HF_SPACE_URL.startsWith('http'));
+
+    if (isPdfBuffer && hasHfConfig) {
+      const digitalText = await extractDigitalPdfText(imageBuffer);
+      if (digitalText && digitalText.trim()) {
+        return digitalText.trim();
+      }
+
+      const pageImages = await convertPdfToImageBuffers(imageBuffer);
+      if (pageImages.length > 0) {
+        let combinedText = '';
+        for (let i = 0; i < pageImages.length; i++) {
+          const pageText = await this.sendImageToHuggingFace(pageImages[i], `page-${i + 1}.png`, 'image/png');
+          if (pageText && pageText.trim()) {
+            combinedText += (combinedText ? '\n' : '') + pageText.trim();
+          }
+        }
+        if (combinedText.trim()) return combinedText.trim();
+      }
+    }
+
     if (!this.apiKey) {
       throw new Error('OCR_SPACE_API_KEY not set in environment variables');
     }
 
     try {
       const formData = new FormData();
-
-      // 1. Detect File Type
-      const isPdfBuffer = imageBuffer.length > 4 &&
-        imageBuffer[0] === 0x25 &&
-        imageBuffer[1] === 0x50;
 
       // 2. THE CRITICAL CHANGE: Use 'file' instead of 'base64Image'
       // This sends raw bytes, which Engine 3 handles much more reliably
@@ -63,87 +131,13 @@ class OCRSpaceService {
 
       console.log('Sending image to Hugging Face YOLOv8+TrOCR Hybrid Service...');
 
-      // ── Hugging Face YOLOv8 + TrOCR Hybrid Service ────────────────────────
-      // Sanitize the env var: strip any accidental 'HF_SPACE_URL=' prefix or
-      // surrounding quotes that some deployment tools inject.
-      let targetUrl = (process.env.HF_SPACE_URL || '')
-        .replace(/^HF_SPACE_URL=/, '')
-        .replace(/^['"]|['"]$/g, '')
-        .trim();
-
-      // Idempotent /extract-text suffix: append only when not already present.
-      if (targetUrl && !targetUrl.endsWith('/extract-text')) {
-        targetUrl = `${targetUrl.replace(/\/+$/, '')}/extract-text`;
-      }
-
-      // Guard: stop early if the URL is missing or still a placeholder.
-      if (!targetUrl || !targetUrl.startsWith('http')) {
-        console.error(
-          '[HF Service] HF_SPACE_URL is not configured or is invalid. ' +
-          'Set a valid URL in your .env to enable the Hugging Face OCR service.'
-        );
-        throw new Error(
-          'HF_SPACE_URL is not configured. Please set a valid Hugging Face Space URL in your environment variables.'
-        );
-      }
-
-      // Build a fresh FormData with the image buffer keyed as 'file'.
-      // FastAPI's UploadFile parameter expects exactly this field name.
       const hfFormData = new FormData();
       hfFormData.append('file', imageBuffer, {
         filename: isPdfBuffer ? 'document.pdf' : 'captured_paper.jpg',
         contentType: isPdfBuffer ? 'application/pdf' : 'image/jpeg',
       });
 
-      console.log('[HF Service] Target URL:', targetUrl);
-
-      let hfResponse;
-      try {
-        hfResponse = await axios.post(
-          targetUrl,
-          hfFormData,
-          {
-            headers: { ...hfFormData.getHeaders() },
-            // ── Strict 15-second timeout ──────────────────────────────────
-            // Vercel serverless functions are hard-killed after 45 seconds.
-            // Hugging Face Spaces can take 30–60 s to cold-start, so a 120 s
-            // timeout would always let Vercel kill the function first.
-            // 15 s gives HF a reasonable window for a warm response while
-            // leaving 30+ seconds for Gemini fallback + DB writes.
-            // On timeout the catch block below re-throws with code HF_TIMEOUT
-            // so ocrRouter's Tesseract fallback is triggered correctly.
-            timeout: 15000,
-          }
-        );
-      } catch (hfErr) {
-        const isTimeout =
-          hfErr.code === 'ECONNABORTED' ||
-          (hfErr.message && hfErr.message.toLowerCase().includes('timeout'));
-
-        if (isTimeout) {
-          console.warn(
-            '[HF Service] Request timed out after 15 s — the Space may be cold-starting. ' +
-            'Falling through to Tesseract/Gemini fallback.'
-          );
-          const timeoutErr = new Error(
-            'Hugging Face OCR service timed out (15 s). Falling back to local OCR.'
-          );
-          timeoutErr.code = 'HF_TIMEOUT';
-          throw timeoutErr;
-        }
-
-        // Non-timeout HF errors: log and re-throw for the outer catch below.
-        if (hfErr.response) {
-          console.error('[HF Service] API error response:', JSON.stringify(hfErr.response.data, null, 2));
-        } else {
-          console.error('[HF Service] Network error:', hfErr.message);
-        }
-        throw new Error('HF OCR processing failed: ' + hfErr.message);
-      }
-
-      const extractedText = hfResponse.data.text || '';
-      console.log('Hugging Face AI Output:\n', extractedText);
-      return extractedText;
+      return await this.sendImageToHuggingFace(imageBuffer, isPdfBuffer ? 'document.pdf' : 'captured_paper.jpg', isPdfBuffer ? 'application/pdf' : 'image/jpeg');
 
 
 
@@ -168,6 +162,63 @@ class OCRSpaceService {
 
   }
 
+
+  async sendImageToHuggingFace(imageBuffer, filename, contentType) {
+    let targetUrl = (process.env.HF_SPACE_URL || '')
+      .replace(/^HF_SPACE_URL=/, '')
+      .replace(/^['"]|['"]$/g, '')
+      .trim();
+
+    if (targetUrl && !targetUrl.endsWith('/extract-text')) {
+      targetUrl = `${targetUrl.replace(/\/+$/, '')}/extract-text`;
+    }
+
+    if (!targetUrl || !targetUrl.startsWith('http')) {
+      console.error(
+        '[HF Service] HF_SPACE_URL is not configured or is invalid. ' +
+        'Set a valid URL in your .env to enable the Hugging Face OCR service.'
+      );
+      throw new Error(
+        'HF_SPACE_URL is not configured. Please set a valid Hugging Face Space URL in your environment variables.'
+      );
+    }
+
+    const hfFormData = new FormData();
+    hfFormData.append('file', imageBuffer, {
+      filename,
+      contentType,
+    });
+
+    console.log('[HF Service] Target URL:', targetUrl);
+
+    try {
+      const hfResponse = await axios.post(targetUrl, hfFormData, {
+        headers: { ...hfFormData.getHeaders() },
+        timeout: 15000,
+      });
+
+      const extractedText = hfResponse.data.text || '';
+      console.log('Hugging Face AI Output:\n', extractedText);
+      return extractedText;
+    } catch (hfErr) {
+      const isTimeout = hfErr.code === 'ECONNABORTED' ||
+        (hfErr.message && hfErr.message.toLowerCase().includes('timeout'));
+
+      if (isTimeout) {
+        console.warn('[HF Service] Request timed out after 15 s — the Space may be cold-starting. Falling through to local OCR fallback.');
+        const timeoutErr = new Error('Hugging Face OCR service timed out (15 s). Falling back to local OCR.');
+        timeoutErr.code = 'HF_TIMEOUT';
+        throw timeoutErr;
+      }
+
+      if (hfErr.response) {
+        console.error('[HF Service] API error response:', JSON.stringify(hfErr.response.data, null, 2));
+      } else {
+        console.error('[HF Service] Network error:', hfErr.message);
+      }
+      throw new Error('HF OCR processing failed: ' + hfErr.message);
+    }
+  }
 
   async recognizeHandwritingFileUpload(imagePath) {
     if (!this.apiKey) {
