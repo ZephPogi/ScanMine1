@@ -7,7 +7,7 @@ const isVercelRuntime = () => process.env.VERCEL === 'true' || process.env.VERCE
 
 // Lazy-loaded only when Gemini fallback is triggered
 let _GoogleGenerativeAI = null;
-const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-2.5-pro'];
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-1.5-flash'];
 
 function getGoogleGenerativeAI() {
   if (!_GoogleGenerativeAI) {
@@ -46,14 +46,17 @@ async function callGeminiWithFailover(prompt, imageBuffer = null) {
         const message = (error?.message || '').toLowerCase();
 
         if (status === 404 || message.includes('404') || message.includes('not found') || message.includes('no longer available')) {
-          console.warn('[Gemini Failover] ' + modelName + ' returned 404. Skipping to next model...');
+          console.warn(`[Gemini Failover] ${modelName} returned 404. Skipping to next backup model...`);
           break;
         }
 
         if (status === 503 || status === 429 || message.includes('503') || message.includes('429') || message.includes('high demand') || message.includes('overloaded')) {
           if (attempt < MAX_ATTEMPTS) {
-            console.warn(`[Gemini Retry] ${modelName} 503 high demand (Attempt ${attempt}/${MAX_ATTEMPTS}). Retrying in 2s...`);
-            await new Promise(r => setTimeout(r, 2000));
+            const baseDelay = 1500 * Math.pow(1.8, attempt - 1);
+            const jitter = Math.random() * 800;
+            const backoffMs = Math.min(baseDelay + jitter, 10000);
+            console.warn(`[Gemini Retry] ${modelName} 503/high demand (Attempt ${attempt}/5). Waiting${(backoffMs/1000).toFixed(1)}s...`);
+            await new Promise(r => setTimeout(r, backoffMs));
             continue;
           }
           break;
@@ -65,6 +68,87 @@ async function callGeminiWithFailover(prompt, imageBuffer = null) {
   }
 
   throw new Error('All Gemini models are currently busy.');
+}
+
+async function callGroqVisionFallback(imageBuffer) {
+  if (!process.env.GROQ_API_KEY) {
+    throw new Error('GROQ_API_KEY is not set.');
+  }
+  if (!imageBuffer) {
+    throw new Error('An image buffer is required for Groq Vision fallback.');
+  }
+
+  const imageBase64 = Buffer.isBuffer(imageBuffer)
+    ? imageBuffer.toString('base64')
+    : Buffer.from(imageBuffer).toString('base64');
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'qwen/qwen3.8-27b',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Extract student name from header if present, and all multiple-choice answers written on this paper. Return STRICT valid JSON: {"studentName": "...", "answers": {"1": "A", "2": "B", "3": "C"}}',
+            },
+            {
+              type: 'image_url',
+              image_url: { url: `data:image/jpeg;base64,${imageBase64}` },
+            },
+          ],
+        },
+      ],
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Groq Vision request failed (${response.status}): ${errorText}`);
+  }
+
+  const result = await response.json();
+  const content = result.choices?.[0]?.message?.content;
+  if (typeof content !== 'string') {
+    throw new Error('Groq Vision returned no JSON content.');
+  }
+  return JSON.parse(content);
+}
+
+function sanitizeRawOcrTokens(rawTokens, studentAccountName) {
+  const headerBlocklist = new Set([
+    'name', 'date', 'score', 'subject', 'class', 'quiz',
+    'test', 'exam', 'section', 'teacher', 'student',
+  ]);
+  const accountNameParts = new Set(
+    String(studentAccountName || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '')
+      .split(/\s+/)
+      .filter(Boolean)
+  );
+  const tokens = Array.isArray(rawTokens)
+    ? rawTokens
+    : String(rawTokens || '').split(/\r?\n/);
+
+  return tokens
+    .map(token => String(token || '').replace(/[^A-Za-z0-9]/g, '').trim())
+    .filter(Boolean)
+    .filter(token => {
+      const normalizedToken = token.toLowerCase();
+      if (headerBlocklist.has(normalizedToken)) return false;
+      if (accountNameParts.has(normalizedToken)) return false;
+      if (token.length > 2 && !/^(true|false)$/i.test(token)) return false;
+      return /^[A-E1-4]$/i.test(token) || /^(true|false|t|f)$/i.test(token);
+    })
+    .map(token => token.toUpperCase());
 }
 
 /**
@@ -291,19 +375,18 @@ async function extractTextFromImageLegacy(imagePath, imageBuffer = null) {
  *   b) If no numbered answers found, fall back to sequential mapping:
  *      clean each non-empty line with /[^A-Za-z0-9]/g and map to Q1, Q2…
  *
- * STAGE 2: Gemini 3.6 Flash fallback (optional / conditional)
- *   Triggered only when ALL slots are '?' AND ENABLE_GEMINI_FALLBACK=true
- *   AND GEMINI_API_KEY is set.
+ * STAGE 2: Gemini, then Groq Vision fallback (optional / conditional)
+ *   Triggered for garbled answers when ENABLE_GEMINI_FALLBACK=true and at
+ *   least one provider key is configured.
  */
 /**
  * @param {string}      ocrText            Raw OCR text
  * @param {number}      [totalQuestions=0]  Number of questions (fills gaps with '?')
  * @param {Object}      [correctAnswers={}] Map of { [qNum]: expectedAnswer } used for
  *                                          answer-key-aware garble detection
- * @param {Buffer|null} [imageBuffer=null]  Raw image buffer — passed to Gemini Vision
- *                                          when garbled MC tokens are detected
+ * @param {Buffer|null} [imageBuffer=null]  Raw image buffer for vision fallbacks
  */
-async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers = {}, imageBuffer = null) {
+async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers = {}, imageBuffer = null, accountName = '') {
   // Expose imageBuffer under _imageBuffer so the STAGE 2 closure can access it
   const _imageBuffer = imageBuffer;
   const answers = {};
@@ -352,9 +435,7 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
 
   // ── STAGE 1b: Pure JS sequential fallback ────────────────────────────
   if (!numberedFound) {
-    const cleanLines = lines
-      .map(l => l.replace(/[^A-Za-z0-9]/g, '').trim())
-      .filter(Boolean);
+    const cleanLines = sanitizeRawOcrTokens(lines, accountName);
 
     if (cleanLines.length > 0) {
       console.log(
@@ -367,6 +448,21 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
       }
     }
   }
+  const applySanitizedOcrFallback = () => {
+    if (numberedFound) return;
+
+    const cleanTokens = sanitizeRawOcrTokens(lines, accountName);
+    Object.keys(answers).forEach(qNum => delete answers[qNum]);
+    const limit = totalQuestions > 0 ? Math.min(cleanTokens.length, totalQuestions) : cleanTokens.length;
+    for (let i = 0; i < limit; i++) {
+      answers[i + 1] = cleanTokens[i];
+    }
+    if (totalQuestions > 0) {
+      for (let q = 1; q <= totalQuestions; q++) {
+        if (!answers[q]) answers[q] = '?';
+      }
+    }
+  };
 
   // ── Fill missing question slots with '?' ─────────────────────────────
   if (totalQuestions > 0) {
@@ -386,7 +482,7 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
   // triggers Gemini Flash Vision to re-parse the original image.
   if (
     process.env.ENABLE_GEMINI_FALLBACK === 'true' &&
-    process.env.GEMINI_API_KEY
+    (process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY)
   ) {
     const questionNums = totalQuestions > 0
       ? Array.from({ length: totalQuestions }, (_, i) => i + 1)
@@ -420,74 +516,87 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
       } else {
         console.log(
           `[Parser] Garbled answers detected for Q${otherGarbledQNums.join(', Q')}. ` +
-          'Attempting Gemini 2.0 Flash fallback...'
+          'Attempting Gemini Flash fallback...'
         );
       }
 
-      try {
-        const GoogleGenerativeAI = getGoogleGenerativeAI();
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const applyAiResponse = (aiResponse) => {
+        extractedStudentName = typeof aiResponse.studentName === 'string'
+          ? aiResponse.studentName.trim()
+          : extractedStudentName;
+        const aiAnswers = aiResponse.answers && typeof aiResponse.answers === 'object'
+          ? aiResponse.answers
+          : aiResponse;
 
-        // Build a structured description of each question's expected format
-        // so Gemini knows exactly what kind of answer to look for.
-        const questionHints = questionNums.map(qNum => {
-          const expected = correctAnswers[qNum];
-          let type = 'Identification';
-          if (expected !== undefined) {
-            const exp = String(expected).trim().toUpperCase();
-            if (/^[A-E1-5]$/.test(exp))                     type = 'Multiple Choice (single letter A-E)';
-            else if (['TRUE','FALSE','T','F'].includes(exp)) type = 'True/False';
-          }
-          return `  Q${qNum}: ${type}`;
-        }).join('\n');
-
-        const basePrompt =
-          'You are an answer sheet parser. ' +
-          'Extract each student answer for the questions listed below. ' +
-          'Use the question type hints to decide what a valid answer looks like. ' +
-          'Return ONLY JSON: {"studentName":"Extracted student name from header or empty string","answers":{"1":"A","2":"B"}} ' +
-          'with no markdown or explanation.\n\n' +
-          'QUESTION TYPE HINTS:\n' + questionHints;
-
-        let result;
-
-        // ── Vision path: triggered when garbled-choice tokens are detected ──
-        // Pass the original image so Gemini can read the bubble/handwriting
-        // directly instead of relying on already-corrupted OCR text.
-        if (invalidChoiceQNums.length > 0 && _imageBuffer) {
-          const visionPrompt =
-            basePrompt + '\n\nThe student answer sheet image is attached. ' +
-            'Read the student name written on the header and the handwritten or bubble answers directly from the image.';
-          console.log('[Parser] Executing Gemini vision fallback with image buffer...');
-          result = await callGeminiWithFailover(visionPrompt, _imageBuffer);
-        } else {
-          // ── Text path: fall back to OCR text when no image is available ──
-          const textPrompt = basePrompt + '\n\nOCR TEXT:\n' + ocrText;
-          console.log('[Parser] Executing Gemini text fallback with OCR text...');
-          result = await callGeminiWithFailover(textPrompt);
-        }
-
-        const rawText = result.response.text().trim();
-
-        // Strip markdown fences if Gemini wraps in ```json ... ```
-        const jsonStr = rawText.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '').trim();
-        const geminiResponse = JSON.parse(jsonStr);
-        extractedStudentName = typeof geminiResponse.studentName === 'string'
-          ? geminiResponse.studentName.trim()
-          : '';
-        const geminiAnswers = geminiResponse.answers && typeof geminiResponse.answers === 'object'
-          ? geminiResponse.answers
-          : geminiResponse;
-
-        for (const [qStr, ans] of Object.entries(geminiAnswers)) {
+        for (const [qStr, ans] of Object.entries(aiAnswers)) {
           const qNum = parseInt(qStr, 10);
           if (!isNaN(qNum) && qNum >= 1) {
             answers[qNum] = String(ans).trim().toUpperCase();
           }
         }
-        console.log('[Parser] Gemini fallback answers applied:', answers);
-      } catch (geminiErr) {
-        console.warn('[Parser] Gemini fallback failed:', geminiErr.message);
+      };
+
+      let geminiFailed = !process.env.GEMINI_API_KEY;
+      if (process.env.GEMINI_API_KEY) {
+        try {
+          // Build a structured description of each question's expected format
+          // so Gemini knows exactly what kind of answer to look for.
+          const questionHints = questionNums.map(qNum => {
+            const expected = correctAnswers[qNum];
+            let type = 'Identification';
+            if (expected !== undefined) {
+              const exp = String(expected).trim().toUpperCase();
+              if (/^[A-E1-5]$/.test(exp))                     type = 'Multiple Choice (single letter A-E)';
+              else if (['TRUE','FALSE','T','F'].includes(exp)) type = 'True/False';
+            }
+            return `  Q${qNum}: ${type}`;
+          }).join('\n');
+
+          const basePrompt =
+            'You are an answer sheet parser. ' +
+            'Extract each student answer for the questions listed below. ' +
+            'Use the question type hints to decide what a valid answer looks like. ' +
+            'Return ONLY JSON: {"studentName":"Extracted student name from header or empty string","answers":{"1":"A","2":"B"}} ' +
+            'with no markdown or explanation.\n\n' +
+            'QUESTION TYPE HINTS:\n' + questionHints;
+
+          let result;
+          if (invalidChoiceQNums.length > 0 && _imageBuffer) {
+            const visionPrompt =
+              basePrompt + '\n\nThe student answer sheet image is attached. ' +
+              'Read the student name written on the header and the handwritten or bubble answers directly from the image.';
+            console.log('[Parser] Executing Gemini vision fallback with image buffer...');
+            result = await callGeminiWithFailover(visionPrompt, _imageBuffer);
+          } else {
+            const textPrompt = basePrompt + '\n\nOCR TEXT:\n' + ocrText;
+            console.log('[Parser] Executing Gemini text fallback with OCR text...');
+            result = await callGeminiWithFailover(textPrompt);
+          }
+
+          const rawText = result.response.text().trim();
+          const jsonStr = rawText.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '').trim();
+          applyAiResponse(JSON.parse(jsonStr));
+          geminiFailed = false;
+          console.log('[Parser] Gemini fallback answers applied:', answers);
+        } catch (geminiErr) {
+          geminiFailed = true;
+          console.warn('[Parser] Gemini fallback failed:', geminiErr.message);
+        }
+      }
+
+      if (geminiFailed && process.env.GROQ_API_KEY && _imageBuffer) {
+        try {
+          console.log('[Parser] Executing Groq Vision fallback with image buffer...');
+          applyAiResponse(await callGroqVisionFallback(_imageBuffer));
+          console.log('[Parser] Groq Vision fallback answers applied:', answers);
+        } catch (groqErr) {
+          console.warn('[Parser] Groq Vision fallback failed:', groqErr.message);
+          applySanitizedOcrFallback();
+          console.warn('[Parser] Using sanitized raw OCR tokens as the final fallback.');
+        }
+      } else if (geminiFailed) {
+        applySanitizedOcrFallback();
+        console.warn('[Parser] Groq Vision fallback unavailable; using sanitized raw OCR tokens.');
       }
     } else {
       console.log('[Parser] All answers passed garble check — Gemini fallback not needed.');
@@ -532,7 +641,13 @@ async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null,
       correctAnswers[idx + 1] = key.answer_text?.toString().trim();
     });
 
-    const parsedAnswers = await parseStudentAnswers(ocrText, answerKeys.length, correctAnswers, imageBuffer);
+    const parsedAnswers = await parseStudentAnswers(
+      ocrText,
+      answerKeys.length,
+      correctAnswers,
+      imageBuffer,
+      requestBody.studentName
+    );
     const studentAnswers = parsedAnswers.answers;
     const extractedStudentName = parsedAnswers.extractedStudentName;
 
@@ -629,4 +744,4 @@ function verifyNameMatch(accountName, paperName) {
   return ratio >= 0.4; // True if key name tokens match
 }
 
-module.exports = { gradeSubmission };
+module.exports = { gradeSubmission, sanitizeRawOcrTokens };

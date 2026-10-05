@@ -109,7 +109,7 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
  * Returns an initialised GoogleGenAI client.
  * Throws a descriptive error early if the API key is absent.
  */
-const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-2.5-pro'];
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-1.5-flash'];
 
 function getGenAIClient() {
   if (!process.env.GEMINI_API_KEY) {
@@ -157,14 +157,17 @@ async function callGeminiWithFailover(prompt, imageBuffer = null) {
         const message = (error?.message || '').toLowerCase();
 
         if (status === 404 || message.includes('404') || message.includes('not found') || message.includes('no longer available')) {
-          console.warn('[Gemini Failover] ' + modelName + ' returned 404. Skipping to next model...');
+          console.warn(`[Gemini Failover] ${modelName} returned 404. Skipping to next backup model...`);
           break;
         }
 
         if (status === 503 || status === 429 || message.includes('503') || message.includes('429') || message.includes('high demand') || message.includes('overloaded')) {
           if (attempt < MAX_ATTEMPTS) {
-            console.warn(`[Gemini Retry] ${modelName} 503 high demand (Attempt ${attempt}/${MAX_ATTEMPTS}). Retrying in 2s...`);
-            await new Promise(r => setTimeout(r, 2000));
+            const baseDelay = 1500 * Math.pow(1.8, attempt - 1);
+            const jitter = Math.random() * 800;
+            const backoffMs = Math.min(baseDelay + jitter, 10000);
+            console.warn(`[Gemini Retry] ${modelName} 503/high demand (Attempt ${attempt}/5). Waiting${(backoffMs/1000).toFixed(1)}s...`);
+            await new Promise(r => setTimeout(r, backoffMs));
             continue;
           }
           break;
