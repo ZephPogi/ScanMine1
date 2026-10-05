@@ -53,6 +53,7 @@ class OCRRouter {
         console.log('Digital parse empty or failed. Trying OCR.space...');
         return await this.ocrSpaceService.recognizeHandwritingFromBuffer(dataBuffer, engine);
       } catch (err) {
+        if (err.code === 'HF_TIMEOUT') throw err;
         console.error('PDF Extraction failed:', err.message);
         // Ensure we pass a Buffer to the fallback, not a path string that might not exist
         const fallbackBuffer = Buffer.isBuffer(source) ? source : fs.readFileSync(source);
@@ -64,6 +65,8 @@ class OCRRouter {
     try {
       return await this.ocrSpaceService.recognizeHandwritingFromBuffer(source, engine);
     } catch (err) {
+      if (err.code === 'HF_TIMEOUT') throw err;
+
       if (isVercelRuntime()) {
         console.warn('[OCR Router] Vercel detected: skipping local Tesseract WASM fallback and letting the caller use Gemini Vision on the original image buffer.');
 

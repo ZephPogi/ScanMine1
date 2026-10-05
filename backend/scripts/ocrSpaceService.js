@@ -195,38 +195,39 @@ class OCRSpaceService {
 
     console.log('[HF Service] Target URL:', targetUrl);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
     try {
-      const hfResponse = await axios.post(targetUrl, hfFormData, {
-        headers: { ...hfFormData.getHeaders() },
-        timeout: 35000,
+      const hfResponse = await fetch(targetUrl, {
+        method: 'POST',
+        headers: hfFormData.getHeaders(),
+        body: hfFormData.getBuffer(),
+        signal: controller.signal,
       });
 
-      const extractedText = hfResponse.data.text || '';
+      if (!hfResponse.ok) {
+        const errorText = await hfResponse.text();
+        throw new Error(`Hugging Face OCR request failed (${hfResponse.status}): ${errorText}`);
+      }
+
+      const responseData = await hfResponse.json();
+      const extractedText = responseData.text || '';
       console.log('Hugging Face AI Output:\n', extractedText);
       return extractedText;
     } catch (hfErr) {
-      const isTimeout = hfErr.code === 'ECONNABORTED' ||
+      const isTimeout = controller.signal.aborted ||
+        hfErr.name === 'AbortError' ||
+        hfErr.code === 'ECONNABORTED' ||
         (hfErr.message && hfErr.message.toLowerCase().includes('timeout'));
 
       if (isTimeout) {
-        if (isVercelRuntime()) {
-          console.warn('[HF Service] Vercel detected. Bypassing local Tesseract because WASM OCR is unsafe in serverless mode. Gemini Vision must handle the image buffer next.');
-          const timeoutErr = new Error('Vercel bypasses local Tesseract; Gemini Vision fallback should handle this image.');
-          timeoutErr.code = 'VERCEL_TESSERACT_BYPASS';
-          throw timeoutErr;
-        }
-
-        console.warn('[HF Service] Request timed out after 35 s — the Space may be cold-starting. Falling through to local OCR fallback.');
-        const timeoutErr = new Error('Hugging Face OCR service timed out (35 s). Falling back to local OCR.');
+        const timeoutErr = new Error('Hugging Face OCR service timed out after 8 seconds.');
         timeoutErr.code = 'HF_TIMEOUT';
         throw timeoutErr;
       }
 
-      if (hfErr.response) {
-        console.error('[HF Service] API error response:', JSON.stringify(hfErr.response.data, null, 2));
-      } else {
-        console.error('[HF Service] Network error:', hfErr.message);
-      }
+      console.error('[HF Service] Network or API error:', hfErr.message);
 
       if (isVercelRuntime()) {
         const bypassErr = new Error('Vercel runtime detected; local Tesseract fallback is disabled. Use Gemini Vision fallback for this image.');
@@ -235,6 +236,8 @@ class OCRSpaceService {
       }
 
       throw new Error('HF OCR processing failed: ' + hfErr.message);
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 

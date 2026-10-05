@@ -19,7 +19,7 @@ function getGoogleGenerativeAI() {
 async function callGeminiWithFailover(prompt, imageBuffer = null) {
   const GoogleGenerativeAI = getGoogleGenerativeAI();
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const MAX_ATTEMPTS = 5;
+  const MAX_ATTEMPTS = 2;
 
   for (const modelName of GEMINI_MODELS) {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -55,7 +55,7 @@ async function callGeminiWithFailover(prompt, imageBuffer = null) {
             const baseDelay = 1500 * Math.pow(1.8, attempt - 1);
             const jitter = Math.random() * 800;
             const backoffMs = Math.min(baseDelay + jitter, 10000);
-            console.warn(`[Gemini Retry] ${modelName} 503/high demand (Attempt ${attempt}/5). Waiting${(backoffMs/1000).toFixed(1)}s...`);
+            console.warn(`[Gemini Retry] ${modelName} 503/high demand (Attempt ${attempt}/${MAX_ATTEMPTS}). Waiting${(backoffMs/1000).toFixed(1)}s...`);
             await new Promise(r => setTimeout(r, backoffMs));
             continue;
           }
@@ -290,6 +290,11 @@ async function extractTextFromImage(imagePath, imageBuffer = null) {
 
     return text;
   } catch (error) {
+    if (error && error.code === 'HF_TIMEOUT') {
+      console.warn('[HF Service] Timed out after 8s. Bypassing directly to Gemini/Groq Vision fallback...');
+      return '';
+    }
+
     const isBypass = error && (error.code === 'VERCEL_TESSERACT_BYPASS' || /Vercel bypass|bypass.*Tesseract/i.test(error.message || ''));
 
     if (isBypass || isVercelRuntime()) {
