@@ -109,7 +109,7 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
  * Returns an initialised GoogleGenAI client.
  * Throws a descriptive error early if the API key is absent.
  */
-const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-2.0-flash', 'gemini-2.5-flash'];
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-1.5-pro'];
 
 function getGenAIClient() {
   if (!process.env.GEMINI_API_KEY) {
@@ -120,70 +120,61 @@ function getGenAIClient() {
   return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 }
 
-function isRetryableGeminiError(error) {
-  const status = Number(error?.status || error?.code || 0);
-  const message = (error?.message || '').toLowerCase();
-
-  const isFailoverError =
-    status === 503 ||
-    status === 429 ||
-    status === 404 ||
-    message.includes('503') ||
-    message.includes('404') ||
-    message.includes('no longer available') ||
-    message.includes('high demand') ||
-    message.includes('overloaded');
-
-  return isFailoverError;
-}
-
 async function callGeminiWithFailover(prompt, imageBuffer = null) {
   const genai = getGenAIClient();
-  let lastError = null;
 
   for (const modelName of GEMINI_MODELS) {
-    try {
-      const payload = imageBuffer
-        ? [
-            { text: prompt },
-            {
-              inlineData: {
-                data: Buffer.isBuffer(imageBuffer)
-                  ? imageBuffer.toString('base64')
-                  : Buffer.from(imageBuffer).toString('base64'),
-                mimeType: 'image/jpeg',
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const payload = imageBuffer
+          ? [
+              { text: prompt },
+              {
+                inlineData: {
+                  data: Buffer.isBuffer(imageBuffer)
+                    ? imageBuffer.toString('base64')
+                    : Buffer.from(imageBuffer).toString('base64'),
+                  mimeType: 'image/jpeg',
+                },
               },
-            },
-          ]
-        : prompt;
+            ]
+          : prompt;
 
-      const response = await genai.models.generateContent({
-        model: modelName,
-        contents: payload,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: QUESTION_SCHEMA,
-          temperature: 0.4,
-        },
-      });
+        const response = await genai.models.generateContent({
+          model: modelName,
+          contents: payload,
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: QUESTION_SCHEMA,
+            temperature: 0.4,
+          },
+        });
 
-      return response;
-    } catch (error) {
-      lastError = error;
-      if (isRetryableGeminiError(error)) {
-        console.warn(`[Gemini Failover] ${modelName} returned ${error.status || 'error'}. Switching to next backup model...`);
+        return response;
+      } catch (error) {
         const status = Number(error?.status || error?.response?.status || error?.code || 0);
         const message = (error?.message || '').toLowerCase();
-        if (status === 503 || message.includes('high demand')) {
-          await new Promise(r => setTimeout(r, 1000));
+
+        if (status === 404 || message.includes('404') || message.includes('not found') || message.includes('no longer available')) {
+          console.warn('[Gemini Failover] ' + modelName + ' returned 404. Skipping to next model...');
+          break;
         }
-        continue;
+
+        if (status === 503 || status === 429 || message.includes('503') || message.includes('429') || message.includes('high demand')) {
+          if (attempt < 3) {
+            console.warn('[Gemini Retry] ' + modelName + ' 503 high demand (Attempt ' + attempt + '/3). Retrying in 1.5s...');
+            await new Promise(r => setTimeout(r, 1500));
+            continue;
+          }
+          break;
+        }
+
+        throw error;
       }
-      throw error;
     }
   }
 
-  throw new Error(lastError ? 'All Gemini models are currently busy. Please try again in a moment.' : 'All Gemini models are currently busy. Please try again in a moment.');
+  throw new Error('All Gemini models are currently busy.');
 }
 
 // JSON schema that Gemini must conform to for each question

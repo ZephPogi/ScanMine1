@@ -7,7 +7,7 @@ const isVercelRuntime = () => process.env.VERCEL === 'true' || process.env.VERCE
 
 // Lazy-loaded only when Gemini fallback is triggered
 let _GoogleGenerativeAI = null;
-const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-2.0-flash', 'gemini-2.5-flash'];
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-1.5-pro'];
 
 function getGoogleGenerativeAI() {
   if (!_GoogleGenerativeAI) {
@@ -16,63 +16,54 @@ function getGoogleGenerativeAI() {
   return _GoogleGenerativeAI;
 }
 
-function isRetryableGeminiError(error) {
-  const status = Number(error?.status || error?.response?.status || error?.code || 0);
-  const message = (error?.message || '').toLowerCase();
-
-  const isFailoverError =
-    status === 503 ||
-    status === 429 ||
-    status === 404 ||
-    message.includes('503') ||
-    message.includes('404') ||
-    message.includes('no longer available') ||
-    message.includes('high demand') ||
-    message.includes('overloaded');
-
-  return isFailoverError;
-}
-
 async function callGeminiWithFailover(prompt, imageBuffer = null) {
   const GoogleGenerativeAI = getGoogleGenerativeAI();
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  let lastError = null;
 
   for (const modelName of GEMINI_MODELS) {
-    try {
-      const model = genAI.getGenerativeModel({ model: modelName });
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const model = genAI.getGenerativeModel({ model: modelName });
 
-      const payload = imageBuffer
-        ? [
-            prompt,
-            {
-              inlineData: {
-                data: Buffer.isBuffer(imageBuffer)
-                  ? imageBuffer.toString('base64')
-                  : Buffer.from(imageBuffer).toString('base64'),
-                mimeType: 'image/jpeg',
+        const payload = imageBuffer
+          ? [
+              prompt,
+              {
+                inlineData: {
+                  data: Buffer.isBuffer(imageBuffer)
+                    ? imageBuffer.toString('base64')
+                    : Buffer.from(imageBuffer).toString('base64'),
+                  mimeType: 'image/jpeg',
+                },
               },
-            },
-          ]
-        : prompt;
+            ]
+          : prompt;
 
-      return await model.generateContent(payload);
-    } catch (error) {
-      lastError = error;
-      if (isRetryableGeminiError(error)) {
-        console.warn(`[Gemini Failover] ${modelName} returned ${error.status || 'error'}. Switching to next backup model...`);
+        return await model.generateContent(payload);
+      } catch (error) {
         const status = Number(error?.status || error?.response?.status || error?.code || 0);
         const message = (error?.message || '').toLowerCase();
-        if (status === 503 || message.includes('high demand')) {
-          await new Promise(r => setTimeout(r, 1000));
+
+        if (status === 404 || message.includes('404') || message.includes('not found') || message.includes('no longer available')) {
+          console.warn('[Gemini Failover] ' + modelName + ' returned 404. Skipping to next model...');
+          break;
         }
-        continue;
+
+        if (status === 503 || status === 429 || message.includes('503') || message.includes('429') || message.includes('high demand')) {
+          if (attempt < 3) {
+            console.warn('[Gemini Retry] ' + modelName + ' 503 high demand (Attempt ' + attempt + '/3). Retrying in 1.5s...');
+            await new Promise(r => setTimeout(r, 1500));
+            continue;
+          }
+          break;
+        }
+
+        throw error;
       }
-      throw error;
     }
   }
 
-  throw new Error(lastError ? 'All Gemini models are currently busy. Please try again in a moment.' : 'All Gemini models are currently busy. Please try again in a moment.');
+  throw new Error('All Gemini models are currently busy.');
 }
 
 /**
