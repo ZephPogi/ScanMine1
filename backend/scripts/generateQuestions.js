@@ -37,12 +37,13 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
     // If it returns empty text (scanned/image PDF), fall through to temp-file OCR.
     let tempPath = null;
     try {
-      const importedPdf = require('pdf-parse');
-      const pdfParse = typeof importedPdf === 'function'
-        ? importedPdf
-        : (importedPdf && typeof importedPdf.default === 'function'
-          ? importedPdf.default
-          : (importedPdf && typeof importedPdf.pdfParse === 'function' ? importedPdf.pdfParse : null));
+      let pdfParse;
+      try {
+        const rawPdfParse = require('pdf-parse');
+        pdfParse = typeof rawPdfParse === 'function' ? rawPdfParse : (rawPdfParse.default || rawPdfParse);
+      } catch (e) {
+        console.error('pdf-parse initialization failed:', e);
+      }
 
       if (!pdfParse) {
         throw new Error('pdf-parse export is unavailable in this runtime.');
@@ -194,7 +195,7 @@ JSON output:`;
 
     let response;
     let lastError;
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         response = await genai.models.generateContent({
           model: 'gemini-3.6-flash',
@@ -212,12 +213,12 @@ JSON output:`;
         const status = String(error?.status || error?.code || '');
         const isRetryableGeminiError = status === '503' || /503|service unavailable|high demand|overloaded|rate limit|too many requests|429/.test(message);
 
-        if (attempt >= 3 || !isRetryableGeminiError) {
+        if (attempt >= 2 || !isRetryableGeminiError) {
           throw error;
         }
 
-        console.warn(`[generateQuizFromText] Gemini temporarily unavailable (attempt ${attempt}/3). Retrying in 2s...`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.warn(`[generateQuizFromText] Gemini temporarily unavailable (attempt ${attempt}/2). Retrying in 1s...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 

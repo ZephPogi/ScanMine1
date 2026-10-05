@@ -7,14 +7,10 @@ const path = require('path');
 // VERCEL FIX: Use a robust pdf-parse import that supports ESM/CJS default exports.
 let pdfParse;
 try {
-  const importedPdf = require('pdf-parse');
-  pdfParse = typeof importedPdf === 'function'
-    ? importedPdf
-    : (importedPdf && typeof importedPdf.default === 'function'
-      ? importedPdf.default
-      : (importedPdf && typeof importedPdf.pdfParse === 'function' ? importedPdf.pdfParse : null));
+  const rawPdfParse = require('pdf-parse');
+  pdfParse = typeof rawPdfParse === 'function' ? rawPdfParse : (rawPdfParse.default || rawPdfParse);
 } catch (e) {
-  console.error('Critical: pdf-parse could not be loaded', e.message);
+  console.error('pdf-parse initialization failed:', e);
 }
 
 class OCRRouter {

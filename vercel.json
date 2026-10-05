@@ -17,9 +17,8 @@
     }
   ],
   "functions": {
-    "api/index.js": {
-      "maxDuration": 45,
-      "includeFiles": "{**/opencv-wasm/**/*.wasm,**/pdf-parse/**/*.mjs,**/tesseract.js-core/**/*.wasm}"
+    "api/**/*.js": {
+      "maxDuration": 60
     }
   },
   "env": {

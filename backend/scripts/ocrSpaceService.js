@@ -33,7 +33,8 @@ async function extractDigitalPdfText(pdfBuffer) {
 
 async function convertPdfToImageBuffers(pdfBuffer) {
   try {
-    const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdfModule = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdfjsLib = pdfModule.default || pdfModule;
     const pdf = await pdfjsLib.getDocument({ data: pdfBuffer }).promise;
     const pageBuffers = [];
 
