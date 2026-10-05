@@ -86,6 +86,17 @@ async function runStartupMigrations() {
     console.error('Migration warning (raw scores):', err.message);
   }
 
+  // 4b. Track whether a submission was verified
+  try {
+    await db.query(`
+      ALTER TABLE Student_Submissions
+      ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    console.log('Migration OK: Student_Submissions.is_verified column ready');
+  } catch (err) {
+    console.error('Migration warning (submission verification):', err.message);
+  }
+
   // 5a. Add class_code column to Classes (check information_schema first to
   //     avoid a table lock if the column is already present)
   try {
@@ -802,11 +813,11 @@ app.post('/api/grade-manual', async (req, res) => {
 
     // 4. Save
     await db.query(
-      `INSERT INTO Student_Submissions (student_id, exam_id, score, feedback, points_earned, total_items)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO Student_Submissions (student_id, exam_id, score, feedback, points_earned, total_items, is_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (student_id, exam_id)
-       DO UPDATE SET score = EXCLUDED.score, feedback = EXCLUDED.feedback, points_earned = EXCLUDED.points_earned, total_items = EXCLUDED.total_items, created_at = NOW()`,
-      [studentId, examId, percentage, feedback, totalScore, maxScore]
+       DO UPDATE SET score = EXCLUDED.score, feedback = EXCLUDED.feedback, points_earned = EXCLUDED.points_earned, total_items = EXCLUDED.total_items, is_verified = EXCLUDED.is_verified, created_at = NOW()`,
+      [studentId, examId, percentage, feedback, totalScore, maxScore, true]
     );
 
     const subRes = await db.query('SELECT id FROM Student_Submissions WHERE student_id = $1 AND exam_id = $2', [studentId, examId]);

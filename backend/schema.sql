@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS Student_Submissions (
     score NUMERIC(5,2),
     feedback TEXT,
     image_url TEXT,
+    is_verified BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

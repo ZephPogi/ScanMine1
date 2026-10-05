@@ -1,7 +1,7 @@
 /* eslint-disable */
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Search, UserPlus, UserMinus, Download, CheckSquare, Square, MessageSquare, Camera, Edit, Sparkles } from 'lucide-react';
+import { Trash2, Search, UserPlus, UserMinus, Download, CheckSquare, Square, MessageSquare, Camera, Edit, Sparkles, Eye } from 'lucide-react';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import './SectionDetails.css';
@@ -856,14 +856,20 @@ const SectionDetails = ({ section, onBack }) => {
 
       {showExamDetails && (
         <div className="modal-overlay" onClick={() => setShowExamDetails(null)}>
-          <div className="modal-content details-modal" style={{ pointerEvents: 'auto', maxHeight: '90vh', overflowY: 'auto', width: '95%', maxWidth: '1000px' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <h2 style={{ margin: 0 }}>Exam Details: {showExamDetails?.title || 'Untitled'}</h2>
+          <div className="modal-content details-modal exam-details-modal" onClick={e => e.stopPropagation()}>
+            <div className="exam-details-header">
+              <div className="exam-details-heading">
+                <div>
+                  <span className="exam-details-eyebrow">EXAM DETAILS</span>
+                  <h2>{showExamDetails?.title || 'Untitled'}</h2>
+                </div>
+                <span className="exam-items-pill">
+                  {(examQuestions?.manual?.length || 0) + (examQuestions?.generated?.length || 0)} items
+                </span>
               </div>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className="exam-details-actions">
                 <button
-                  className="btn-action"
+                  className="exam-action-button exam-action-primary"
                   onClick={() => {
                     wakeHuggingFaceSpace();
                     navigate('/auto-grading-results', {
@@ -876,21 +882,6 @@ const SectionDetails = ({ section, onBack }) => {
                       }
                     });
                   }}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '8px 16px',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-                    color: '#ffffff',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.25)',
-                    whiteSpace: 'nowrap'
-                  }}
                   title="Scan student papers for this exam"
                 >
                   <Camera size={16} />
@@ -898,7 +889,16 @@ const SectionDetails = ({ section, onBack }) => {
                 </button>
 
                 <button
-                  className="btn-action"
+                  className="exam-action-button"
+                  onClick={handleExportExcel}
+                  title="Export student scores to Excel"
+                >
+                  <Download size={16} />
+                  Export to Excel
+                </button>
+
+                <button
+                  className="exam-action-button"
                   onClick={() => {
                     wakeHuggingFaceSpace();
                     const currentAnswers = examQuestions?.manual?.map(a => cleanAnswer(a.correct_answer)).filter(Boolean).join(', ') || '';
@@ -906,43 +906,29 @@ const SectionDetails = ({ section, onBack }) => {
                     setManualAnswers(currentAnswers);
                     setShowAttachModal(true);
                   }}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '8px 16px',
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    background: '#f1f5f9',
-                    color: '#334155',
-                    border: '1.5px solid #cbd5e1',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap'
-                  }}
                   title="Edit or manually enter answer key"
                 >
                   <Edit size={15} />
-                  Edit/Manual Key
+                  Edit Key
                 </button>
 
                 {showExamDetails?.file_path && (
                   <button
-                    className="btn-action success"
+                    className="exam-icon-action"
                     onClick={() => window.open(showExamDetails.file_path, '_blank')}
-                    style={{ padding: '8px 16px', fontSize: '13px', whiteSpace: 'nowrap' }}
+                    title="View answer key document"
                   >
-                    📄 View Answer Key Document
+                    <Eye size={17} />
                   </button>
                 )}
-                <button className="close-btn" onClick={() => setShowExamDetails(null)}>×</button>
+                <button className="exam-icon-action exam-close-action" onClick={() => setShowExamDetails(null)} aria-label="Close exam details">×</button>
               </div>
             </div>
 
-            <div className="modal-body" style={{ display: 'flex', gap: '24px', padding: '20px' }}>
+            <div className="modal-body exam-details-grid">
               {/* Left Column: Answer Keys & OCR */}
-              <div style={{ flex: '1.2' }}>
-                <div className="details-section">
+              <div className="exam-details-left">
+                <div className="details-section exam-detail-card">
                   <h4>Manual Answer Key ({examQuestions?.manual?.length || 0})</h4>
                   <div className="questions-list">
                     {examQuestions?.manual && examQuestions.manual.length > 0 ? (
@@ -960,7 +946,7 @@ const SectionDetails = ({ section, onBack }) => {
                   </div>
                 </div>
 
-                <div className="details-section" style={{ background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <div className="details-section exam-detail-card exam-ocr-card">
                   <h4 style={{ margin: '0 0 10px 0' }}>OCR Answer Key Extraction</h4>
                   <div className="upload-row" onClick={() => answerKeyInputRef.current && answerKeyInputRef.current.click()} style={{ marginBottom: '10px' }}>
                     <span className="upload-placeholder">
@@ -1020,57 +1006,85 @@ const SectionDetails = ({ section, onBack }) => {
               </div>
 
               {/* Right Column: Student Progress */}
-              <div style={{ flex: '1', background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                  <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#1e293b' }}>Student Progress</h3>
-                  <button
-                    onClick={handleExportExcel}
-                    className="btn-action success"
-                    style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <Download size={14} />
-                    Export to Excel
-                  </button>
+              <section className="exam-detail-card exam-progress-card">
+                <div className="exam-card-heading">
+                  <div>
+                    <span className="exam-card-kicker">CLASS ACTIVITY</span>
+                    <h3>Student progress</h3>
+                  </div>
+                  <span className="exam-graded-pill">
+                    {students.filter(s => s.status === 'enrolled' && examSubmissions.some(sub => sub.student_id === s.user_id)).length} graded
+                  </span>
                 </div>
 
-                <div style={{ marginBottom: '25px', flex: 1, overflowY: 'auto' }}>
+                <div className="exam-progress-section">
                   <h5 style={{ color: '#059669', marginBottom: '10px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Graded ({students.filter(s => examSubmissions.some(sub => sub.student_id === s.user_id)).length})
                   </h5>
-                  <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                  <div className="exam-progress-list">
                     {students
                       .filter(s => s.status === 'enrolled')
                       .map(s => {
                         const sub = examSubmissions.find(sub => sub.student_id === s.user_id);
                         if (!sub) return null;
                         return (
-                          <div key={s.user_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #e2e8f0' }}>
-                            <span style={{ fontSize: '14px', color: '#334155', fontWeight: '500' }}>{s.name}</span>
-                            <span style={{ background: '#dcfce7', color: '#15803d', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: '700' }}>
-                              {sub.points_earned ?? sub.score ?? 0} / {sub.total_items ?? '?'}
+                          <div key={s.user_id} className="exam-progress-row">
+                            <div className="exam-progress-identity">
+                              <span className="exam-progress-name">{s.name}</span>
+                              {sub.is_verified !== false ? (
+                                <span className="exam-verified-badge">✔ Verified</span>
+                              ) : (
+                                <span className="exam-unverified-badge">Unverified</span>
+                              )}
+                            </div>
+                            <span className="exam-score-pill">
+                              {sub.points_earned ?? 0}/{sub.total_items ?? '?'}
                             </span>
+                            <div className="exam-student-actions">
+                              <button className="exam-row-action" onClick={() => handleViewStudent(s)} title={`View ${s.name}'s details`} aria-label={`View ${s.name}'s details`}>
+                                <Eye size={15} />
+                              </button>
+                              <button
+                                className="exam-row-action"
+                                onClick={() => navigate('/auto-grading-results', { state: { section, examId: showExamDetails.id, studentId: s.user_id, openScanModal: true, role: user?.role, studentName: user?.name || user?.fullName } })}
+                                title={`Re-scan ${s.name}'s paper`}
+                                aria-label={`Re-scan ${s.name}'s paper`}
+                              >
+                                <Camera size={15} />
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
                   </div>
                 </div>
 
-                <div>
+                <div className="exam-progress-section exam-pending-section">
                   <h5 style={{ color: '#64748b', marginBottom: '10px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Pending ({students.filter(s => s.status === 'enrolled' && !examSubmissions.some(sub => sub.student_id === s.user_id)).length})
                   </h5>
-                  <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                  <div className="exam-progress-list exam-pending-list">
                     {students
                       .filter(s => s.status === 'enrolled' && !examSubmissions.some(sub => sub.student_id === s.user_id))
                       .map(s => (
-                        <div key={s.user_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #e2e8f0' }}>
-                          <span style={{ fontSize: '14px', color: '#64748b' }}>{s.name}</span>
-                          <span style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase' }}>Not Submitted</span>
+                        <div key={s.user_id} className="exam-progress-row is-pending">
+                          <div className="exam-progress-identity">
+                            <span className="exam-progress-name">{s.name}</span>
+                            <span className="exam-pending-label">Not submitted</span>
+                          </div>
+                          <button
+                            className="exam-row-action"
+                            onClick={() => navigate('/auto-grading-results', { state: { section, examId: showExamDetails.id, studentId: s.user_id, openScanModal: true, role: user?.role, studentName: user?.name || user?.fullName } })}
+                            title={`Scan ${s.name}'s paper`}
+                            aria-label={`Scan ${s.name}'s paper`}
+                          >
+                            <Camera size={15} />
+                          </button>
                         </div>
                       ))}
                   </div>
                 </div>
-              </div>
+              </section>
             </div>
           </div>
         </div>

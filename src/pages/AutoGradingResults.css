@@ -165,6 +165,22 @@
     color: #1e293b;
 }
 
+.verified-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border: 1px solid #a7f3d0;
+    border-radius: 999px;
+    background: #ecfdf5;
+    color: #047857;
+    font-size: 0.7rem;
+    font-weight: 700;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
 .method-badge {
     background: #eef2ff;
     color: #4483f2;

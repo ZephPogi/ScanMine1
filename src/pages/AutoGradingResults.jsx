@@ -22,7 +22,7 @@ const AutoGradingResults = () => {
   const [showScanModal, setShowScanModal] = useState(() => !!location.state?.openScanModal);
   
   // Selection state
-  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [selectedStudentId, setSelectedStudentId] = useState(() => location.state?.studentId ? String(location.state.studentId) : '');
   const [selectedExamId, setSelectedExamId] = useState(() => location.state?.examId ? String(location.state.examId) : '');
   const [students, setStudents] = useState([]);
   const [exams, setExams] = useState([]);
@@ -49,6 +49,7 @@ const AutoGradingResults = () => {
         const formatted = data.map(sub => ({
           id: sub.id,
           name: sub.student_name,
+          is_verified: sub.is_verified,
           exam: sub.exam_title,
           submittedBy: 'System',
           method: 'AI Grading',
@@ -241,6 +242,7 @@ const handleScanRecord = async () => {
         score: `${totalScore} / ${maxScore}`,
         status: percentage >= 50 ? 'Pass' : 'Fail',
         feedback: data.result.feedback || '',
+        is_verified: data.result.is_verified !== false,
         image_url: data.result.image_url
       };
 
@@ -304,6 +306,7 @@ const handleScanRecord = async () => {
         score: `${data.result.totalScore} / ${data.result.maxScore}`,
         status: percentage >= 50 ? 'Pass' : 'Fail',
         feedback: data.result.feedback || '',
+        is_verified: true,
         image_url: null
       }, ...prev.filter(r => !(r.name === studentName && r.exam === examTitle))]);
       
@@ -355,7 +358,15 @@ const handleScanRecord = async () => {
               <tbody>
                 {studentResults.map((s) => (
                   <tr key={s.id}>
-                    <td className="student-name-cell">{s.name}</td>
+                    <td className="student-name-cell">
+                      <span>{s.name}</span>
+                      {s.is_verified !== false && (
+                        <span className="verified-badge inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <svg className="w-3 h-3 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                          Verified
+                        </span>
+                      )}
+                    </td>
                     <td>{s.exam}</td>
                     <td>{s.submittedBy}</td>
                     <td className="score-cell">{s.score}</td>

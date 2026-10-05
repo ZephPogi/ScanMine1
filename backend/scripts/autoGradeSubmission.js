@@ -537,9 +537,11 @@ async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null,
 
     const userRole = (requestBody.role || requestBody.userRole || '').toLowerCase();
     const isTeacher = userRole === 'teacher' || userRole === 'instructor' || userRole === 'admin';
+    const isVerifiedOwner = Boolean(extractedStudentName) &&
+      verifyNameMatch(requestBody.studentName, extractedStudentName);
 
     // Only check student account scans; teachers are trusted and bypassed
-    if (!isTeacher && extractedStudentName && !verifyNameMatch(requestBody.studentName, extractedStudentName)) {
+    if (!isTeacher && extractedStudentName && !isVerifiedOwner) {
       const error = new Error(`Paper ownership mismatch: This paper appears to belong to "${extractedStudentName}", but you are logged in as "${requestBody.studentName}".`);
       error.status = 400;
       error.code = 'NAME_MISMATCH';
@@ -582,8 +584,8 @@ async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null,
 
     // 5. Save or update result (overwrite if student already has a submission)
     await db.query(
-      `INSERT INTO Student_Submissions (student_id, exam_id, extracted_text, score, feedback, image_url, points_earned, total_items)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO Student_Submissions (student_id, exam_id, extracted_text, score, feedback, image_url, points_earned, total_items, is_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (student_id, exam_id)
        DO UPDATE SET 
          extracted_text = EXCLUDED.extracted_text, 
@@ -592,17 +594,19 @@ async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null,
          image_url = EXCLUDED.image_url, 
          points_earned = EXCLUDED.points_earned,
          total_items = EXCLUDED.total_items,
+        is_verified = EXCLUDED.is_verified,
          created_at = NOW()`,
-      [studentId, examId, ocrText, percentage, feedback, imageUrl, totalScore, maxScore]
+      [studentId, examId, ocrText, percentage, feedback, imageUrl, totalScore, maxScore, isTeacher || isVerifiedOwner]
     );
 
     const sub = await db.query(
-      'SELECT id FROM Student_Submissions WHERE student_id = $1 AND exam_id = $2',
+      'SELECT id, is_verified FROM Student_Submissions WHERE student_id = $1 AND exam_id = $2',
       [studentId, examId]
     );
 
     return {
       submission_id: sub.rows[0]?.id,
+      is_verified: sub.rows[0]?.is_verified,
       totalScore, maxScore, feedback,
       results: feedbackLines
     };
