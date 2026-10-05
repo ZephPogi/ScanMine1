@@ -109,7 +109,7 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
  * Returns an initialised GoogleGenAI client.
  * Throws a descriptive error early if the API key is absent.
  */
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-1.5-flash'];
 
 function getGenAIClient() {
   if (!process.env.GEMINI_API_KEY) {
@@ -121,9 +121,20 @@ function getGenAIClient() {
 }
 
 function isRetryableGeminiError(error) {
-  const message = (error?.message || '').toLowerCase();
   const status = Number(error?.status || error?.code || 0);
-  return status === 503 || status === 429 || /503|429|service unavailable|high demand|overloaded|rate limit|too many requests/.test(message);
+  const message = (error?.message || '').toLowerCase();
+
+  const isFailoverError =
+    status === 503 ||
+    status === 429 ||
+    status === 404 ||
+    message.includes('503') ||
+    message.includes('404') ||
+    message.includes('no longer available') ||
+    message.includes('high demand') ||
+    message.includes('overloaded');
+
+  return isFailoverError;
 }
 
 async function callGeminiWithFailover(prompt, imageBuffer = null) {
@@ -160,7 +171,7 @@ async function callGeminiWithFailover(prompt, imageBuffer = null) {
     } catch (error) {
       lastError = error;
       if (isRetryableGeminiError(error)) {
-        console.warn('[Gemini Failover] ' + modelName + ' high demand (503). Switching to backup model...');
+        console.warn(`[Gemini Failover] ${modelName} returned ${error.status || 'error'}. Switching to next backup model...`);
         continue;
       }
       throw error;
