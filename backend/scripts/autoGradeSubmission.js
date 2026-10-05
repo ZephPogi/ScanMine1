@@ -53,12 +53,20 @@ function isGarbledAnswer(studentAns, expectedAns) {
  * @param {string|number} correctAns  Correct answer from the answer key
  * @returns {boolean} true if the answer looks garbled and should trigger re-parse
  */
+function sanitizeAnswerText(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/^(?:Answer|Ans)\s*:\s*/i, '')
+    .replace(/^Option\s+/i, '')
+    .trim();
+}
+
 function isInvalidChoice(studentAns, correctAns) {
   if (!studentAns || studentAns === '?') return true;
 
-  // Strip optional "Answer: " prefix that some answer-key formats include
+  // Strip optional "Answer: " / "Ans: " / "Option " prefix that some answer-key formats include
   const isSingleLetterKey = /^[A-E1-5]$/i.test(
-    String(correctAns).replace(/Answer:\s*/i, '').trim()
+    sanitizeAnswerText(correctAns)
   );
 
   // If the expected answer is a single-letter MC key, any token longer than
@@ -366,6 +374,29 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
 
         let result;
 
+        const retryGeminiCall = async (operation) => {
+          let lastError;
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              return await operation(attempt);
+            } catch (error) {
+              lastError = error;
+              const status = Number(error?.status || error?.response?.status || error?.code || 0);
+              const message = (error?.message || '').toLowerCase();
+              const isRetryable = status === 503 || /503|service unavailable|high demand|overloaded|too many requests|rate limit|temporary|network|fetch failed/.test(message);
+
+              if (attempt >= 3 || !isRetryable) {
+                throw error;
+              }
+
+              console.warn(`[Parser] Gemini fallback temporarily unavailable (attempt ${attempt}/3). Retrying in 2s...`, error?.message || error);
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
+
+          throw lastError;
+        };
+
         // ── Vision path: triggered when garbled-choice tokens are detected ──
         // Pass the original image so Gemini can read the bubble/handwriting
         // directly instead of relying on already-corrupted OCR text.
@@ -383,13 +414,13 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
           const visionPrompt =
             basePrompt + '\n\nThe student answer sheet image is attached. ' +
             'Read the handwritten or bubble answers directly from the image.';
-          result = await model.generateContent([visionPrompt, imagePart]);
+          result = await retryGeminiCall(async () => model.generateContent([visionPrompt, imagePart]));
         } else {
           // ── Text path: fall back to OCR text when no image is available ──
           console.log('[Parser] Executing gemini-3.8-flash Text fallback with OCR text...');
           const model = genAI.getGenerativeModel({ model: 'gemini-3.8-flash' });
           const textPrompt = basePrompt + '\n\nOCR TEXT:\n' + ocrText;
-          result = await model.generateContent(textPrompt);
+          result = await retryGeminiCall(async () => model.generateContent(textPrompt));
         }
 
         const rawText = result.response.text().trim();
@@ -459,8 +490,9 @@ async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null,
     // 4. Compare each answer with enhanced fuzzy matching
     for (let i = 0; i < answerKeys.length; i++) {
       const qNum = i + 1;
-      const correctAnswer = answerKeys[i].answer_text?.toString().trim();
-      const studentAnswer = (studentAnswers[qNum] || '').trim();
+      const rawCorrectAnswer = answerKeys[i].answer_text?.toString().trim();
+      const correctAnswer = sanitizeAnswerText(rawCorrectAnswer);
+      const studentAnswer = sanitizeAnswerText(studentAnswers[qNum] || '');
 
       // Use enhanced fuzzy matching with dynamic thresholds
       const isCorrect = studentAnswer && ScannerLogic.isMatch(studentAnswer, correctAnswer);

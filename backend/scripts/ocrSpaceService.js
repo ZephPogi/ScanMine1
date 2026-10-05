@@ -194,7 +194,7 @@ class OCRSpaceService {
     try {
       const hfResponse = await axios.post(targetUrl, hfFormData, {
         headers: { ...hfFormData.getHeaders() },
-        timeout: 15000,
+        timeout: 35000,
       });
 
       const extractedText = hfResponse.data.text || '';
@@ -205,8 +205,8 @@ class OCRSpaceService {
         (hfErr.message && hfErr.message.toLowerCase().includes('timeout'));
 
       if (isTimeout) {
-        console.warn('[HF Service] Request timed out after 15 s — the Space may be cold-starting. Falling through to local OCR fallback.');
-        const timeoutErr = new Error('Hugging Face OCR service timed out (15 s). Falling back to local OCR.');
+        console.warn('[HF Service] Request timed out after 35 s — the Space may be cold-starting. Falling through to local OCR fallback.');
+        const timeoutErr = new Error('Hugging Face OCR service timed out (35 s). Falling back to local OCR.');
         timeoutErr.code = 'HF_TIMEOUT';
         throw timeoutErr;
       }
