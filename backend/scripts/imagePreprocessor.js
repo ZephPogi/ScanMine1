@@ -1,4 +1,16 @@
-const cv = require('opencv-wasm');
+let cvCache = null;
+function getCv() {
+  if (!cvCache) {
+    try {
+      cvCache = require('opencv-wasm');
+    } catch (error) {
+      console.warn('[ImagePreprocessor] OpenCV failed to load:', error.message);
+      return null;
+    }
+  }
+  return cvCache;
+}
+
 const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const fs = require('fs');
 const path = require('path');
@@ -12,6 +24,10 @@ class ImagePreprocessor {
    * Ensures OpenCV is initialized
    */
   static async ensureOpenCVReady() {
+    const cv = getCv();
+    if (!cv) {
+      throw new Error('OpenCV is unavailable in this environment. OCR preprocessing is disabled.');
+    }
     if (!cv.Mat) {
       await new Promise(resolve => {
         cv.onRuntimeInitialized = resolve;
@@ -25,6 +41,10 @@ class ImagePreprocessor {
    * @returns {Promise<Buffer>} - Grayscale image buffer
    */
   static async toGrayscale(imagePath) {
+    const cv = getCv();
+    if (!cv) {
+      throw new Error('OpenCV is unavailable in this environment. OCR preprocessing is disabled.');
+    }
     await this.ensureOpenCVReady();
 
     try {
@@ -71,6 +91,10 @@ class ImagePreprocessor {
    * @returns {Promise<Buffer>} - Binarized image buffer
    */
   static async binarize(imagePath, threshold = 140) {
+    const cv = getCv();
+    if (!cv) {
+      throw new Error('OpenCV is unavailable in this environment. OCR preprocessing is disabled.');
+    }
     await this.ensureOpenCVReady();
 
     try {
@@ -104,6 +128,10 @@ class ImagePreprocessor {
    * @returns {Promise<Buffer>} - Adaptively thresholded image buffer
    */
   static async adaptiveThreshold(imagePath) {
+    const cv = getCv();
+    if (!cv) {
+      throw new Error('OpenCV is unavailable in this environment. OCR preprocessing is disabled.');
+    }
     await this.ensureOpenCVReady();
 
     try {

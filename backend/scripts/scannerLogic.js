@@ -1,4 +1,16 @@
-const cv = require('opencv-wasm');
+let cvCache = null;
+function getCv() {
+  if (!cvCache) {
+    try {
+      cvCache = require('opencv-wasm');
+    } catch (error) {
+      console.warn('[ScannerLogic] OpenCV failed to load:', error.message);
+      return null;
+    }
+  }
+  return cvCache;
+}
+
 const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const levenshtein = require('fast-levenshtein');
 
@@ -140,6 +152,11 @@ class ScannerLogic {
    * @param {Buffer|string} imageSource - Image path or buffer of the MCQ zone
    */
   static async detectEncircledLetter(imageSource) {
+    const cv = getCv();
+    if (!cv) {
+      return null;
+    }
+
     try {
       // Ensure OpenCV is ready
       // Note: opencv-wasm often needs initialization
