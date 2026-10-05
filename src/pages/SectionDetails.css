@@ -1465,7 +1465,7 @@
 .exam-management {
     display: flex;
     flex-direction: column;
-    a width: 100%;
+    width: 100%;
     overflow: hidden;
 }
 
