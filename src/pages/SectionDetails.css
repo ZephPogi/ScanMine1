@@ -625,8 +625,8 @@
 
 /* Scrollable container for the AI Quiz Generator */
 .modal-content.quiz-gen-modal {
-    max-height: 85vh;
-    overflow-y: auto;
+    max-height: 80vh;
+    overflow-y: auto !important;
     width: 560px;
     max-width: 96vw;
     display: flex;

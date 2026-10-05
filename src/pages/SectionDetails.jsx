@@ -1176,7 +1176,7 @@ const SectionDetails = ({ section, onBack }) => {
 
       {showQuizGeneratorModal && (
         <div className="modal-overlay" onClick={closeQuizGeneratorModal}>
-          <div className="modal-content attach-modal quiz-gen-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content quiz-gen-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-bar">
               <span className="modal-prof-label">🧠 ScanMine AI Quiz Generator</span>
               <button className="modal-close-btn" onClick={closeQuizGeneratorModal} disabled={isGeneratingQuiz || isSavingQuiz}>×</button>
