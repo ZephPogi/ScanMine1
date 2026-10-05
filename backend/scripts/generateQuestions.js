@@ -109,7 +109,7 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
  * Returns an initialised GoogleGenAI client.
  * Throws a descriptive error early if the API key is absent.
  */
-const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-1.5-flash'];
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-2.0-flash', 'gemini-2.5-flash'];
 
 function getGenAIClient() {
   if (!process.env.GEMINI_API_KEY) {
@@ -172,6 +172,11 @@ async function callGeminiWithFailover(prompt, imageBuffer = null) {
       lastError = error;
       if (isRetryableGeminiError(error)) {
         console.warn(`[Gemini Failover] ${modelName} returned ${error.status || 'error'}. Switching to next backup model...`);
+        const status = Number(error?.status || error?.response?.status || error?.code || 0);
+        const message = (error?.message || '').toLowerCase();
+        if (status === 503 || message.includes('high demand')) {
+          await new Promise(r => setTimeout(r, 1000));
+        }
         continue;
       }
       throw error;

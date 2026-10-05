@@ -172,7 +172,7 @@ const StudentViewClass = () => {
       if (error.code === 'NAME_MISMATCH') {
         setScanError('❌ Name Mismatch: You can only scan your own paper.');
       } else {
-        alert("Error during scanning: " + error.message);
+        setScanError(error.message || 'Error during scanning. Please try again.');
       }
     } finally {
       setIsScanning(false);

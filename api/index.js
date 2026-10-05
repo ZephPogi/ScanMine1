@@ -704,17 +704,27 @@ app.post('/api/upload-answer-key-file', upload.single('file'), async (req, res) 
 });
 
 // --- STUDENT: UPLOAD PAPER ---
-app.post('/api/upload-paper', upload.single('studentPaper'), async (req, res) => {
+app.post('/api/upload-paper', (req, res, next) => {
+  upload.single('studentPaper')(req, res, error => {
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to upload paper'
+      });
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
     const file = req.file;
-    if (!file) return res.status(400).json({ error: 'No image uploaded' });
+    if (!file) return res.status(400).json({ success: false, message: 'No image uploaded' });
     
     // Ensure these IDs are integers
     const studentId = parseInt(req.body.studentId);
     const examId = parseInt(req.body.examId);
 
     if (isNaN(studentId) || isNaN(examId)) {
-      return res.status(400).json({ error: 'Invalid Student or Exam ID' });
+      return res.status(400).json({ success: false, message: 'Invalid Student or Exam ID' });
     }
 
     const { publicUrl } = await uploadFile(file.buffer, file.originalname, file.mimetype);
@@ -735,7 +745,10 @@ app.post('/api/upload-paper', upload.single('studentPaper'), async (req, res) =>
       });
     }
     // This ensures we send JSON even if the server crashes
-    res.status(500).json({ error: 'Internal Server Error: ' + error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Internal Server Error: ' + error.message
+    });
   }
 });
 
