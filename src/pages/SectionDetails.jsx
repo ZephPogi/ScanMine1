@@ -870,7 +870,9 @@ const SectionDetails = ({ section, onBack }) => {
                       state: {
                         section,
                         examId: showExamDetails.id,
-                        openScanModal: true
+                        openScanModal: true,
+                        role: user?.role,
+                        studentName: user?.name || user?.fullName
                       }
                     });
                   }}

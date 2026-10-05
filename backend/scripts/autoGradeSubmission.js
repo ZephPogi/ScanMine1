@@ -310,6 +310,7 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
   // Expose imageBuffer under _imageBuffer so the STAGE 2 closure can access it
   const _imageBuffer = imageBuffer;
   const answers = {};
+  let extractedStudentName = '';
 
   // ── STAGE 1a: Explicit numbered regex matching ────────────────────────
   const lines = ocrText.split(/\r?\n/);
@@ -447,8 +448,8 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
           'You are an answer sheet parser. ' +
           'Extract each student answer for the questions listed below. ' +
           'Use the question type hints to decide what a valid answer looks like. ' +
-          'Return ONLY a raw JSON object like {"1": "A", "2": "TRUE", "3": "Mercury"} ' +
-          'with no markdown, no explanation, and no extra keys.\n\n' +
+          'Return ONLY JSON: {"studentName":"Extracted student name from header or empty string","answers":{"1":"A","2":"B"}} ' +
+          'with no markdown or explanation.\n\n' +
           'QUESTION TYPE HINTS:\n' + questionHints;
 
         let result;
@@ -459,7 +460,7 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
         if (invalidChoiceQNums.length > 0 && _imageBuffer) {
           const visionPrompt =
             basePrompt + '\n\nThe student answer sheet image is attached. ' +
-            'Read the handwritten or bubble answers directly from the image.';
+            'Read the student name written on the header and the handwritten or bubble answers directly from the image.';
           console.log('[Parser] Executing Gemini vision fallback with image buffer...');
           result = await callGeminiWithFailover(visionPrompt, _imageBuffer);
         } else {
@@ -473,7 +474,13 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
 
         // Strip markdown fences if Gemini wraps in ```json ... ```
         const jsonStr = rawText.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '').trim();
-        const geminiAnswers = JSON.parse(jsonStr);
+        const geminiResponse = JSON.parse(jsonStr);
+        extractedStudentName = typeof geminiResponse.studentName === 'string'
+          ? geminiResponse.studentName.trim()
+          : '';
+        const geminiAnswers = geminiResponse.answers && typeof geminiResponse.answers === 'object'
+          ? geminiResponse.answers
+          : geminiResponse;
 
         for (const [qStr, ans] of Object.entries(geminiAnswers)) {
           const qNum = parseInt(qStr, 10);
@@ -491,13 +498,13 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
   }
 
   console.log('[Parser] Final parsed student answers:', answers);
-  return answers;
+  return { answers, extractedStudentName };
 }
 
 /**
  * Main Grading Logic
  */
-async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null, imageUrl = null) {
+async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null, imageUrl = null, requestBody = {}) {
   try {
     // 1. Get Answer Keys (manual first, then AI generated)
     let keysRes = await db.query('SELECT * FROM Answer_Keys WHERE exam_id = $1 ORDER BY id ASC', [examId]);
@@ -528,7 +535,20 @@ async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null,
       correctAnswers[idx + 1] = key.answer_text?.toString().trim();
     });
 
-    const studentAnswers = await parseStudentAnswers(ocrText, answerKeys.length, correctAnswers, imageBuffer);
+    const parsedAnswers = await parseStudentAnswers(ocrText, answerKeys.length, correctAnswers, imageBuffer);
+    const studentAnswers = parsedAnswers.answers;
+    const extractedStudentName = parsedAnswers.extractedStudentName;
+
+    const userRole = (requestBody.role || requestBody.userRole || '').toLowerCase();
+    const isTeacher = userRole === 'teacher' || userRole === 'instructor' || userRole === 'admin';
+
+    // Only check student account scans; teachers are trusted and bypassed
+    if (!isTeacher && extractedStudentName && !verifyNameMatch(requestBody.studentName, extractedStudentName)) {
+      const error = new Error(`Paper ownership mismatch: This paper appears to belong to "${extractedStudentName}", but you are logged in as "${requestBody.studentName}".`);
+      error.status = 400;
+      error.code = 'NAME_MISMATCH';
+      throw error;
+    }
 
     let correctCount = 0;
     const feedbackLines = [];
@@ -595,6 +615,17 @@ async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null,
     console.error('Grading Error:', error);
     throw error;
   }
+}
+
+function verifyNameMatch(accountName, paperName) {
+  if (!accountName || !paperName) return true; // Default to true if paper header is unreadable
+  const clean = (str) => str.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+  const accTokens = clean(accountName).split(/\s+/).filter(t => t.length > 1);
+  const paperTokens = clean(paperName).split(/\s+/).filter(t => t.length > 1);
+  if (accTokens.length === 0 || paperTokens.length === 0) return true;
+  const matches = paperTokens.filter(token => accTokens.includes(token));
+  const ratio = matches.length / Math.max(accTokens.length, paperTokens.length);
+  return ratio >= 0.4; // True if key name tokens match
 }
 
 module.exports = { gradeSubmission };

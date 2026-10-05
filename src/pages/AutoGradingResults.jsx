@@ -8,6 +8,7 @@ import Sidebar from './Sidebar';
 const AutoGradingResults = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   // Try to get section from location state, fallback to localStorage
   const [section] = useState(() => {
     if (location.state?.section) {
@@ -27,6 +28,7 @@ const AutoGradingResults = () => {
   const [exams, setExams] = useState([]);
 
   const [scanFile, setScanFile] = useState(null);
+  const [scanError, setScanError] = useState('');
   const scanFileRef = useRef(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -180,6 +182,7 @@ const handleScanRecord = async () => {
       return;
     }
 
+    setScanError('');
     setIsScanning(true);
     try {
       // --- AUTOMATIC COMPRESSION LOGIC START ---
@@ -203,6 +206,8 @@ const handleScanRecord = async () => {
       const formData = new FormData();
       formData.append('studentId', selectedStudentId);
       formData.append('examId', selectedExamId);
+      formData.append('role', location.state?.role || currentUser.role || '');
+      formData.append('studentName', location.state?.studentName || currentUser.name || currentUser.fullName || '');
       
       // Append the newly compressed image!
       formData.append('studentPaper', imageToUpload, 'captured_paper.jpg');
@@ -213,7 +218,11 @@ const handleScanRecord = async () => {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to grade paper');
+      if (!response.ok) {
+        const error = new Error(data.message || data.error || 'Failed to grade paper');
+        error.code = data.code;
+        throw error;
+      }
 
       // Optimistic UI Update
       const studentName = students.find(s => s.id === parseInt(selectedStudentId))?.name || 'Student';
@@ -249,7 +258,11 @@ const handleScanRecord = async () => {
       */
     } catch (error) {
       console.error("Error grading:", error);
-      alert("Error during scanning: " + error.message);
+      if (error.code === 'NAME_MISMATCH') {
+        setScanError('❌ Name Mismatch: You can only scan your own paper.');
+      } else {
+        alert("Error during scanning: " + error.message);
+      }
     } finally {
       setIsScanning(false);
     }
@@ -435,6 +448,12 @@ const handleScanRecord = async () => {
               <span>Scan Student Paper</span>
               <button className="scan-close-btn" onClick={closeScanModal}><X size={20} /></button>
             </div>
+
+            {scanError && (
+              <div role="alert" style={{ margin: '12px 20px', padding: '12px 14px', border: '1px solid #fecaca', borderRadius: '6px', background: '#fef2f2', color: '#b91c1c', fontSize: '14px', fontWeight: '600' }}>
+                {scanError}
+              </div>
+            )}
 
             <div className="scan-step">
               <h4 className="scan-step-title">Step 1: Select Student</h4>

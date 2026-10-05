@@ -722,11 +722,18 @@ app.post('/api/upload-paper', upload.single('studentPaper'), async (req, res) =>
     // This is where the crash likely happens.
     // We wrap it to see exactly what goes wrong.
     // FIX: Pass file.buffer as imageBuffer (4th param), not as imagePath (3rd param)
-    const result = await gradeSubmission(examId, studentId, null, file.buffer, publicUrl);
+    const result = await gradeSubmission(examId, studentId, null, file.buffer, publicUrl, req.body);
     
     res.json({ message: 'Paper graded successfully', result });
   } catch (error) {
     console.error('CRITICAL GRADING ERROR:', error);
+    if (error.code === 'NAME_MISMATCH') {
+      return res.status(400).json({
+        success: false,
+        code: 'NAME_MISMATCH',
+        message: error.message
+      });
+    }
     // This ensures we send JSON even if the server crashes
     res.status(500).json({ error: 'Internal Server Error: ' + error.message });
   }

@@ -18,6 +18,7 @@ const StudentViewClass = () => {
   const [showScanModal, setShowScanModal] = useState(false);
   const [selectedExamId, setSelectedExamId] = useState('');
   const [scanFile, setScanFile] = useState(null);
+  const [scanError, setScanError] = useState('');
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [capturedImage, setCapturedImage] = useState(null);
@@ -123,6 +124,7 @@ const StudentViewClass = () => {
       return;
     }
 
+    setScanError('');
     setIsScanning(true);
     try {
       const compressionOptions = {
@@ -141,6 +143,8 @@ const StudentViewClass = () => {
       const formData = new FormData();
       formData.append('studentId', user.id);
       formData.append('examId', selectedExamId);
+      formData.append('role', user?.role || '');
+      formData.append('studentName', user?.name || user?.fullName || '');
       formData.append('studentPaper', imageToUpload, 'captured_paper.jpg');
 
       const response = await fetch('/api/upload-paper', {
@@ -149,7 +153,11 @@ const StudentViewClass = () => {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to grade paper');
+      if (!response.ok) {
+        const error = new Error(data.message || data.error || 'Failed to grade paper');
+        error.code = data.code;
+        throw error;
+      }
 
       const totalScore = data.result.totalScore || 0;
       const maxScore = data.result.maxScore || 1;
@@ -161,7 +169,11 @@ const StudentViewClass = () => {
       navigate(`/student/grades/${section.id}`, { state: { section } });
     } catch (error) {
       console.error("Error grading:", error);
-      alert("Error during scanning: " + error.message);
+      if (error.code === 'NAME_MISMATCH') {
+        setScanError('❌ Name Mismatch: You can only scan your own paper.');
+      } else {
+        alert("Error during scanning: " + error.message);
+      }
     } finally {
       setIsScanning(false);
     }
@@ -257,6 +269,12 @@ const StudentViewClass = () => {
               <Camera size={20} style={{ display: 'inline', marginRight: '10px', verticalAlign: 'middle' }} />
               <span style={{ verticalAlign: 'middle' }}>Scan My Answer Sheet</span>
             </div>
+
+            {scanError && (
+              <div role="alert" style={{ margin: '12px 32px', padding: '12px 14px', border: '1px solid #fecaca', borderRadius: '6px', background: '#fef2f2', color: '#b91c1c', fontSize: '14px', fontWeight: '600' }}>
+                {scanError}
+              </div>
+            )}
 
             <div className="upload-section" style={{ padding: '20px 32px' }}>
               <label className="upload-label">Step 1: Select Exam</label>
