@@ -109,7 +109,7 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
  * Returns an initialised GoogleGenAI client.
  * Throws a descriptive error early if the API key is absent.
  */
-const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-1.5-pro'];
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-2.5-pro'];
 
 function getGenAIClient() {
   if (!process.env.GEMINI_API_KEY) {
@@ -122,9 +122,10 @@ function getGenAIClient() {
 
 async function callGeminiWithFailover(prompt, imageBuffer = null) {
   const genai = getGenAIClient();
+  const MAX_ATTEMPTS = 5;
 
   for (const modelName of GEMINI_MODELS) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
         const payload = imageBuffer
           ? [
@@ -160,10 +161,10 @@ async function callGeminiWithFailover(prompt, imageBuffer = null) {
           break;
         }
 
-        if (status === 503 || status === 429 || message.includes('503') || message.includes('429') || message.includes('high demand')) {
-          if (attempt < 3) {
-            console.warn('[Gemini Retry] ' + modelName + ' 503 high demand (Attempt ' + attempt + '/3). Retrying in 1.5s...');
-            await new Promise(r => setTimeout(r, 1500));
+        if (status === 503 || status === 429 || message.includes('503') || message.includes('429') || message.includes('high demand') || message.includes('overloaded')) {
+          if (attempt < MAX_ATTEMPTS) {
+            console.warn(`[Gemini Retry] ${modelName} 503 high demand (Attempt ${attempt}/${MAX_ATTEMPTS}). Retrying in 2s...`);
+            await new Promise(r => setTimeout(r, 2000));
             continue;
           }
           break;
