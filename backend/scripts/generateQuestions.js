@@ -109,6 +109,8 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
  * Returns an initialised GoogleGenAI client.
  * Throws a descriptive error early if the API key is absent.
  */
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+
 function getGenAIClient() {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error(
@@ -116,6 +118,56 @@ function getGenAIClient() {
     );
   }
   return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+}
+
+function isRetryableGeminiError(error) {
+  const message = (error?.message || '').toLowerCase();
+  const status = Number(error?.status || error?.code || 0);
+  return status === 503 || status === 429 || /503|429|service unavailable|high demand|overloaded|rate limit|too many requests/.test(message);
+}
+
+async function callGeminiWithFailover(prompt, imageBuffer = null) {
+  const genai = getGenAIClient();
+  let lastError = null;
+
+  for (const modelName of GEMINI_MODELS) {
+    try {
+      const payload = imageBuffer
+        ? [
+            { text: prompt },
+            {
+              inlineData: {
+                data: Buffer.isBuffer(imageBuffer)
+                  ? imageBuffer.toString('base64')
+                  : Buffer.from(imageBuffer).toString('base64'),
+                mimeType: 'image/jpeg',
+              },
+            },
+          ]
+        : prompt;
+
+      const response = await genai.models.generateContent({
+        model: modelName,
+        contents: payload,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: QUESTION_SCHEMA,
+          temperature: 0.4,
+        },
+      });
+
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (isRetryableGeminiError(error)) {
+        console.warn('[Gemini Failover] ' + modelName + ' high demand (503). Switching to backup model...');
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw new Error(lastError ? 'All Gemini models are currently busy. Please try again in a moment.' : 'All Gemini models are currently busy. Please try again in a moment.');
 }
 
 // JSON schema that Gemini must conform to for each question
@@ -193,34 +245,7 @@ ${text.slice(0, 12000)}
 
 JSON output:`;
 
-    let response;
-    let lastError;
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        response = await genai.models.generateContent({
-          model: 'gemini-3.6-flash',
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema:   QUESTION_SCHEMA,
-            temperature:      0.4,
-          }
-        });
-        break;
-      } catch (error) {
-        lastError = error;
-        const message = (error?.message || '').toLowerCase();
-        const status = String(error?.status || error?.code || '');
-        const isRetryableGeminiError = status === '503' || /503|service unavailable|high demand|overloaded|rate limit|too many requests|429/.test(message);
-
-        if (attempt >= 2 || !isRetryableGeminiError) {
-          throw error;
-        }
-
-        console.warn(`[generateQuizFromText] Gemini temporarily unavailable (attempt ${attempt}/2). Retrying in 1s...`);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    }
+    const response = await callGeminiWithFailover(prompt);
 
     // ── Parse response ───────────────────────────────────────────────────
     const rawText = response.text?.trim() ?? '';

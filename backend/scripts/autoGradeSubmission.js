@@ -7,11 +7,56 @@ const isVercelRuntime = () => process.env.VERCEL === 'true' || process.env.VERCE
 
 // Lazy-loaded only when Gemini fallback is triggered
 let _GoogleGenerativeAI = null;
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+
 function getGoogleGenerativeAI() {
   if (!_GoogleGenerativeAI) {
     _GoogleGenerativeAI = require('@google/generative-ai').GoogleGenerativeAI;
   }
   return _GoogleGenerativeAI;
+}
+
+function isRetryableGeminiError(error) {
+  const message = (error?.message || '').toLowerCase();
+  const status = Number(error?.status || error?.response?.status || error?.code || 0);
+  return status === 503 || status === 429 || /503|429|service unavailable|high demand|overloaded|rate limit|too many requests/.test(message);
+}
+
+async function callGeminiWithFailover(prompt, imageBuffer = null) {
+  const GoogleGenerativeAI = getGoogleGenerativeAI();
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  let lastError = null;
+
+  for (const modelName of GEMINI_MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+
+      const payload = imageBuffer
+        ? [
+            prompt,
+            {
+              inlineData: {
+                data: Buffer.isBuffer(imageBuffer)
+                  ? imageBuffer.toString('base64')
+                  : Buffer.from(imageBuffer).toString('base64'),
+                mimeType: 'image/jpeg',
+              },
+            },
+          ]
+        : prompt;
+
+      return await model.generateContent(payload);
+    } catch (error) {
+      lastError = error;
+      if (isRetryableGeminiError(error)) {
+        console.warn('[Gemini Failover] ' + modelName + ' high demand (503). Switching to backup model...');
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw new Error(lastError ? 'All Gemini models are currently busy. Please try again in a moment.' : 'All Gemini models are currently busy. Please try again in a moment.');
 }
 
 /**
@@ -397,53 +442,20 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
 
         let result;
 
-        const retryGeminiCall = async (operation) => {
-          let lastError;
-          for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-              return await operation(attempt);
-            } catch (error) {
-              lastError = error;
-              const status = Number(error?.status || error?.response?.status || error?.code || 0);
-              const message = (error?.message || '').toLowerCase();
-              const isRetryable = status === 503 || /503|service unavailable|high demand|overloaded|too many requests|rate limit|temporary|network|fetch failed/.test(message);
-
-              if (attempt >= 3 || !isRetryable) {
-                throw error;
-              }
-
-              console.warn(`[Parser] Gemini fallback temporarily unavailable (attempt ${attempt}/3). Retrying in 2s...`, error?.message || error);
-              await new Promise(resolve => setTimeout(resolve, 2000));
-            }
-          }
-
-          throw lastError;
-        };
-
         // ── Vision path: triggered when garbled-choice tokens are detected ──
         // Pass the original image so Gemini can read the bubble/handwriting
         // directly instead of relying on already-corrupted OCR text.
         if (invalidChoiceQNums.length > 0 && _imageBuffer) {
-          console.log('[Parser] Executing gemini-3.8-flash Vision fallback with image buffer...');
-          const model = genAI.getGenerativeModel({ model: 'gemini-3.8-flash' });
-          const imagePart = {
-            inlineData: {
-              data: Buffer.isBuffer(_imageBuffer)
-                ? _imageBuffer.toString('base64')
-                : Buffer.from(_imageBuffer).toString('base64'),
-              mimeType: 'image/jpeg',
-            },
-          };
           const visionPrompt =
             basePrompt + '\n\nThe student answer sheet image is attached. ' +
             'Read the handwritten or bubble answers directly from the image.';
-          result = await retryGeminiCall(async () => model.generateContent([visionPrompt, imagePart]));
+          console.log('[Parser] Executing Gemini vision fallback with image buffer...');
+          result = await callGeminiWithFailover(visionPrompt, _imageBuffer);
         } else {
           // ── Text path: fall back to OCR text when no image is available ──
-          console.log('[Parser] Executing gemini-3.8-flash Text fallback with OCR text...');
-          const model = genAI.getGenerativeModel({ model: 'gemini-3.8-flash' });
           const textPrompt = basePrompt + '\n\nOCR TEXT:\n' + ocrText;
-          result = await retryGeminiCall(async () => model.generateContent(textPrompt));
+          console.log('[Parser] Executing Gemini text fallback with OCR text...');
+          result = await callGeminiWithFailover(textPrompt);
         }
 
         const rawText = result.response.text().trim();
