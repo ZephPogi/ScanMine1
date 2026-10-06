@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
 import { Lock, Edit, Check, X, BookOpen, Users, Loader2, UserCircle } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 import './TeacherProfile.css';
 
 // ── Toast notification helper ──────────────────────────────────────────────
@@ -100,9 +101,13 @@ const TeacherProfile = () => {
     }
     setSaving(true);
     try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session?.access_token) throw new Error('Your session has expired. Please sign in again.');
+
       const res = await fetch('/api/user/update-name', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({
           userId:        storedUser.id,
           firstName:     editForm.firstName.trim(),
@@ -148,9 +153,13 @@ const TeacherProfile = () => {
     }
     setPwSaving(true);
     try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session?.access_token) throw new Error('Your session has expired. Please sign in again.');
+
       const res = await fetch('/api/user/update-password', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({
           userId: storedUser.id,
           currentPassword: passwords.current,

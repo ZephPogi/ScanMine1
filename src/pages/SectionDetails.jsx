@@ -1,9 +1,10 @@
 /* eslint-disable */
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Search, UserPlus, UserMinus, Download, Camera, Edit, Sparkles, Eye, Upload, X, Check } from 'lucide-react';
+import { Trash2, Search, UserPlus, UserMinus, Download, Camera, Edit, Sparkles, Eye, Upload, X, Check, Pencil } from 'lucide-react';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
+import { supabase } from '../supabaseClient';
 import './SectionDetails.css';
 import Sidebar from './Sidebar';
 
@@ -87,6 +88,10 @@ const SectionDetails = ({ section, onBack }) => {
   const [examSubmissions, setExamSubmissions] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentSubmissions, setStudentSubmissions] = useState([]);
+  const [isEditingStudentName, setIsEditingStudentName] = useState(false);
+  const [studentNameDraft, setStudentNameDraft] = useState('');
+  const [studentNameSaving, setStudentNameSaving] = useState(false);
+  const [studentNameError, setStudentNameError] = useState('');
 
   // ── Selected exam highlight (tap/active state) ─────────────────────────
   const [selectedExamId, setSelectedExamId] = useState(null);
@@ -171,6 +176,9 @@ const SectionDetails = ({ section, onBack }) => {
     if (!student) return;
     setSelectedStudent(student);
     setStudentSubmissions([]);
+    setIsEditingStudentName(false);
+    setStudentNameDraft(student.name || '');
+    setStudentNameError('');
     try {
       const response = await fetch(`/api/student/${student.user_id}/grades/${section.id}`);
       if (response.ok) {
@@ -179,6 +187,44 @@ const SectionDetails = ({ section, onBack }) => {
       }
     } catch (error) {
       console.error('Error fetching student grades:', error);
+    }
+  };
+
+  const handleSaveStudentName = async (event) => {
+    event.preventDefault();
+    const normalizedName = studentNameDraft.trim().replace(/\s+/g, ' ');
+    if (!normalizedName) {
+      setStudentNameError('Student name cannot be empty.');
+      return;
+    }
+
+    setStudentNameSaving(true);
+    setStudentNameError('');
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session?.access_token) throw new Error('Your session has expired. Please sign in again.');
+
+      const response = await fetch(`/api/students/${selectedStudent.user_id}/name`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ classId: section.id, name: normalizedName }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to update student name');
+
+      setSelectedStudent((current) => ({ ...current, ...data.user }));
+      setStudents((current) => current.map((student) => (
+        String(student.user_id) === String(selectedStudent.user_id)
+          ? { ...student, name: data.user.name }
+          : student
+      )));
+      setStudentNameDraft(data.user.name);
+      setIsEditingStudentName(false);
+    } catch (error) {
+      setStudentNameError(error.message || 'Failed to update student name.');
+    } finally {
+      setStudentNameSaving(false);
     }
   };
 
@@ -1124,9 +1170,75 @@ const SectionDetails = ({ section, onBack }) => {
             </button>
 
             <header style={{ marginBottom: '28px' }}>
-              <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#0f172a', fontWeight: '800' }}>
-                Student Details: {selectedStudent.name}
-              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingRight: '30px' }}>
+                <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#0f172a', fontWeight: '800' }}>
+                  Student Details: {selectedStudent.name}
+                </h2>
+                {!isEditingStudentName && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStudentNameDraft(selectedStudent.name || '');
+                      setStudentNameError('');
+                      setIsEditingStudentName(true);
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '7px 10px',
+                      color: '#475569',
+                      background: '#f1f5f9',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.8rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <Pencil size={14} />
+                    Edit Name
+                  </button>
+                )}
+              </div>
+              {isEditingStudentName && (
+                <form onSubmit={handleSaveStudentName} style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
+                  <input
+                    type="text"
+                    aria-label="Student full name"
+                    value={studentNameDraft}
+                    onChange={(event) => setStudentNameDraft(event.target.value)}
+                    disabled={studentNameSaving}
+                    autoFocus
+                    style={{ flex: '1 1 220px', minWidth: 0, padding: '9px 11px', border: '1px solid #cbd5e1', borderRadius: '8px', font: 'inherit' }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={studentNameSaving}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '8px 11px', color: '#fff', background: '#2563eb', border: 0, borderRadius: '8px', fontWeight: '600', cursor: studentNameSaving ? 'wait' : 'pointer' }}
+                  >
+                    <Check size={15} />
+                    {studentNameSaving ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={studentNameSaving}
+                    onClick={() => {
+                      setStudentNameDraft(selectedStudent.name || '');
+                      setStudentNameError('');
+                      setIsEditingStudentName(false);
+                    }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '8px 11px', color: '#475569', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px', fontWeight: '600', cursor: studentNameSaving ? 'wait' : 'pointer' }}
+                  >
+                    <X size={15} />
+                    Cancel
+                  </button>
+                </form>
+              )}
+              {studentNameError && (
+                <p role="alert" style={{ margin: '8px 0 0', color: '#b91c1c', fontSize: '0.85rem' }}>{studentNameError}</p>
+              )}
               <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.95rem' }}>{selectedStudent.email}</p>
             </header>
 

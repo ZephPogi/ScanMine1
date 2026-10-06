@@ -5,6 +5,7 @@ const multer = require('multer');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const { createClient } = require('@supabase/supabase-js');
 const db = require('../backend/db');
 
 // Only load dotenv in local development. 
@@ -19,7 +20,7 @@ const { extractText, generateQuizFromText } = require('../backend/scripts/genera
 const { gradeSubmission } = require('../backend/scripts/autoGradeSubmission');
 const OCRSpaceService = require('../backend/scripts/ocrSpaceService');
 const { parseFullQuestions } = require('../backend/scripts/ocrAnswerParser');
-const { uploadFile, deleteFile } = require('../backend/supabaseClient');
+const { supabase, uploadFile, deleteFile } = require('../backend/supabaseClient');
 const { BUCKET_NAME } = require('../backend/supabaseClient');
 
 const app = express();
@@ -27,6 +28,44 @@ const port = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
+const authenticateProfileRequest = async (req, res, next) => {
+  const authorization = req.headers.authorization || '';
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+  if (!token) return res.status(401).json({ error: 'Authentication required' });
+
+  try {
+    const { data: { user: authUser }, error } = await supabase.auth.getUser(token);
+    if (error || !authUser) return res.status(401).json({ error: 'Invalid or expired session' });
+
+    const result = await db.query(
+      'SELECT id, name, email, role, supabase_id FROM Users WHERE supabase_id = $1',
+      [authUser.id]
+    );
+    if (result.rows.length === 0) return res.status(403).json({ error: 'Account is not registered in ScanMine' });
+
+    req.authenticatedUser = result.rows[0];
+    next();
+  } catch (error) {
+    console.error('PROFILE AUTHENTICATION ERROR:', error);
+    res.status(500).json({ error: 'Failed to authenticate request' });
+  }
+};
+
+const verifySupabasePassword = async (email, password) => {
+  const apiKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!process.env.SUPABASE_URL || !apiKey) {
+    throw new Error('Supabase password authentication is not configured');
+  }
+
+  const authClient = createClient(process.env.SUPABASE_URL, apiKey, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  });
+  const { error } = await authClient.auth.signInWithPassword({ email, password });
+  if (error?.message === 'Invalid login credentials') return false;
+  if (error) throw error;
+  return true;
+};
 
 // ── Startup migrations (local dev only) ──────────────────────────────────
 // These idempotent ALTER TABLE statements run ONLY in local development.
@@ -1151,26 +1190,31 @@ app.get('/api/user/profile', async (req, res) => {
   }
 });
 
-// PUT /api/user/update-name
-app.put('/api/user/update-name', async (req, res) => {
+// PUT /api/user/update-name (teachers may edit their own name; students cannot edit names)
+app.put('/api/user/update-name', authenticateProfileRequest, async (req, res) => {
   try {
-    const { userId, firstName, middleInitial, lastName } = req.body;
-    if (!userId || !firstName || !lastName) {
+    const { firstName, middleInitial, lastName } = req.body;
+    if (req.authenticatedUser.role !== 'teacher') {
+      return res.status(403).json({ error: 'Only a teacher can update profile names' });
+    }
+    if (
+      typeof firstName !== 'string' || !firstName.trim() ||
+      typeof lastName !== 'string' || !lastName.trim()
+    ) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-    const mi = (middleInitial || '').trim().toUpperCase().slice(0, 1);
+    const mi = typeof middleInitial === 'string' ? middleInitial.trim().toUpperCase().slice(0, 1) : '';
     const newName = [firstName.trim(), mi ? `${mi}.` : '', lastName.trim()].filter(Boolean).join(' ');
     const result = await db.query(
       `UPDATE Users
        SET name = $1, first_name = $2, middle_initial = $3, last_name = $4
-       WHERE id = $5
+       WHERE id = $5 AND role = 'teacher'
        RETURNING id, name, first_name, middle_initial, last_name, email, role`,
-      [newName, firstName.trim(), mi || null, lastName.trim(), userId]
+      [newName, firstName.trim(), mi || null, lastName.trim(), req.authenticatedUser.id]
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: 'Teacher not found' });
     }
-    // Update the name in localStorage-friendly response
     res.json({ success: true, user: result.rows[0] });
   } catch (error) {
     console.error('UPDATE NAME ERROR:', error);
@@ -1178,29 +1222,102 @@ app.put('/api/user/update-name', async (req, res) => {
   }
 });
 
-// PUT /api/user/update-password
-app.put('/api/user/update-password', async (req, res) => {
+// PUT /api/students/:studentId/name — teacher edits a student enrolled in their class
+app.put('/api/students/:studentId/name', authenticateProfileRequest, async (req, res) => {
   try {
-    const { userId, currentPassword, newPassword } = req.body;
-    if (!userId || !currentPassword || !newPassword) {
+    if (req.authenticatedUser.role !== 'teacher') {
+      return res.status(403).json({ error: 'Only teachers can update student names' });
+    }
+
+    const { classId, name } = req.body;
+    const studentId = req.params.studentId;
+    const normalizedName = typeof name === 'string' ? name.trim().replace(/\s+/g, ' ') : '';
+    if (!classId || !studentId || !normalizedName) {
+      return res.status(400).json({ error: 'Class, student, and name are required' });
+    }
+
+    const classResult = await db.query(
+      'SELECT id FROM Classes WHERE id = $1 AND teacher_id = $2',
+      [classId, req.authenticatedUser.id]
+    );
+    if (classResult.rows.length === 0) {
+      return res.status(403).json({ error: 'You can only edit students in your own class' });
+    }
+
+    const enrollmentResult = await db.query(
+      'SELECT id FROM Students WHERE class_id = $1 AND user_id = $2',
+      [classId, studentId]
+    );
+    if (enrollmentResult.rows.length === 0) {
+      return res.status(403).json({ error: 'Student is not enrolled in this class' });
+    }
+
+    const [firstName, ...lastNameParts] = normalizedName.split(' ');
+    const lastName = lastNameParts.join(' ') || null;
+    const result = await db.query(
+      `UPDATE Users
+       SET name = $1, first_name = $2, middle_initial = NULL, last_name = $3
+       WHERE id = $4 AND role = 'student'
+       RETURNING id, name, first_name, middle_initial, last_name, email, role`,
+      [normalizedName, firstName, lastName, studentId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Student not found' });
+
+    res.json({ success: true, user: result.rows[0] });
+  } catch (error) {
+    console.error('UPDATE STUDENT NAME ERROR:', error);
+    res.status(500).json({ error: 'Failed to update student name' });
+  }
+});
+
+// PUT /api/user/update-password
+app.put('/api/user/update-password', authenticateProfileRequest, async (req, res) => {
+  try {
+    const allowedFields = new Set(['userId', 'currentPassword', 'newPassword', 'password']);
+    if (Object.keys(req.body).some((field) => !allowedFields.has(field))) {
+      return res.status(403).json({ error: 'Only password fields may be updated' });
+    }
+
+    const { currentPassword } = req.body;
+    const newPassword = req.body.newPassword || req.body.password;
+    if (!currentPassword || !newPassword) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+    if (req.body.userId && String(req.body.userId) !== String(req.authenticatedUser.id)) {
+      return res.status(403).json({ error: 'You can only update your own password' });
+    }
+    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+      return res.status(400).json({ error: 'Password values must be strings' });
     }
     if (newPassword.length < 6) {
       return res.status(400).json({ error: 'New password must be at least 6 characters' });
     }
-    // Fetch current hash
-    const result = await db.query('SELECT password_hash FROM Users WHERE id = $1', [userId]);
+    const result = await db.query(
+      'SELECT password_hash, supabase_id FROM Users WHERE id = $1',
+      [req.authenticatedUser.id]
+    );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
-    // Verify current password
-    const match = await bcrypt.compare(currentPassword, result.rows[0].password_hash);
-    if (!match) {
-      return res.status(401).json({ error: 'Current password is incorrect' });
+
+    if (result.rows[0].supabase_id) {
+      const passwordMatches = await verifySupabasePassword(req.authenticatedUser.email, currentPassword);
+      if (!passwordMatches) return res.status(401).json({ error: 'Current password is incorrect' });
+
+      const { error } = await supabase.auth.admin.updateUserById(
+        result.rows[0].supabase_id,
+        { password: newPassword }
+      );
+      if (error) throw error;
+    } else {
+      const passwordHash = result.rows[0].password_hash;
+      const passwordMatches = passwordHash && await bcrypt.compare(currentPassword, passwordHash);
+      if (!passwordMatches) return res.status(401).json({ error: 'Current password is incorrect' });
+
+      const newHash = await bcrypt.hash(newPassword, 10);
+      await db.query('UPDATE Users SET password_hash = $1 WHERE id = $2', [newHash, req.authenticatedUser.id]);
     }
-    // Hash and save new password
-    const newHash = await bcrypt.hash(newPassword, 10);
-    await db.query('UPDATE Users SET password_hash = $1 WHERE id = $2', [newHash, userId]);
+
     res.json({ success: true, message: 'Password updated successfully' });
   } catch (error) {
     console.error('UPDATE PASSWORD ERROR:', error);

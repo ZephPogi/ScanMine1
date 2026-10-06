@@ -162,6 +162,15 @@
   margin-bottom: 20px;
 }
 
+.student-name-lock-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
 .section-title-row h3 {
   font-size: 1.05rem;
   font-weight: 700;

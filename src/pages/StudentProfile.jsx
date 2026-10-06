@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Lock, Edit, Check, X, BookOpen, TrendingUp } from 'lucide-react';
+import { Lock, Check, X, BookOpen, TrendingUp } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 import './StudentProfile.css';
 
 // ── Toast notification helper ──────────────────────────────────────────────
@@ -26,11 +27,6 @@ const StudentProfile = () => {
   });
   const [stats, setStats] = useState({ activeClasses: 0, averageGrade: '0.0' });
   const [loading, setLoading] = useState(true);
-
-  // ── Edit mode state ───────────────────────────────────────────────────────
-  const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ firstName: '', middleInitial: '', lastName: '' });
-  const [saving, setSaving] = useState(false);
 
   // ── Password modal state ──────────────────────────────────────────────────
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -61,7 +57,6 @@ const StudentProfile = () => {
         const mi = data.middle_initial || '';
         const ln = data.last_name || (data.name || '').trim().split(' ').slice(1).join(' ') || '';
         setProfile({ firstName: fn, middleInitial: mi, lastName: ln, email: data.email, role: data.role });
-        setEditForm({ firstName: fn, middleInitial: mi, lastName: ln });
       }
 
       if (dashRes.ok) {
@@ -86,45 +81,6 @@ const StudentProfile = () => {
   // ── Computed display name ─────────────────────────────────────────────────
   const displayName = [profile.firstName, profile.middleInitial ? `${profile.middleInitial.toUpperCase()}.` : '', profile.lastName].filter(Boolean).join(' ');
 
-  // ── Save name ─────────────────────────────────────────────────────────────
-  const handleSaveName = async () => {
-    if (!editForm.firstName.trim() || !editForm.lastName.trim()) {
-      showToast('First and last name cannot be empty.', 'error');
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await fetch('/api/user/update-name', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId:        storedUser.id,
-          firstName:     editForm.firstName.trim(),
-          middleInitial: editForm.middleInitial.trim().toUpperCase().slice(0, 1),
-          lastName:      editForm.lastName.trim(),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update name');
-
-      const updated = { ...storedUser, name: data.user.name };
-      localStorage.setItem('user', JSON.stringify(updated));
-
-      setProfile(prev => ({ ...prev, firstName: editForm.firstName.trim(), middleInitial: editForm.middleInitial.trim().toUpperCase().slice(0,1), lastName: editForm.lastName.trim() }));
-      setIsEditing(false);
-      showToast('Name updated successfully!', 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditForm({ firstName: profile.firstName, middleInitial: profile.middleInitial, lastName: profile.lastName });
-    setIsEditing(false);
-  };
-
   // ── Change password ───────────────────────────────────────────────────────
   const handleChangePassword = async () => {
     if (!passwords.current || !passwords.newPass || !passwords.confirm) {
@@ -141,9 +97,13 @@ const StudentProfile = () => {
     }
     setPwSaving(true);
     try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session?.access_token) throw new Error('Your session has expired. Please sign in again.');
+
       const res = await fetch('/api/user/update-password', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({
           userId: storedUser.id,
           currentPassword: passwords.current,
@@ -214,19 +174,22 @@ const StudentProfile = () => {
             <section className="profile-card profile-details">
               <div className="section-title-row">
                 <h3>Personal Information</h3>
+                <p className="student-name-lock-note">
+                  <Lock size={14} />
+                  Only your teacher can edit your registered name.
+                </p>
               </div>
 
-              {/* Editable: First / Middle Initial / Last Name */}
+              {/* Student name is managed by the teacher. */}
               <div className="form-group-row">
                 <div className="form-item">
                   <label>First Name</label>
                   <input
                     type="text"
-                    value={isEditing ? editForm.firstName : profile.firstName}
-                    readOnly={!isEditing}
-                    disabled={!isEditing}
-                    className={isEditing ? 'input-active' : 'input-readonly'}
-                    onChange={e => setEditForm(prev => ({ ...prev, firstName: e.target.value }))}
+                    value={profile.firstName}
+                    readOnly
+                    disabled
+                    className="input-locked"
                     placeholder="First Name"
                   />
                 </div>
@@ -234,11 +197,10 @@ const StudentProfile = () => {
                   <label>M.I.</label>
                   <input
                     type="text"
-                    value={isEditing ? editForm.middleInitial : profile.middleInitial}
-                    readOnly={!isEditing}
-                    disabled={!isEditing}
-                    className={isEditing ? 'input-active' : 'input-readonly'}
-                    onChange={e => setEditForm(prev => ({ ...prev, middleInitial: e.target.value.toUpperCase().slice(0,1) }))}
+                    value={profile.middleInitial}
+                    readOnly
+                    disabled
+                    className="input-locked"
                     placeholder="Z"
                     maxLength={1}
                     style={{ textAlign: 'center', textTransform: 'uppercase' }}
@@ -248,11 +210,10 @@ const StudentProfile = () => {
                   <label>Last Name</label>
                   <input
                     type="text"
-                    value={isEditing ? editForm.lastName : profile.lastName}
-                    readOnly={!isEditing}
-                    disabled={!isEditing}
-                    className={isEditing ? 'input-active' : 'input-readonly'}
-                    onChange={e => setEditForm(prev => ({ ...prev, lastName: e.target.value }))}
+                    value={profile.lastName}
+                    readOnly
+                    disabled
+                    className="input-locked"
                     placeholder="Last Name"
                   />
                 </div>
@@ -290,29 +251,10 @@ const StudentProfile = () => {
 
               {/* Actions */}
               <div className="profile-actions">
-                {isEditing ? (
-                  <>
-                    <button className="btn-save" onClick={handleSaveName} disabled={saving}>
-                      <Check size={16} />
-                      <span>{saving ? 'Saving…' : 'Save Changes'}</span>
-                    </button>
-                    <button className="btn-cancel" onClick={handleCancelEdit} disabled={saving}>
-                      <X size={16} />
-                      <span>Cancel</span>
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button className="btn-edit" onClick={() => setIsEditing(true)}>
-                      <Edit size={16} />
-                      <span>Edit Profile</span>
-                    </button>
-                    <button className="btn-password" onClick={() => setShowPasswordModal(true)}>
-                      <Lock size={16} />
-                      <span>Change Password</span>
-                    </button>
-                  </>
-                )}
+                <button className="btn-password" onClick={() => setShowPasswordModal(true)}>
+                  <Lock size={16} />
+                  <span>Change Password</span>
+                </button>
               </div>
             </section>
           </div>
