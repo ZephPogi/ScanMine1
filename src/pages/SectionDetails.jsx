@@ -1,7 +1,7 @@
 /* eslint-disable */
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Search, UserPlus, UserMinus, Download, CheckSquare, Square, MessageSquare, Camera, Edit, Sparkles, Eye } from 'lucide-react';
+import { Trash2, Search, UserPlus, UserMinus, Download, Camera, Edit, Sparkles, Eye, Upload, X, Check } from 'lucide-react';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import './SectionDetails.css';
@@ -1212,113 +1212,176 @@ const SectionDetails = ({ section, onBack }) => {
       )}
 
       {showQuizGeneratorModal && (
-        <div className="modal-overlay" onClick={closeQuizGeneratorModal}>
-          <div className="modal-content quiz-gen-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-bar">
-              <span className="modal-prof-label">🧠 ScanMine AI Quiz Generator</span>
-              <button className="modal-close-btn" onClick={closeQuizGeneratorModal} disabled={isGeneratingQuiz || isSavingQuiz}>×</button>
-            </div>
+        <div className="ai-quiz-modal-overlay" onClick={closeQuizGeneratorModal}>
+          <div className="ai-quiz-modal" role="dialog" aria-modal="true" aria-labelledby="quiz-generator-title" onClick={(e) => e.stopPropagation()}>
+            <header className="ai-quiz-modal-header">
+              <div>
+                <h2 id="quiz-generator-title">Generate AI Quiz</h2>
+                <p>Create quiz questions automatically from a lesson PDF</p>
+              </div>
+              <button
+                className="ai-quiz-close"
+                type="button"
+                aria-label="Close quiz generator"
+                onClick={closeQuizGeneratorModal}
+                disabled={isGeneratingQuiz || isSavingQuiz}
+              >
+                <X size={20} />
+              </button>
+            </header>
 
-            <div className="modal-title-banner" style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)', boxShadow: '0 10px 15px -3px rgba(124, 58, 237, 0.35)' }}>
-              ✨ Generate Quiz from Lesson
-            </div>
-
-            {/* Exam Title */}
-            <div className="upload-section">
-              <label className="upload-label">📝 Exam Title</label>
-              <input
-                type="text"
-                className="create-input"
-                placeholder="e.g. Science Chapter 5 Quiz"
-                value={examTitle}
-                onChange={(e) => setExamTitle(e.target.value)}
-              />
-            </div>
-
-            {/* Lesson PDF */}
-            <div className="upload-section">
-              <label className="upload-label">📄 Lesson PDF File</label>
-              <div className="upload-row" onClick={() => quizFileRef.current && quizFileRef.current.click()}>
-                <span className="upload-placeholder">
-                  {quizLessonFile?.name ? quizLessonFile.name : 'Upload Lesson PDF'}
-                </span>
+            <div className="ai-quiz-modal-body">
+              <div className="ai-quiz-field">
+                <label className="ai-quiz-label" htmlFor="quiz-exam-title">Exam Title</label>
                 <input
-                  type="file"
-                  ref={quizFileRef}
-                  style={{ display: 'none' }}
-                  accept=".pdf"
-                  onChange={handleQuizFileChange}
+                  id="quiz-exam-title"
+                  type="text"
+                  className="ai-quiz-input"
+                  placeholder="e.g. Science Chapter 5 Quiz"
+                  value={examTitle}
+                  onChange={(e) => setExamTitle(e.target.value)}
                 />
-                <button className="browse-btn exam-browse">Browse</button>
               </div>
-            </div>
 
-            {/* Question Count */}
-            <div className="upload-section">
-              <label className="upload-label">🔢 Number of Questions</label>
-              <input
-                type="number"
-                className="create-input"
-                placeholder="10"
-                value={numberOfQuestions}
-                onChange={(e) => setNumberOfQuestions(parseInt(e.target.value) || 10)}
-                min="1"
-                max="50"
-              />
-            </div>
+              <div className="ai-quiz-field">
+                <label className="ai-quiz-label" htmlFor="quiz-lesson-file">Lesson PDF</label>
+                <label className="ai-quiz-dropzone">
+                  <input
+                    id="quiz-lesson-file"
+                    type="file"
+                    ref={quizFileRef}
+                    className="ai-quiz-file-input"
+                    accept=".pdf"
+                    onChange={handleQuizFileChange}
+                  />
+                  <Upload size={21} aria-hidden="true" />
+                  <span className="ai-quiz-file-name">
+                    {quizLessonFile?.name || 'Choose a lesson PDF to upload'}
+                  </span>
+                  <span className="ai-quiz-file-hint">PDF files only</span>
+                </label>
+              </div>
 
-            {/* Question Types Toggle */}
-            <div className="upload-section">
-              <label className="upload-label">🎯 Question Types</label>
-              <div className="qtype-toggle-row">
-                {[
-                  { key: 'multiple_choice', label: '🔤 Multiple Choice' },
-                  { key: 'true_false', label: '✅ True / False' },
-                  { key: 'identification', label: '✏️ Identification' },
-                ].map(({ key, label }) => {
-                  const active = questionTypes.includes(key);
-                  return (
+              <div className="ai-quiz-field">
+                <label className="ai-quiz-label" htmlFor="quiz-question-count">Number of Questions</label>
+                <input
+                  id="quiz-question-count"
+                  type="number"
+                  className="ai-quiz-input"
+                  placeholder="10"
+                  value={numberOfQuestions}
+                  onChange={(e) => setNumberOfQuestions(parseInt(e.target.value) || 10)}
+                  min="1"
+                  max="50"
+                />
+              </div>
+
+              <div className="ai-quiz-field">
+                <span className="ai-quiz-label">Question Types</span>
+                <div className="ai-quiz-type-pills">
+                  {[
+                    { key: 'multiple_choice', label: 'Multiple Choice' },
+                    { key: 'true_false', label: 'True / False' },
+                    { key: 'identification', label: 'Identification' },
+                  ].map(({ key, label }) => {
+                    const active = questionTypes.includes(key);
+                    return (
+                      <button
+                        key={key}
+                        className={`ai-quiz-type-pill${active ? ' is-selected' : ''}`}
+                        onClick={() => toggleQuestionType(key)}
+                        type="button"
+                        aria-pressed={active}
+                      >
+                        {active && <Check size={15} aria-hidden="true" />}
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {questionTypes.length === 0 && (
+                  <p className="ai-quiz-warning">Select at least one question type.</p>
+                )}
+              </div>
+
+              <div className="ai-quiz-field">
+                <label className="ai-quiz-label" htmlFor="quiz-custom-instructions">
+                  Custom AI Instructions <span>(optional)</span>
+                </label>
+                <textarea
+                  id="quiz-custom-instructions"
+                  className="ai-quiz-input ai-quiz-textarea"
+                  placeholder="e.g. Focus on Chapter 3 definitions. Avoid timeline questions. Make items tricky."
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  rows={3}
+                />
+                <p className="ai-quiz-help">These instructions are passed directly to the AI for extra control.</p>
+              </div>
+
+              {quizError && (
+                <p className="ai-quiz-error" role="alert">{quizError}</p>
+              )}
+
+              {generatedQuestions.length > 0 && (
+                <div className="ai-quiz-preview">
+                  <h4 className="quiz-preview-title">📋 Generated Questions Preview ({generatedQuestions.length})</h4>
+                  <div className="quiz-preview-list">
+                    {generatedQuestions.map((q, index) => (
+                      <div key={index} className="quiz-preview-item">
+                        <span className="quiz-preview-type">{q.type?.replace('_', ' ')}</span>
+                        <p className="quiz-preview-q">{index + 1}. {q.question || q.question_text}</p>
+                        <p className="quiz-preview-ans">✓ {q.correctAnswer || q.answer_text}</p>
+                        {q.options?.length > 0 && (
+                          <div className="quiz-preview-opts">
+                            {q.options.map((opt, i) => (
+                              <span key={i} className={`quiz-opt-chip${opt === (q.correctAnswer || q.answer_text) ? ' quiz-opt-correct' : ''}`}>
+                                {opt}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="quiz-preview-actions">
                     <button
-                      key={key}
-                      className={`qtype-toggle-btn${active ? ' qtype-active' : ''}`}
-                      onClick={() => toggleQuestionType(key)}
-                      type="button"
+                      className="save-assign-btn"
+                      onClick={handleSaveAndAssignQuiz}
+                      disabled={isSavingQuiz || isGeneratingQuiz}
                     >
-                      {active ? <CheckSquare size={15} /> : <Square size={15} />}
-                      {label}
+                      {isSavingQuiz ? (
+                        <span className="quiz-btn-loading">
+                          <span className="quiz-gen-spinner" aria-hidden="true" />
+                          Saving...
+                        </span>
+                      ) : 'Save & Assign to Class'}
                     </button>
-                  );
-                })}
-              </div>
-              {questionTypes.length === 0 && (
-                <p className="qtype-warn">⚠️ Select at least one question type.</p>
+                    <button
+                      className="save-assign-btn quiz-download-btn"
+                      onClick={handleDownloadAnswerKey}
+                      disabled={isSavingQuiz || isGeneratingQuiz}
+                      style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                    >
+                      📥 Download ScanMine Answer Key
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
-            {/* Custom AI Prompt */}
-            <div className="upload-section">
-              <label className="upload-label">
-                <MessageSquare size={14} style={{ marginRight: 4 }} />
-                Custom AI Instructions <span style={{ color: '#94a3b8', fontWeight: 400 }}>(optional)</span>
-              </label>
-              <textarea
-                className="manual-textarea quiz-custom-prompt"
-                placeholder="e.g. Focus on Chapter 3 definitions. Avoid timeline questions. Make items tricky."
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                rows={3}
-              />
-              <p className="manual-hint">These instructions are passed directly to the AI for extra control.</p>
-            </div>
-
-            {quizError && (
-              <p className="quiz-error-banner" role="alert">{quizError}</p>
-            )}
-
-            <div className="modal-footer">
+            <footer className="ai-quiz-modal-footer">
               <button
-                className="save-assign-btn"
-                style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)', boxShadow: '0 10px 15px -3px rgba(124, 58, 237, 0.35)' }}
+                className="ai-quiz-cancel"
+                type="button"
+                onClick={closeQuizGeneratorModal}
+                disabled={isGeneratingQuiz || isSavingQuiz}
+              >
+                Cancel
+              </button>
+              <button
+                className="ai-quiz-generate"
+                type="button"
                 onClick={handleGenerateQuiz}
                 disabled={isGeneratingQuiz || isSavingQuiz || questionTypes.length === 0}
               >
@@ -1327,55 +1390,9 @@ const SectionDetails = ({ section, onBack }) => {
                     <span className="quiz-gen-spinner" aria-hidden="true" />
                     Generating...
                   </span>
-                ) : '✨ Generate Quiz'}
+                ) : 'Generate Quiz'}
               </button>
-            </div>
-
-            {generatedQuestions.length > 0 && (
-              <div className="quiz-preview-box">
-                <h4 className="quiz-preview-title">📋 Generated Questions Preview ({generatedQuestions.length})</h4>
-                <div className="quiz-preview-list">
-                  {generatedQuestions.map((q, index) => (
-                    <div key={index} className="quiz-preview-item">
-                      <span className="quiz-preview-type">{q.type?.replace('_', ' ')}</span>
-                      <p className="quiz-preview-q">{index + 1}. {q.question || q.question_text}</p>
-                      <p className="quiz-preview-ans">✓ {q.correctAnswer || q.answer_text}</p>
-                      {q.options?.length > 0 && (
-                        <div className="quiz-preview-opts">
-                          {q.options.map((opt, i) => (
-                            <span key={i} className={`quiz-opt-chip${opt === (q.correctAnswer || q.answer_text) ? ' quiz-opt-correct' : ''}`}>
-                              {opt}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <div className="quiz-preview-actions">
-                  <button
-                    className="save-assign-btn"
-                    onClick={handleSaveAndAssignQuiz}
-                    disabled={isSavingQuiz || isGeneratingQuiz}
-                  >
-                    {isSavingQuiz ? (
-                      <span className="quiz-btn-loading">
-                        <span className="quiz-gen-spinner" aria-hidden="true" />
-                        Saving...
-                      </span>
-                    ) : 'Save & Assign to Class'}
-                  </button>
-                  <button
-                    className="save-assign-btn quiz-download-btn"
-                    onClick={handleDownloadAnswerKey}
-                    disabled={isSavingQuiz || isGeneratingQuiz}
-                    style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
-                  >
-                    📥 Download ScanMine Answer Key
-                  </button>
-                </div>
-              </div>
-            )}
+            </footer>
           </div>
         </div>
       )}
