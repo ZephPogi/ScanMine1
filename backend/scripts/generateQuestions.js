@@ -1,3 +1,5 @@
+process.env.PDFJS_DISABLE_WORKER = 'true';
+
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -109,7 +111,7 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
  * Returns an initialised GoogleGenAI client.
  * Throws a descriptive error early if the API key is absent.
  */
-const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-1.5-flash'];
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
 const MAX_GEMINI_ATTEMPTS = 2;
 
 function getGenAIClient() {
@@ -172,32 +174,64 @@ async function callGeminiWithFailover(prompt, attachmentBuffer = null, mimeType 
 }
 
 async function extractPdfTextFallback(pdfBuffer) {
-  const pdfModule = require('pdf-parse');
-  let extractedText = '';
+  try {
+    const pdfModule = require('pdf-parse');
+    let extractedText = '';
 
-  if (typeof pdfModule === 'function') {
-    const result = await pdfModule(pdfBuffer);
-    extractedText = result?.text || '';
-  } else {
-    const PDFParse = pdfModule.PDFParse || pdfModule.default?.PDFParse;
-    if (typeof PDFParse !== 'function') {
-      throw new Error('pdf-parse does not expose a supported parser in this runtime.');
-    }
-
-    const parser = new PDFParse({ data: pdfBuffer });
-    try {
-      const result = await parser.getText();
+    if (typeof pdfModule === 'function') {
+      const result = await pdfModule(pdfBuffer);
       extractedText = result?.text || '';
-    } finally {
-      await parser.destroy();
+    } else {
+      const PDFParse = pdfModule.PDFParse || pdfModule.default?.PDFParse;
+      if (typeof PDFParse !== 'function') {
+        throw new Error('pdf-parse does not expose a supported parser in this runtime.');
+      }
+
+      const parser = new PDFParse({ data: pdfBuffer });
+      try {
+        const result = await parser.getText();
+        extractedText = result?.text || '';
+      } finally {
+        await parser.destroy();
+      }
+    }
+
+    const text = extractedText.trim();
+    if (text) {
+      return text;
+    }
+    console.warn('[PDF Fallback] pdf-parse returned no embedded text; extracting PDF text tokens directly.');
+  } catch (error) {
+    console.warn(`[PDF Fallback] pdf-parse failed (${error.message}); extracting PDF text tokens directly.`);
+  }
+
+  const pdfSource = pdfBuffer.toString('binary');
+  const textOperators = /\[((?:\\.|[^\]])*)\]\s*TJ\b|(\(((?:\\.|[^\\()])*)\))\s*Tj\b/g;
+  const strings = [];
+  let match;
+  while ((match = textOperators.exec(pdfSource)) !== null) {
+    const textArray = match[1];
+    const singleText = match[3];
+    const literals = textArray
+      ? textArray.match(/\(((?:\\.|[^\\()])*)\)/g) || []
+      : [`(${singleText})`];
+
+    for (const literal of literals) {
+      const value = literal.slice(1, -1)
+        .replace(/\\([nrtbf()\\])/g, (_, escaped) => ({
+          n: '\n',
+          r: '\r',
+          t: '\t',
+          b: '\b',
+          f: '\f',
+        }[escaped] || escaped))
+        .replace(/\\([0-7]{1,3})/g, (_, octal) => String.fromCharCode(parseInt(octal, 8)));
+      if (value.trim()) strings.push(value);
     }
   }
 
-  const text = extractedText.trim();
-  if (!text) {
-    throw new Error('No embedded text was found in the PDF; OCR fallback is disabled.');
-  }
-  return text;
+  const text = strings.join(' ').replace(/\s+/g, ' ').trim();
+  return text || 'No readable text could be extracted from the PDF.';
 }
 
 async function generateQuestionsWithGroq(text, numberOfQuestions, questionTypes, customPrompt) {
