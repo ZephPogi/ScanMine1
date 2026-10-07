@@ -110,6 +110,7 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
  * Throws a descriptive error early if the API key is absent.
  */
 const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-1.5-flash'];
+const MAX_GEMINI_ATTEMPTS = 2;
 
 function getGenAIClient() {
   if (!process.env.GEMINI_API_KEY) {
@@ -120,65 +121,54 @@ function getGenAIClient() {
   return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 }
 
-async function callGeminiWithFailover(prompt, attachmentBuffer = null, mimeType = 'image/jpeg', maxAttempts = 5, stopAfterBusy = false) {
+function callGeminiWithTimeout(callFn, timeoutMs = 10000) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error(`Gemini request timed out after ${timeoutMs / 1000}s`)),
+      timeoutMs
+    );
+  });
+
+  return Promise.race([Promise.resolve().then(callFn), timeout]).finally(() => {
+    clearTimeout(timeoutId);
+  });
+}
+
+async function callGeminiWithFailover(prompt, attachmentBuffer = null, mimeType = 'image/jpeg') {
   const genai = getGenAIClient();
 
-  for (const modelName of GEMINI_MODELS) {
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const payload = attachmentBuffer
-          ? [
-              { text: prompt },
-              {
-                inlineData: {
-                  data: Buffer.isBuffer(attachmentBuffer)
-                    ? attachmentBuffer.toString('base64')
-                    : Buffer.from(attachmentBuffer).toString('base64'),
-                  mimeType,
-                },
+  for (const modelName of GEMINI_MODELS.slice(0, MAX_GEMINI_ATTEMPTS)) {
+    try {
+      const payload = attachmentBuffer
+        ? [
+            { text: prompt },
+            {
+              inlineData: {
+                data: Buffer.isBuffer(attachmentBuffer)
+                  ? attachmentBuffer.toString('base64')
+                  : Buffer.from(attachmentBuffer).toString('base64'),
+                mimeType,
               },
-            ]
-          : prompt;
+            },
+          ]
+        : prompt;
 
-        const response = await genai.models.generateContent({
-          model: modelName,
-          contents: payload,
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: QUESTION_SCHEMA,
-            temperature: 0.4,
-          },
-        });
-
-        return response;
-      } catch (error) {
-        const status = Number(error?.status || error?.response?.status || error?.code || 0);
-        const message = (error?.message || '').toLowerCase();
-
-        if (status === 404 || message.includes('404') || message.includes('not found') || message.includes('no longer available')) {
-          console.warn(`[Gemini Failover] ${modelName} returned 404. Skipping to next backup model...`);
-          break;
-        }
-
-        if (status === 503 || status === 429 || message.includes('503') || message.includes('429') || message.includes('high demand') || message.includes('overloaded')) {
-          if (attempt < maxAttempts) {
-            const baseDelay = 1500 * Math.pow(1.8, attempt - 1);
-            const jitter = Math.random() * 800;
-            const backoffMs = Math.min(baseDelay + jitter, 10000);
-            console.warn(`[Gemini Retry] ${modelName} 503/high demand (Attempt ${attempt}/${maxAttempts}). Waiting${(backoffMs/1000).toFixed(1)}s...`);
-            await new Promise(r => setTimeout(r, backoffMs));
-            continue;
-          }
-          if (stopAfterBusy) throw error;
-          break;
-        }
-
-        throw error;
-      }
+      return await callGeminiWithTimeout(() => genai.models.generateContent({
+        model: modelName,
+        contents: payload,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: QUESTION_SCHEMA,
+          temperature: 0.4,
+        },
+      }));
+    } catch (error) {
+      console.warn(`[Gemini Timeout] ${error.message}. Moving to next attempt/Groq fallback...`);
     }
   }
 
-  throw new Error('All Gemini models are currently busy.');
+  throw new Error(`Gemini failed after ${MAX_GEMINI_ATTEMPTS} attempts.`);
 }
 
 async function extractPdfTextFallback(pdfBuffer) {
@@ -212,10 +202,10 @@ async function extractPdfTextFallback(pdfBuffer) {
 
 async function generateQuestionsWithGroq(text, numberOfQuestions, questionTypes, customPrompt) {
   if (!process.env.GROQ_API_KEY) {
-    throw new Error('GROQ_API_KEY is not set; cannot generate questions from the extracted PDF text.');
+    throw new Error('GROQ_API_KEY is not set; cannot generate questions from the lesson text.');
   }
 
-  const prompt = `Generate exactly ${numberOfQuestions} quiz questions from this extracted lesson text.
+  const prompt = `Generate exactly ${numberOfQuestions} quiz questions from this lesson text.
 Use only these question types: ${questionTypes}.
 ${customPrompt?.trim() ? `Additional teacher instructions: ${customPrompt.trim()}\n` : ''}
 Return a JSON object with a "questions" array. Each question must have "question", "options", "correctAnswer", and "type" fields.
@@ -246,7 +236,7 @@ ${text.slice(0, 12000)}
   const result = await response.json();
   const content = result.choices?.[0]?.message?.content;
   if (typeof content !== 'string') {
-    throw new Error('Groq returned no JSON content for PDF question generation.');
+    throw new Error('Groq returned no JSON content for question generation.');
   }
   const parsed = JSON.parse(content);
   if (!parsed || !Array.isArray(parsed.questions)) {
@@ -289,8 +279,6 @@ async function generateQuizFromText(text, examId, numberOfQuestions = 10, questi
   }
 
   try {
-    const genai = getGenAIClient();
-
     // Build question type rules based on the requested types
     const allowedTypes = Array.isArray(questionTypes) && questionTypes.length > 0
       ? questionTypes
@@ -335,21 +323,17 @@ ${text.slice(0, 12000)}
 JSON output:`;
 
     let rawText;
-    if (isPdf) {
-      if (!Buffer.isBuffer(text)) {
+    try {
+      if (isPdf && !Buffer.isBuffer(text)) {
         throw new Error('A PDF buffer is required when the MIME type is application/pdf.');
       }
-      try {
-        const response = await callGeminiWithFailover(prompt, text, 'application/pdf', 3, true);
-        rawText = response.text?.trim() ?? '';
-      } catch (geminiError) {
-        console.warn('[generateQuizFromText] Gemini PDF request failed; trying extracted-text fallback:', geminiError.message);
-        const extractedText = await extractPdfTextFallback(text);
-        rawText = await generateQuestionsWithGroq(extractedText, numberOfQuestions, allowedTypes, customPrompt);
-      }
-    } else {
-      const response = await callGeminiWithFailover(prompt);
+      const response = isPdf
+        ? await callGeminiWithFailover(prompt, text, 'application/pdf')
+        : await callGeminiWithFailover(prompt);
       rawText = response.text?.trim() ?? '';
+    } catch {
+      const fallbackText = isPdf ? await extractPdfTextFallback(text) : text;
+      rawText = await generateQuestionsWithGroq(fallbackText, numberOfQuestions, allowedTypes, customPrompt);
     }
 
     // ── Parse response ───────────────────────────────────────────────────
