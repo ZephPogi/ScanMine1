@@ -1328,6 +1328,7 @@ const SectionDetails = ({ section, onBack }) => {
           <div className="ai-quiz-modal" role="dialog" aria-modal="true" aria-labelledby="quiz-generator-title" onClick={(e) => e.stopPropagation()}>
             <header className="ai-quiz-modal-header">
               <div>
+                <span className="ai-quiz-eyebrow">QUIZ GENERATION</span>
                 <h2 id="quiz-generator-title">Generate AI Quiz</h2>
                 <p>Create quiz questions automatically from a lesson PDF</p>
               </div>
@@ -1371,6 +1372,7 @@ const SectionDetails = ({ section, onBack }) => {
                     {quizLessonFile?.name || 'Choose a lesson PDF to upload'}
                   </span>
                   <span className="ai-quiz-file-hint">PDF files only</span>
+                  <span className="ai-quiz-browse">Browse</span>
                 </label>
               </div>
 
