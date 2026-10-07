@@ -1,7 +1,7 @@
 /* eslint-disable */
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Search, UserPlus, UserMinus, Download, Camera, Edit, Sparkles, Eye, Upload, X, Check, Pencil } from 'lucide-react';
+import { Trash2, Search, UserPlus, UserMinus, Download, Camera, Edit, Sparkles, Eye, Upload, X, Check, Pencil, ArrowUp, ArrowDown } from 'lucide-react';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
@@ -59,6 +59,12 @@ const normalizeMultipleChoiceQuestion = (question) => {
     correctAnswer: details.letter
   };
 };
+
+const DEFAULT_QUESTION_BREAKDOWN = [
+  { id: 'multiple_choice', label: 'Multiple Choice', count: 5, enabled: true },
+  { id: 'true_false', label: 'True / False', count: 5, enabled: true },
+  { id: 'identification', label: 'Identification', count: 0, enabled: false }
+];
 
 const wakeHuggingFaceSpace = () => {
   fetch('https://zephpogi-scanmine-trocr.hf.space/', { mode: 'no-cors' })
@@ -122,13 +128,12 @@ const SectionDetails = ({ section, onBack }) => {
 
   const [showQuizGeneratorModal, setShowQuizGeneratorModal] = useState(false);
   const [quizLessonFile, setQuizLessonFile] = useState(null);
-  const [numberOfQuestions, setNumberOfQuestions] = useState(10);
+  const [questionBreakdown, setQuestionBreakdown] = useState(DEFAULT_QUESTION_BREAKDOWN);
   const [generatedQuestions, setGeneratedQuestions] = useState([]);
   const [generatedExamId, setGeneratedExamId] = useState(null);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
   const [isSavingQuiz, setIsSavingQuiz] = useState(false);
   const [quizError, setQuizError] = useState('');
-  const [questionTypes, setQuestionTypes] = useState(['multiple_choice', 'true_false', 'identification']);
   const [customPrompt, setCustomPrompt] = useState('');
   const [examSubmissions, setExamSubmissions] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -137,6 +142,20 @@ const SectionDetails = ({ section, onBack }) => {
   const [studentNameDraft, setStudentNameDraft] = useState('');
   const [studentNameSaving, setStudentNameSaving] = useState(false);
   const [studentNameError, setStudentNameError] = useState('');
+  const totalQuestions = questionBreakdown.reduce(
+    (total, item) => total + (item.enabled ? item.count : 0),
+    0
+  );
+  const activeQuestionBreakdown = questionBreakdown
+    .filter(item => item.enabled && item.count > 0)
+    .map(({ id, count }) => ({ type: id, count }));
+  let nextQuestionNumber = 1;
+  const questionBreakdownWithRanges = questionBreakdown.map(item => {
+    const start = nextQuestionNumber;
+    const end = item.enabled && item.count > 0 ? start + item.count - 1 : null;
+    if (end !== null) nextQuestionNumber = end + 1;
+    return { ...item, start, end };
+  });
 
   // ── Selected exam highlight (tap/active state) ─────────────────────────
   const [selectedExamId, setSelectedExamId] = useState(null);
@@ -505,8 +524,7 @@ const SectionDetails = ({ section, onBack }) => {
     setGeneratedExamId(null);
     setQuizError('');
     setCustomPrompt('');
-    setNumberOfQuestions(10);
-    setQuestionTypes(['multiple_choice', 'true_false', 'identification']);
+    setQuestionBreakdown(DEFAULT_QUESTION_BREAKDOWN);
     if (quizFileRef.current) quizFileRef.current.value = '';
   };
 
@@ -527,8 +545,8 @@ const SectionDetails = ({ section, onBack }) => {
       setQuizError('Please enter an exam title.');
       return;
     }
-    if (questionTypes.length === 0) {
-      setQuizError('Please select at least one question type.');
+    if (totalQuestions === 0) {
+      setQuizError('Add at least one question to the quiz breakdown.');
       return;
     }
 
@@ -542,8 +560,8 @@ const SectionDetails = ({ section, onBack }) => {
       formData.append('teacherId', user?.id || '');
       formData.append('classId', section?.id || '');
       formData.append('title', examTitle);
-      formData.append('numberOfQuestions', String(numberOfQuestions));
-      formData.append('questionTypes', JSON.stringify(questionTypes));
+      formData.append('numberOfQuestions', String(totalQuestions));
+      formData.append('questionBreakdown', JSON.stringify(activeQuestionBreakdown));
       formData.append('customPrompt', customPrompt.trim());
 
       const response = await fetch('/api/generate-quiz', {
@@ -636,9 +654,31 @@ const SectionDetails = ({ section, onBack }) => {
   };
 
   const toggleQuestionType = (type) => {
-    setQuestionTypes(prev =>
-      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
-    );
+    setQuestionBreakdown(previous => previous.map(item => (
+      item.id === type
+        ? { ...item, enabled: !item.enabled, count: !item.enabled && item.count === 0 ? 5 : item.count }
+        : item
+    )));
+  };
+
+  const updateQuestionCount = (type, value) => {
+    const count = Math.max(0, Math.min(50, Number.parseInt(value, 10) || 0));
+    setQuestionBreakdown(previous => previous.map(item => (
+      item.id === type
+        ? { ...item, count }
+        : item
+    )));
+  };
+
+  const moveQuestionSection = (type, direction) => {
+    setQuestionBreakdown(previous => {
+      const index = previous.findIndex(item => item.id === type);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= previous.length) return previous;
+      const reordered = [...previous];
+      [reordered[index], reordered[nextIndex]] = [reordered[nextIndex], reordered[index]];
+      return reordered;
+    });
   };
 
   const handleDownloadAnswerKey = () => {
@@ -1429,44 +1469,61 @@ const SectionDetails = ({ section, onBack }) => {
               </div>
 
               <div className="ai-quiz-field">
-                <label className="ai-quiz-label" htmlFor="quiz-question-count">Number of Questions</label>
-                <input
-                  id="quiz-question-count"
-                  type="number"
-                  className="ai-quiz-input"
-                  placeholder="10"
-                  value={numberOfQuestions}
-                  onChange={(e) => setNumberOfQuestions(parseInt(e.target.value) || 10)}
-                  min="1"
-                  max="50"
-                />
-              </div>
-
-              <div className="ai-quiz-field">
-                <span className="ai-quiz-label">Question Types</span>
-                <div className="ai-quiz-type-pills">
-                  {[
-                    { key: 'multiple_choice', label: 'Multiple Choice' },
-                    { key: 'true_false', label: 'True / False' },
-                    { key: 'identification', label: 'Identification' },
-                  ].map(({ key, label }) => {
-                    const active = questionTypes.includes(key);
-                    return (
-                      <button
-                        key={key}
-                        className={`ai-quiz-type-pill${active ? ' is-selected' : ''}`}
-                        onClick={() => toggleQuestionType(key)}
-                        type="button"
-                        aria-pressed={active}
-                      >
-                        {active && <Check size={15} aria-hidden="true" />}
-                        {label}
-                      </button>
-                    );
-                  })}
+                <div className="ai-quiz-breakdown-heading">
+                  <span className="ai-quiz-label">Quiz Breakdown</span>
+                  <span className="ai-quiz-total">Total: {totalQuestions} Questions</span>
                 </div>
-                {questionTypes.length === 0 && (
-                  <p className="ai-quiz-warning">Select at least one question type.</p>
+                <div className="ai-quiz-breakdown-list">
+                  {questionBreakdownWithRanges.map((item, index) => (
+                    <div className={`ai-quiz-breakdown-row${item.enabled ? ' is-enabled' : ''}`} key={item.id}>
+                      <button
+                        className={`ai-quiz-type-pill${item.enabled ? ' is-selected' : ''}`}
+                        onClick={() => toggleQuestionType(item.id)}
+                        type="button"
+                        aria-pressed={item.enabled}
+                      >
+                        {item.enabled && <Check size={15} aria-hidden="true" />}
+                        {item.label}
+                      </button>
+                      <label className="ai-quiz-count-control">
+                        <span>Items</span>
+                        <input
+                          type="number"
+                          className="ai-quiz-input"
+                          aria-label={`${item.label} item count`}
+                          value={item.count}
+                          onChange={event => updateQuestionCount(item.id, event.target.value)}
+                          min="0"
+                          max="50"
+                          disabled={!item.enabled}
+                        />
+                      </label>
+                      <span className="ai-quiz-range">
+                        {item.end !== null ? `Questions ${item.start}–${item.end}` : 'Not included'}
+                      </span>
+                      <div className="ai-quiz-order-controls">
+                        <button
+                          type="button"
+                          aria-label={`Move ${item.label} up`}
+                          onClick={() => moveQuestionSection(item.id, -1)}
+                          disabled={index === 0}
+                        >
+                          <ArrowUp size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Move ${item.label} down`}
+                          onClick={() => moveQuestionSection(item.id, 1)}
+                          disabled={index === questionBreakdown.length - 1}
+                        >
+                          <ArrowDown size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {totalQuestions === 0 && (
+                  <p className="ai-quiz-warning">Enable a question type and add at least one item.</p>
                 )}
               </div>
 
@@ -1551,7 +1608,7 @@ const SectionDetails = ({ section, onBack }) => {
                 className="ai-quiz-generate"
                 type="button"
                 onClick={handleGenerateQuiz}
-                disabled={isGeneratingQuiz || isSavingQuiz || questionTypes.length === 0}
+                disabled={isGeneratingQuiz || isSavingQuiz || totalQuestions === 0}
               >
                 {isGeneratingQuiz ? (
                   <span className="quiz-btn-loading">

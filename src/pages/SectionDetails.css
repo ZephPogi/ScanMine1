@@ -1020,6 +1020,104 @@
     font-weight: 700;
 }
 
+.ai-quiz-breakdown-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.ai-quiz-breakdown-heading .ai-quiz-label {
+    margin: 0;
+}
+
+.ai-quiz-total {
+    color: #047857;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.ai-quiz-breakdown-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ai-quiz-breakdown-row {
+    display: grid;
+    grid-template-columns: minmax(150px, 1fr) 90px minmax(120px, auto) 68px;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+}
+
+.ai-quiz-breakdown-row .ai-quiz-type-pill {
+    justify-self: start;
+}
+
+.ai-quiz-count-control {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: #64748b;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.ai-quiz-count-control .ai-quiz-input {
+    padding: 7px 9px;
+    border-radius: 8px;
+}
+
+.ai-quiz-count-control .ai-quiz-input:disabled {
+    color: #94a3b8;
+    background: #f1f5f9;
+    cursor: not-allowed;
+}
+
+.ai-quiz-range {
+    color: #475569;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.ai-quiz-order-controls {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.ai-quiz-order-controls button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    color: #475569;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.ai-quiz-order-controls button:hover:not(:disabled) {
+    color: #047857;
+    border-color: #059669;
+}
+
+.ai-quiz-order-controls button:disabled {
+    color: #cbd5e1;
+    cursor: not-allowed;
+}
+
 .ai-quiz-warning,
 .ai-quiz-help {
     margin: 8px 0 0;
@@ -1152,6 +1250,25 @@
     .ai-quiz-type-pill {
         padding: 8px 10px;
         font-size: 0.8rem;
+    }
+
+    .ai-quiz-breakdown-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+    }
+
+    .ai-quiz-range {
+        grid-column: 1;
+        grid-row: 2;
+    }
+
+    .ai-quiz-count-control {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+    }
+
+    .ai-quiz-order-controls {
+        grid-column: 1 / -1;
     }
 
     .ai-quiz-modal-footer {

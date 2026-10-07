@@ -682,6 +682,31 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
       }
     } catch (_) { /* keep default if parsing fails */ }
 
+    let questionBreakdown = null;
+    if (req.body.questionBreakdown) {
+      try {
+        questionBreakdown = JSON.parse(req.body.questionBreakdown);
+      } catch (_) {
+        return res.status(400).json({ error: 'Question breakdown must be valid JSON.' });
+      }
+      const supportedTypes = new Set(['multiple_choice', 'true_false', 'identification']);
+      if (!Array.isArray(questionBreakdown) || questionBreakdown.length === 0
+        || questionBreakdown.some(section => (
+          !section
+          || !supportedTypes.has(section.type)
+          || !Number.isInteger(section.count)
+          || section.count < 1
+        ))
+        || new Set(questionBreakdown.map(section => section.type)).size !== questionBreakdown.length) {
+        return res.status(400).json({ error: 'Question breakdown must contain unique question types with positive whole-number counts.' });
+      }
+      questionTypes = questionBreakdown.map(section => section.type);
+    }
+
+    const requestedQuestionCount = questionBreakdown
+      ? questionBreakdown.reduce((total, section) => total + section.count, 0)
+      : parseInt(numberOfQuestions, 10) || 10;
+
     let text = '';
     let fileUrl = null;
 
@@ -701,9 +726,9 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
 
     let questions = [];
     if (file?.mimetype === 'application/pdf') {
-      questions = await generateQuizFromText(file.buffer, examId, parseInt(numberOfQuestions) || 10, questionTypes, customPrompt || '', file.mimetype);
+      questions = await generateQuizFromText(file.buffer, examId, requestedQuestionCount, questionTypes, customPrompt || '', file.mimetype, questionBreakdown);
     } else if (text) {
-      questions = await generateQuizFromText(text, examId, parseInt(numberOfQuestions) || 10, questionTypes, customPrompt || '');
+      questions = await generateQuizFromText(text, examId, requestedQuestionCount, questionTypes, customPrompt || '', '', questionBreakdown);
     }
     res.json({ message: 'Exam created successfully', examId, questions });
   } catch (error) {

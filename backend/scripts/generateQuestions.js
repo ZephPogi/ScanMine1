@@ -234,14 +234,78 @@ async function extractPdfTextFallback(pdfBuffer) {
   return text || 'No readable text could be extracted from the PDF.';
 }
 
-async function generateQuestionsWithGroq(text, numberOfQuestions, questionTypes, customPrompt) {
+const QUESTION_TYPE_LABELS = {
+  multiple_choice: 'Multiple Choice',
+  true_false: 'True / False',
+  identification: 'Identification',
+};
+
+function createBreakdownInstructions(questionBreakdown) {
+  if (!questionBreakdown) return '';
+
+  let questionNumber = 1;
+  const sections = questionBreakdown.map((section, index) => {
+    const endQuestion = questionNumber + section.count - 1;
+    const typeInstruction = section.type === 'multiple_choice'
+      ? '4 choices A-D, correctAnswer MUST be a single letter A-D'
+      : section.type === 'true_false'
+        ? "correctAnswer MUST be 'True' or 'False'"
+        : 'correctAnswer MUST be the exact answer word or phrase';
+    const sectionText = `- Section ${index + 1} (Questions ${questionNumber} to ${endQuestion}): ${QUESTION_TYPE_LABELS[section.type]} (${typeInstruction}).`;
+    questionNumber = endQuestion + 1;
+    return sectionText;
+  });
+  const totalQuestions = questionNumber - 1;
+  return `Generate a quiz with exactly ${totalQuestions} questions strictly ordered into the following numbered sections:\n${sections.join('\n')}\nReturn strictly valid JSON array of questions maintaining this EXACT sequence.`;
+}
+
+function normalizeQuestionBreakdown(questionBreakdown, allowedTypes) {
+  if (questionBreakdown == null) return null;
+  if (!Array.isArray(questionBreakdown) || questionBreakdown.length === 0) {
+    throw new Error('Question breakdown must be a non-empty ordered array.');
+  }
+
+  const seenTypes = new Set();
+  const normalized = questionBreakdown.map(section => {
+    if (!section || !allowedTypes.includes(section.type) || seenTypes.has(section.type)) {
+      throw new Error('Question breakdown contains an invalid or duplicate question type.');
+    }
+    if (!Number.isInteger(section.count) || section.count < 1) {
+      throw new Error('Each enabled question section must have a positive whole-number count.');
+    }
+    seenTypes.add(section.type);
+    return { type: section.type, count: section.count };
+  });
+  return normalized;
+}
+
+function validateQuestionBreakdownOrder(questions, questionBreakdown) {
+  if (!questionBreakdown) return;
+
+  let questionIndex = 0;
+  for (const section of questionBreakdown) {
+    for (let item = 0; item < section.count; item += 1) {
+      if (questions[questionIndex]?.type !== section.type) {
+        throw new Error(`Generated questions do not match the requested section order at question ${questionIndex + 1}.`);
+      }
+      questionIndex += 1;
+    }
+  }
+  if (questions.length !== questionIndex) {
+    throw new Error(`Expected exactly ${questionIndex} questions from the requested breakdown.`);
+  }
+}
+
+async function generateQuestionsWithGroq(text, numberOfQuestions, questionTypes, customPrompt, questionBreakdown) {
   if (!process.env.GROQ_API_KEY) {
     throw new Error('GROQ_API_KEY is not set; cannot generate questions from the lesson text.');
   }
 
+  const breakdownInstructions = createBreakdownInstructions(questionBreakdown);
   const prompt = `Generate exactly ${numberOfQuestions} quiz questions from this lesson text.
 Use only these question types: ${questionTypes}.
 CRITICAL FOR MULTIPLE CHOICE: For 'multiple_choice' items, 'correctAnswer' MUST be strictly a single uppercase letter corresponding to the correct choice ('A', 'B', 'C', or 'D'). Do NOT put the full text or word in 'correctAnswer'.
+${breakdownInstructions}
 ${customPrompt?.trim() ? `Additional teacher instructions: ${customPrompt.trim()}\n` : ''}
 Return a JSON object with a "questions" array. Each question must have "question", "options", "correctAnswer", and "type" fields.
 
@@ -350,9 +414,10 @@ const QUESTION_SCHEMA = {
  * @param {string[]} questionTypes    - Subset of: ['multiple_choice','true_false','identification']
  * @param {string} customPrompt       - Optional extra instructions for the AI
  * @param {string} mimeType           - MIME type of the source file, when available
+ * @param {Array<{type: string, count: number}>|null} questionBreakdown - Ordered question sections
  * @returns {Promise<Array>}          - Array of question objects
  */
-async function generateQuizFromText(text, examId, numberOfQuestions = 10, questionTypes = ['multiple_choice', 'true_false', 'identification'], customPrompt = '', mimeType = '') {
+async function generateQuizFromText(text, examId, numberOfQuestions = 10, questionTypes = ['multiple_choice', 'true_false', 'identification'], customPrompt = '', mimeType = '', questionBreakdown = null) {
   // ── Guard: API key must be present ──────────────────────────────────────
   if (!process.env.GEMINI_API_KEY) {
     console.error('[generateQuizFromText] GEMINI_API_KEY is missing. Returning empty question list.');
@@ -364,6 +429,11 @@ async function generateQuizFromText(text, examId, numberOfQuestions = 10, questi
     const allowedTypes = Array.isArray(questionTypes) && questionTypes.length > 0
       ? questionTypes
       : ['multiple_choice', 'true_false', 'identification'];
+    const normalizedBreakdown = normalizeQuestionBreakdown(questionBreakdown, allowedTypes);
+    const requestedQuestionCount = normalizedBreakdown
+      ? normalizedBreakdown.reduce((total, section) => total + section.count, 0)
+      : numberOfQuestions;
+    const breakdownInstructions = createBreakdownInstructions(normalizedBreakdown);
 
     const typeLabels = {
       multiple_choice: 'multiple_choice',
@@ -385,12 +455,13 @@ async function generateQuizFromText(text, examId, numberOfQuestions = 10, questi
 
     const isPdf = Buffer.isBuffer(text) || mimeType === 'application/pdf';
     const prompt = isPdf
-      ? `Extract lesson concepts and generate ${numberOfQuestions} quiz questions from this attached PDF based on these options:${allowedTypes}.\n${multipleChoiceInstruction}\nReturn strictly valid JSON.`
+      ? `Extract lesson concepts from this attached PDF. ${breakdownInstructions || `Generate ${requestedQuestionCount} quiz questions based on these options: ${allowedTypes}.`}\n${multipleChoiceInstruction}\nReturn strictly valid JSON.`
       : `You are an expert quiz maker.
 
-Analyze the following passage and generate exactly ${numberOfQuestions} quiz questions.
+Analyze the following passage and generate exactly ${requestedQuestionCount} quiz questions.
 Only use these question types: ${allowedTypeNames}.
-Distribute the questions evenly across the allowed types.
+${normalizedBreakdown ? '' : 'Distribute the questions evenly across the allowed types.'}
+${breakdownInstructions}
 ${multipleChoiceInstruction}
 ${customInstructions}
 Rules:
@@ -416,7 +487,13 @@ JSON output:`;
       rawText = response.text?.trim() ?? '';
     } catch {
       const fallbackText = isPdf ? await extractPdfTextFallback(text) : text;
-      rawText = await generateQuestionsWithGroq(fallbackText, numberOfQuestions, allowedTypes, customPrompt);
+      rawText = await generateQuestionsWithGroq(
+        fallbackText,
+        requestedQuestionCount,
+        normalizedBreakdown ? normalizedBreakdown.map(section => section.type) : allowedTypes,
+        customPrompt,
+        normalizedBreakdown
+      );
     }
 
     // ── Parse response ───────────────────────────────────────────────────
@@ -432,8 +509,14 @@ JSON output:`;
       throw new Error('Gemini response is not a JSON array.');
     }
 
-    // Clamp to requested number
-    const questions = normalizeMultipleChoiceAnswers(parsed.slice(0, numberOfQuestions));
+    if (normalizedBreakdown && parsed.length !== requestedQuestionCount) {
+      throw new Error(`Expected exactly ${requestedQuestionCount} questions from the requested breakdown.`);
+    }
+
+    const questions = normalizeMultipleChoiceAnswers(
+      parsed.slice(0, requestedQuestionCount)
+    );
+    validateQuestionBreakdownOrder(questions, normalizedBreakdown);
 
     // ── Persist to DB if examId is provided ──────────────────────────────
     for (const q of questions) {
