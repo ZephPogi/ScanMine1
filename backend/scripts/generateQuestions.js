@@ -3,7 +3,6 @@ process.env.PDFJS_DISABLE_WORKER = 'true';
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const db = require('../db');
 const OCRRouter = require('./ocrRouter');
 const { GoogleGenAI } = require('@google/genai');
 
@@ -409,7 +408,6 @@ const QUESTION_SCHEMA = {
  * Uses Google Gemini (gemini-3.6-flash) to generate quiz questions from text.
  *
  * @param {string|Buffer} text       - Source passage or uploaded PDF buffer
- * @param {string|number|null} examId - DB exam ID (used to persist questions)
  * @param {number} numberOfQuestions  - How many questions to request
  * @param {string[]} questionTypes    - Subset of: ['multiple_choice','true_false','identification']
  * @param {string} customPrompt       - Optional extra instructions for the AI
@@ -417,7 +415,7 @@ const QUESTION_SCHEMA = {
  * @param {Array<{type: string, count: number}>|null} questionBreakdown - Ordered question sections
  * @returns {Promise<Array>}          - Array of question objects
  */
-async function generateQuizFromText(text, examId, numberOfQuestions = 10, questionTypes = ['multiple_choice', 'true_false', 'identification'], customPrompt = '', mimeType = '', questionBreakdown = null) {
+async function generateQuizFromText(text, numberOfQuestions = 10, questionTypes = ['multiple_choice', 'true_false', 'identification'], customPrompt = '', mimeType = '', questionBreakdown = null) {
   // ── Guard: API key must be present ──────────────────────────────────────
   if (!process.env.GEMINI_API_KEY) {
     console.error('[generateQuizFromText] GEMINI_API_KEY is missing. Returning empty question list.');
@@ -517,21 +515,6 @@ JSON output:`;
       parsed.slice(0, requestedQuestionCount)
     );
     validateQuestionBreakdownOrder(questions, normalizedBreakdown);
-
-    // ── Persist to DB if examId is provided ──────────────────────────────
-    for (const q of questions) {
-      if (examId) {
-        try {
-          await db.query(
-            'INSERT INTO Generated_Questions (exam_id, question_text, correct_answer) VALUES ($1, $2, $3)',
-            [examId, q.question, q.correctAnswer]
-          );
-        } catch (dbErr) {
-          // Non-fatal: log and continue
-          console.warn('[generateQuizFromText] DB insert skipped for question:', q.question, dbErr.message);
-        }
-      }
-    }
 
     console.log(`[generateQuizFromText] Generated ${questions.length} questions via AI.`);
     return questions;

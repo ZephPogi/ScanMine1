@@ -726,9 +726,9 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
 
     let questions = [];
     if (file?.mimetype === 'application/pdf') {
-      questions = await generateQuizFromText(file.buffer, examId, requestedQuestionCount, questionTypes, customPrompt || '', file.mimetype, questionBreakdown);
+      questions = await generateQuizFromText(file.buffer, requestedQuestionCount, questionTypes, customPrompt || '', file.mimetype, questionBreakdown);
     } else if (text) {
-      questions = await generateQuizFromText(text, examId, requestedQuestionCount, questionTypes, customPrompt || '', '', questionBreakdown);
+      questions = await generateQuizFromText(text, requestedQuestionCount, questionTypes, customPrompt || '', '', questionBreakdown);
     }
     res.json({ message: 'Exam created successfully', examId, questions });
   } catch (error) {
@@ -784,19 +784,22 @@ app.post('/api/save-quiz', async (req, res) => {
     await db.query('DELETE FROM answer_keys WHERE exam_id = $1', [id]);
     await db.query('DELETE FROM generated_questions WHERE exam_id = $1', [id]);
 
-    let questionCount = 0;
-    for (const item of normalizedItems) {
-      const correct = item.correctAnswer;
-      const qText = item.questionText || item.question || item.question_text;
-      if (!correct) continue;
-      questionCount++;
+    const insertItems = normalizedItems.filter(item => item.correctAnswer);
+    const questionCount = insertItems.length;
+    if (questionCount > 0) {
+      const values = [];
+      const valuePlaceholders = insertItems.map((item, index) => {
+        const offset = index * 3;
+        values.push(
+          id,
+          item.correctAnswer,
+          item.questionText || item.question || item.question_text || `Question ${index + 1}`
+        );
+        return `($${offset + 1}, $${offset + 2}, $${offset + 3})`;
+      });
       await db.query(
-        'INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ($1, $2, $3)',
-        [id, correct, qText || `Question ${questionCount}`]
-      );
-      await db.query(
-        'INSERT INTO Generated_Questions (exam_id, question_text, correct_answer) VALUES ($1, $2, $3)',
-        [id, qText || `Question ${questionCount}`, correct]
+        `INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ${valuePlaceholders.join(', ')}`,
+        values
       );
     }
 

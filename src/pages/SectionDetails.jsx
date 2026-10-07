@@ -130,6 +130,7 @@ const SectionDetails = ({ section, onBack }) => {
   const [quizLessonFile, setQuizLessonFile] = useState(null);
   const [questionBreakdown, setQuestionBreakdown] = useState(DEFAULT_QUESTION_BREAKDOWN);
   const [generatedQuestions, setGeneratedQuestions] = useState([]);
+  const quizSaveInProgressRef = useRef(false);
   const [generatedExamId, setGeneratedExamId] = useState(null);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
   const [isSavingQuiz, setIsSavingQuiz] = useState(false);
@@ -574,7 +575,17 @@ const SectionDetails = ({ section, onBack }) => {
         throw new Error(data?.error || 'Quiz generation failed. Please try again.');
       }
 
-      const questions = Array.isArray(data?.questions) ? data.questions : [];
+      const questions = Array.isArray(data?.questions)
+        ? Array.from(new Map(data.questions.map(question => [
+          JSON.stringify([
+            question.type,
+            question.question || question.question_text,
+            question.correctAnswer || question.answer_text,
+            question.options
+          ]),
+          question
+        ])).values())
+        : [];
       if (questions.length === 0) {
         throw new Error('No questions were generated. Try a different PDF or prompt.');
       }
@@ -590,11 +601,13 @@ const SectionDetails = ({ section, onBack }) => {
   };
 
   const handleSaveAndAssignQuiz = async () => {
+    if (quizSaveInProgressRef.current) return;
     if (generatedQuestions.length === 0) {
       setQuizError('Generate a quiz before saving and assigning it to the class.');
       return;
     }
 
+    quizSaveInProgressRef.current = true;
     setQuizError('');
     setIsSavingQuiz(true);
     try {
@@ -649,6 +662,7 @@ const SectionDetails = ({ section, onBack }) => {
       console.error('Save quiz error:', error);
       setQuizError(error?.message || 'Error saving quiz.');
     } finally {
+      quizSaveInProgressRef.current = false;
       setIsSavingQuiz(false);
     }
   };
