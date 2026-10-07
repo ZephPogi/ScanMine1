@@ -15,6 +15,51 @@ const cleanAnswer = (ans) => {
   return String(ans).replace(/^(?:Answer:\s*)+/i, '').trim();
 };
 
+const getMultipleChoiceDetails = (question) => {
+  const optionLetters = ['A', 'B', 'C', 'D'];
+  const options = Array.isArray(question?.options)
+    ? question.options.map(option => (
+      typeof option === 'string' ? option.replace(/^\s*[A-D]\s*[.)]\s*/i, '').trim() : ''
+    ))
+    : [];
+  const rawAnswer = cleanAnswer(question?.correctAnswer ?? question?.correct_answer ?? question?.answer_text);
+  const letterMatch = rawAnswer.match(/^([A-D])(?:\s*[).:-]|\s*\(|$)/i);
+  let optionIndex = letterMatch ? optionLetters.indexOf(letterMatch[1].toUpperCase()) : -1;
+
+  if (optionIndex < 0 && rawAnswer) {
+    const normalizedAnswer = rawAnswer.toLowerCase();
+    optionIndex = options.findIndex(option => option && option.toLowerCase() === normalizedAnswer);
+    if (optionIndex < 0) {
+      optionIndex = options.findIndex(option => option
+        && (option.toLowerCase().includes(normalizedAnswer) || normalizedAnswer.includes(option.toLowerCase())));
+    }
+  }
+
+  const letter = optionIndex >= 0 && optionIndex < optionLetters.length
+    ? optionLetters[optionIndex]
+    : (letterMatch ? letterMatch[1].toUpperCase() : '');
+  const answer = letter
+    ? `${letter}${options[optionIndex] ? ` (${options[optionIndex]})` : ''}`
+    : (rawAnswer || 'N/A');
+
+  return { answer, letter, optionIndex, options };
+};
+
+const normalizeMultipleChoiceQuestion = (question) => {
+  if (question?.type !== 'multiple_choice') return question;
+
+  const details = getMultipleChoiceDetails(question);
+  if (!/^[A-D]$/.test(details.letter)) {
+    throw new Error(`Could not map the multiple-choice answer for "${question.question || question.question_text || 'a question'}" to an option letter.`);
+  }
+
+  return {
+    ...question,
+    options: details.options,
+    correctAnswer: details.letter
+  };
+};
+
 const wakeHuggingFaceSpace = () => {
   fetch('https://zephpogi-scanmine-trocr.hf.space/', { mode: 'no-cors' })
     .then(() => console.log('🔥 [Pre-Warm] Sent wakeup ping to Hugging Face Space'))
@@ -535,9 +580,12 @@ const SectionDetails = ({ section, onBack }) => {
     setQuizError('');
     setIsSavingQuiz(true);
     try {
-      const answers = generatedQuestions.map((q, i) => ({
+      const normalizedQuestions = generatedQuestions.map(normalizeMultipleChoiceQuestion);
+      const answers = normalizedQuestions.map((q, i) => ({
         questionText: q.question || q.question_text || `Question ${i + 1}`,
-        correctAnswer: q.correctAnswer || q.answer_text || ''
+        correctAnswer: q.correctAnswer || q.answer_text || '',
+        type: q.type,
+        options: q.options
       }));
 
       const payload = {
@@ -545,7 +593,7 @@ const SectionDetails = ({ section, onBack }) => {
         teacherId: user?.id || '',
         classId: section?.id || '',
         title: examTitle,
-        questions: generatedQuestions,
+        questions: normalizedQuestions,
         answers
       };
 
@@ -603,7 +651,9 @@ const SectionDetails = ({ section, onBack }) => {
 
     let yPosition = 40;
     generatedQuestions.forEach((q, index) => {
-      const ans = cleanAnswer(q.correctAnswer || q.answer_text || '');
+      const ans = q.type === 'multiple_choice'
+        ? getMultipleChoiceDetails(q).answer
+        : cleanAnswer(q.correctAnswer || q.answer_text || '');
       const qText = q.question || q.question_text || `Question ${index + 1}`;
       const line = `${ans.padEnd(15)} ${index + 1}. ${qText}`;
       doc.text(line, 20, yPosition);
@@ -982,7 +1032,9 @@ const SectionDetails = ({ section, onBack }) => {
                         <div key={a.id || `manual-${idx}`} className="question-item">
                           <p><strong>{idx + 1}. {a.question_text || `Question ${idx + 1}`}</strong></p>
                           <p className="ans-text" style={{ color: '#059669', fontWeight: 'bold' }}>
-                            Answer: {cleanAnswer(a.correct_answer) || 'N/A'}
+                            Answer: {a.type === 'multiple_choice' || (Array.isArray(a.options) && a.options.length > 0)
+                              ? getMultipleChoiceDetails({ ...a, correctAnswer: a.correct_answer }).answer
+                              : cleanAnswer(a.correct_answer) || 'N/A'}
                           </p>
                         </div>
                       ) : null)
@@ -1445,11 +1497,13 @@ const SectionDetails = ({ section, onBack }) => {
                       <div key={index} className="quiz-preview-item">
                         <span className="quiz-preview-type">{q.type?.replace('_', ' ')}</span>
                         <p className="quiz-preview-q">{index + 1}. {q.question || q.question_text}</p>
-                        <p className="quiz-preview-ans">✓ {q.correctAnswer || q.answer_text}</p>
+                        <p className="quiz-preview-ans">✓ {q.type === 'multiple_choice'
+                          ? getMultipleChoiceDetails(q).answer
+                          : q.correctAnswer || q.answer_text}</p>
                         {q.options?.length > 0 && (
                           <div className="quiz-preview-opts">
-                            {q.options.map((opt, i) => (
-                              <span key={i} className={`quiz-opt-chip${opt === (q.correctAnswer || q.answer_text) ? ' quiz-opt-correct' : ''}`}>
+                            {getMultipleChoiceDetails(q).options.map((opt, i) => (
+                              <span key={i} className={`quiz-opt-chip${q.type === 'multiple_choice' && i === getMultipleChoiceDetails(q).optionIndex ? ' quiz-opt-correct' : ''}`}>
                                 {opt}
                               </span>
                             ))}

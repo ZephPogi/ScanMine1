@@ -25,6 +25,27 @@ const { BUCKET_NAME } = require('../backend/supabaseClient');
 
 const app = express();
 const port = process.env.PORT || 5000;
+const MULTIPLE_CHOICE_LETTERS = ['A', 'B', 'C', 'D'];
+
+const normalizeMultipleChoiceAnswer = (answer, options) => {
+  const value = typeof answer === 'string' ? answer.trim() : String(answer ?? '').trim();
+  const letterMatch = value.match(/^([A-D])(?:\s*[).:-]|\s*\(|$)/i);
+  if (letterMatch) return letterMatch[1].toUpperCase();
+
+  if (!Array.isArray(options) || !value) return null;
+  const cleanOptions = options.map(option => (
+    typeof option === 'string' ? option.replace(/^\s*[A-D]\s*[.)]\s*/i, '').trim() : ''
+  ));
+  const normalizedAnswer = value.toLowerCase();
+  let index = cleanOptions.findIndex(option => option && option.toLowerCase() === normalizedAnswer);
+  if (index < 0) {
+    index = cleanOptions.findIndex(option => option
+      && (option.toLowerCase().includes(normalizedAnswer) || normalizedAnswer.includes(option.toLowerCase())));
+  }
+  return index >= 0 && index < MULTIPLE_CHOICE_LETTERS.length
+    ? MULTIPLE_CHOICE_LETTERS[index]
+    : null;
+};
 
 app.use(cors());
 app.use(express.json());
@@ -695,16 +716,33 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
 app.post('/api/save-quiz', async (req, res) => {
   try {
     const { examId, teacherId, classId, title, questions, answers } = req.body;
+    const sourceQuestions = Array.isArray(questions) ? questions : [];
     const items = Array.isArray(answers) && answers.length
-      ? answers
-      : (Array.isArray(questions)
-        ? questions.map((q) => ({
-            questionText: q.question || q.question_text,
-            correctAnswer: q.correctAnswer || q.answer_text
-          }))
-        : []);
+      ? answers.map((answer, index) => ({
+          ...sourceQuestions[index],
+          ...answer,
+          type: answer.type || sourceQuestions[index]?.type,
+          options: answer.options || sourceQuestions[index]?.options
+        }))
+      : sourceQuestions.map(q => ({
+          ...q,
+          questionText: q.question || q.question_text,
+          correctAnswer: q.correctAnswer || q.answer_text
+        }));
 
     if (!items.length) return res.status(400).json({ error: 'No questions to save' });
+
+    const normalizedItems = [];
+    for (const item of items) {
+      let correctAnswer = item.correctAnswer || item.answer_text || item.correct_answer;
+      if (item.type === 'multiple_choice') {
+        correctAnswer = normalizeMultipleChoiceAnswer(correctAnswer, item.options);
+        if (!correctAnswer) {
+          return res.status(400).json({ error: 'A multiple-choice answer could not be mapped to A, B, C, or D.' });
+        }
+      }
+      normalizedItems.push({ ...item, correctAnswer });
+    }
 
     let id = examId;
     if (!id) {
@@ -722,8 +760,8 @@ app.post('/api/save-quiz', async (req, res) => {
     await db.query('DELETE FROM generated_questions WHERE exam_id = $1', [id]);
 
     let questionCount = 0;
-    for (const item of items) {
-      const correct = item.correctAnswer || item.answer_text;
+    for (const item of normalizedItems) {
+      const correct = item.correctAnswer;
       const qText = item.questionText || item.question || item.question_text;
       if (!correct) continue;
       questionCount++;
@@ -993,6 +1031,22 @@ app.post('/api/upload-answer-key', async (req, res) => {
     const { examId, answers, pdfUrl } = req.body;
     if (!examId || !answers) return res.status(400).json({ error: 'Missing data' });
 
+    const normalizedAnswers = Array.isArray(answers)
+      ? answers.map(item => {
+        if (item?.type !== 'multiple_choice') return item;
+        const correctAnswer = normalizeMultipleChoiceAnswer(
+          item.correctAnswer ?? item.correct_answer ?? item.answer_text,
+          item.options
+        );
+        return correctAnswer ? { ...item, correctAnswer } : null;
+      })
+      : answers;
+    if (Array.isArray(normalizedAnswers) && normalizedAnswers.some((item, index) => (
+      answers[index]?.type === 'multiple_choice' && !item
+    ))) {
+      return res.status(400).json({ error: 'A multiple-choice answer could not be mapped to A, B, C, or D.' });
+    }
+
     // 1. Clear old keys for this exam (prevent duplicates)
     await db.query('DELETE FROM answer_keys WHERE exam_id = $1', [examId]);
     await db.query('DELETE FROM generated_questions WHERE exam_id = $1', [examId]);
@@ -1000,9 +1054,9 @@ app.post('/api/upload-answer-key', async (req, res) => {
     let questionCount = 0;
 
     // 2. CHECK: If the frontend sent a structured array (OCR Data)
-    if (Array.isArray(answers)) {
-      console.log(`Processing array of ${answers.length} answers...`);
-      for (const item of answers) {
+    if (Array.isArray(normalizedAnswers)) {
+      console.log(`Processing array of ${normalizedAnswers.length} answers...`);
+      for (const item of normalizedAnswers) {
         if (item.correctAnswer && item.correctAnswer !== '?') {
           questionCount++;
           await db.query(

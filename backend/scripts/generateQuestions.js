@@ -241,6 +241,7 @@ async function generateQuestionsWithGroq(text, numberOfQuestions, questionTypes,
 
   const prompt = `Generate exactly ${numberOfQuestions} quiz questions from this lesson text.
 Use only these question types: ${questionTypes}.
+CRITICAL FOR MULTIPLE CHOICE: For 'multiple_choice' items, 'correctAnswer' MUST be strictly a single uppercase letter corresponding to the correct choice ('A', 'B', 'C', or 'D'). Do NOT put the full text or word in 'correctAnswer'.
 ${customPrompt?.trim() ? `Additional teacher instructions: ${customPrompt.trim()}\n` : ''}
 Return a JSON object with a "questions" array. Each question must have "question", "options", "correctAnswer", and "type" fields.
 
@@ -277,6 +278,52 @@ ${text.slice(0, 12000)}
     throw new Error('Groq response did not contain a questions array.');
   }
   return JSON.stringify(parsed.questions);
+}
+
+function normalizeMultipleChoiceAnswers(questions) {
+  const optionLetters = ['A', 'B', 'C', 'D'];
+
+  return questions.map((question) => {
+    if (question.type !== 'multiple_choice') return question;
+
+    const options = Array.isArray(question.options) ? question.options : [];
+    const cleanOptions = options.map((option) => (
+      typeof option === 'string'
+        ? option.replace(/^\s*[A-D]\s*[.)]\s*/i, '')
+        : option
+    ));
+    question.options = cleanOptions;
+
+    const answer = typeof question.correctAnswer === 'string'
+      ? question.correctAnswer.trim()
+      : '';
+    const letterMatch = answer.match(/^([A-D])(?:\s*[).:-]|\s*\(|$)/i);
+    if (letterMatch) {
+      question.correctAnswer = letterMatch[1].toUpperCase();
+      return question;
+    }
+
+    if (answer.length > 1) {
+      const normalizedAnswer = answer.toLowerCase();
+      let matchingIndex = cleanOptions.findIndex(
+        option => typeof option === 'string' && option.trim().toLowerCase() === normalizedAnswer
+      );
+      if (matchingIndex < 0) {
+        matchingIndex = cleanOptions.findIndex(
+          option => typeof option === 'string'
+            && option.trim()
+            && (option.toLowerCase().includes(normalizedAnswer) || normalizedAnswer.includes(option.trim().toLowerCase()))
+        );
+      }
+      if (matchingIndex >= 0 && matchingIndex < optionLetters.length) {
+        question.correctAnswer = optionLetters[matchingIndex];
+      }
+    }
+    if (!optionLetters.includes(question.correctAnswer)) {
+      throw new Error('A multiple-choice answer could not be mapped to A, B, C, or D.');
+    }
+    return question;
+  });
 }
 
 // JSON schema that Gemini must conform to for each question
@@ -326,10 +373,11 @@ async function generateQuizFromText(text, examId, numberOfQuestions = 10, questi
     const allowedTypeNames = allowedTypes.map(t => typeLabels[t] || t).join(', ');
 
     const typeRules = [
-      allowedTypes.includes('multiple_choice') && '- For multiple_choice: provide exactly 4 options (A, B, C, D) and set correctAnswer to the correct option text.',
+      allowedTypes.includes('multiple_choice') && '- For multiple_choice: provide exactly 4 options (A, B, C, D) and set correctAnswer to the corresponding option letter.',
       allowedTypes.includes('true_false')      && '- For true_false: set options to ["True", "False"] and correctAnswer to either "True" or "False".',
       allowedTypes.includes('identification')  && '- For identification: leave options as an empty array [] and set correctAnswer to the exact answer word or phrase.',
     ].filter(Boolean).join('\n');
+    const multipleChoiceInstruction = "CRITICAL FOR MULTIPLE CHOICE: For 'multiple_choice' items, 'correctAnswer' MUST be strictly a single uppercase letter corresponding to the correct choice ('A', 'B', 'C', or 'D'). Do NOT put the full text or word in 'correctAnswer'.";
 
     const customInstructions = customPrompt?.trim()
       ? `\nAdditional instructions from the teacher:\n"${customPrompt.trim()}"\n`
@@ -337,12 +385,13 @@ async function generateQuizFromText(text, examId, numberOfQuestions = 10, questi
 
     const isPdf = Buffer.isBuffer(text) || mimeType === 'application/pdf';
     const prompt = isPdf
-      ? `Extract lesson concepts and generate ${numberOfQuestions} quiz questions from this attached PDF based on these options:${allowedTypes}. Return strictly valid JSON.`
+      ? `Extract lesson concepts and generate ${numberOfQuestions} quiz questions from this attached PDF based on these options:${allowedTypes}.\n${multipleChoiceInstruction}\nReturn strictly valid JSON.`
       : `You are an expert quiz maker.
 
 Analyze the following passage and generate exactly ${numberOfQuestions} quiz questions.
 Only use these question types: ${allowedTypeNames}.
 Distribute the questions evenly across the allowed types.
+${multipleChoiceInstruction}
 ${customInstructions}
 Rules:
 ${typeRules}
@@ -384,7 +433,7 @@ JSON output:`;
     }
 
     // Clamp to requested number
-    const questions = parsed.slice(0, numberOfQuestions);
+    const questions = normalizeMultipleChoiceAnswers(parsed.slice(0, numberOfQuestions));
 
     // ── Persist to DB if examId is provided ──────────────────────────────
     for (const q of questions) {
