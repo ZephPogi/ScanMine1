@@ -125,7 +125,7 @@
 }
 
 .table-responsive-wrapper table {
-    min-width: 600px;
+    min-width: 540px;
     white-space: nowrap;
 }
 
@@ -271,7 +271,7 @@
 }
 
 .scan-btn {
-    background: linear-gradient(135deg, #7c3aed, #9333ea);
+    background: #047857;
     color: white;
     border: none;
     padding: 11px 24px;
@@ -280,12 +280,13 @@
     font-weight: 700;
     cursor: pointer;
     transition: transform 0.15s, box-shadow 0.15s;
-    box-shadow: 0 3px 12px rgba(124, 58, 237, 0.3);
+    box-shadow: 0 3px 12px rgba(4, 120, 87, 0.24);
 }
 
 .scan-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 5px 18px rgba(124, 58, 237, 0.45);
+    background: #065f46;
+    box-shadow: 0 5px 18px rgba(4, 120, 87, 0.32);
 }
 
 .export-btn {
@@ -330,12 +331,13 @@
 }
 
 .scan-modal-content {
-    background: #f8fafc;
+    background: #ffffff;
     border-radius: 18px;
     width: 500px;
     max-width: 94vw;
     max-height: 90vh;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
     overflow-y: auto;
     animation: scanSlideUp 0.3s ease;
 }
@@ -353,32 +355,37 @@
 
 /* Title Banner */
 .scan-title-banner {
-    background: linear-gradient(135deg, #2d3a5c, #3b4a6b);
-    color: white;
-    text-align: center;
-    padding: 14px 20px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #ffffff;
+    color: #0f172a;
+    text-align: left;
+    padding: 18px 24px;
     font-size: 1.1rem;
     font-weight: 700;
-    margin: 0 20px;
-    border-radius: 12px;
-    letter-spacing: 0.3px;
+    border-bottom: 1px solid #f1f5f9;
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
-    position: relative;
+    gap: 10px;
+}
+
+.scan-title-banner > svg {
+    color: #047857;
 }
 
 .scan-close-btn {
     position: absolute;
-    right: 12px;
+    right: 18px;
     top: 50%;
     transform: translateY(-50%);
-    background: #ef4444;
-    color: white;
-    border: none;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
+    background: #f8fafc;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
     font-size: 1.2rem;
     line-height: 1;
     cursor: pointer;
@@ -389,7 +396,9 @@
 }
 
 .scan-close-btn:hover {
-    background: #dc2626;
+    background: #f1f5f9;
+    color: #0f172a;
+    border-color: #cbd5e1;
     transform: translateY(-50%) scale(1.1);
 }
 
@@ -399,10 +408,12 @@
 }
 
 .scan-step-title {
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: #1e293b;
-    margin: 0 0 8px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #475569;
+    margin: 0 0 9px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
 }
 
 /* Step 1: Search */
@@ -427,8 +438,8 @@
 
 .scan-search-input:focus {
     outline: none;
-    border-color: #4483f2;
-    box-shadow: 0 0 0 3px rgba(68, 131, 242, 0.1);
+    border-color: #059669;
+    box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.12);
 }
 
 .scan-search-input::placeholder {
@@ -437,7 +448,7 @@
 
 .scan-browse-btn {
     padding: 10px 22px;
-    background: #4483f2;
+    background: #047857;
     color: white;
     border: none;
     border-radius: 10px;
@@ -449,7 +460,7 @@
 }
 
 .scan-browse-btn:hover {
-    opacity: 0.88;
+    background: #065f46;
     transform: translateY(-1px);
 }
 
@@ -474,12 +485,12 @@
     text-align: center;
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s;
-    background: white;
+    background: #f8fafc;
 }
 
 .scan-capture-zone:hover {
-    border-color: #4483f2;
-    background: #f8faff;
+    border-color: #059669;
+    background: #f1f5f9;
 }
 
 .scan-camera-icon {
@@ -504,12 +515,12 @@
 /* Auto-detect info */
 .scan-autodetect {
     margin: 16px 24px 0;
-    background: linear-gradient(135deg, #ede9fe, #e0e7ff);
+    background: #ecfdf5;
     padding: 14px 18px;
     border-radius: 10px;
     text-align: center;
     font-size: 0.85rem;
-    color: #4c1d95;
+    color: #047857;
     font-weight: 600;
     line-height: 1.6;
 }
@@ -522,21 +533,23 @@
 }
 
 .scan-record-btn {
-    background: linear-gradient(135deg, #7c3aed, #9333ea);
+    background: #0d5c46;
     color: white;
-    border: none;
+    border: 1px solid #0d5c46;
     padding: 14px 40px;
     border-radius: 12px;
     font-size: 1.05rem;
     font-weight: 700;
     cursor: pointer;
     transition: transform 0.15s, box-shadow 0.15s;
-    box-shadow: 0 4px 16px rgba(124, 58, 237, 0.35);
+    box-shadow: 0 4px 14px rgba(13, 92, 70, 0.22);
 }
 
 .scan-record-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 22px rgba(124, 58, 237, 0.5);
+    background: #047857;
+    border-color: #047857;
+    box-shadow: 0 6px 18px rgba(13, 92, 70, 0.3);
 }
 
 .delete-sub-btn {
@@ -575,9 +588,9 @@
 }
 
 .mode-btn.active {
-    border-color: #7c3aed;
-    background: #f5f3ff;
-    color: #7c3aed;
+    border-color: #059669;
+    background: #ecfdf5;
+    color: #047857;
 }
 
 .manual-grade-area {
@@ -622,22 +635,32 @@
 }
 
 .feedback-row {
+    display: inline-flex;
+    align-items: center;
     padding: 10px 14px;
     border-radius: 10px;
     margin-bottom: 8px;
     font-size: 0.9rem;
     font-weight: 600;
     font-family: inherit;
+    border: 1px solid transparent;
 }
 
 .feedback-row.correct {
-    background: #dcfce7;
-    color: #166534;
+    background: #ecfdf5;
+    color: #047857;
+    border-color: #d1fae5;
 }
 
 .feedback-row.wrong {
-    background: #fee2e2;
+    background: #fef2f2;
     color: #991b1b;
+    border-color: #fee2e2;
+}
+
+.feedback-modal-body {
+    padding: 20px;
+    color: #334155;
 }
 
 /* Mobile Responsiveness */

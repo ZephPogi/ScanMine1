@@ -51,7 +51,6 @@ const AutoGradingResults = () => {
           name: sub.student_name,
           is_verified: sub.is_verified,
           exam: sub.exam_title,
-          submittedBy: 'System',
           method: 'AI Grading',
           score: sub.points_earned !== null ? `${sub.points_earned} / ${sub.total_items}` : `${Math.round(sub.score)}%`,
           status: sub.score >= 50 ? 'Pass' : 'Fail',
@@ -237,7 +236,6 @@ const handleScanRecord = async () => {
         id: data.result.submission_id || Date.now(),
         name: studentName,
         exam: examTitle,
-        submittedBy: 'Teacher (Scan)',
         method: 'AI Grading',
         score: `${totalScore} / ${maxScore}`,
         status: percentage >= 50 ? 'Pass' : 'Fail',
@@ -302,7 +300,6 @@ const handleScanRecord = async () => {
       setStudentResults(prev => [{
         id: data.result.submission_id || Date.now(),
         name: studentName, exam: examTitle,
-        submittedBy: 'Teacher (Manual)',
         score: `${data.result.totalScore} / ${data.result.maxScore}`,
         status: percentage >= 50 ? 'Pass' : 'Fail',
         feedback: data.result.feedback || '',
@@ -349,7 +346,6 @@ const handleScanRecord = async () => {
                 <tr>
                   <th>Student</th>
                   <th>Exam</th>
-                  <th>Submitted By</th>
                   <th>Score</th>
                   <th>Status</th>
                   <th>Action</th>
@@ -368,7 +364,6 @@ const handleScanRecord = async () => {
                       )}
                     </td>
                     <td>{s.exam}</td>
-                    <td>{s.submittedBy}</td>
                     <td className="score-cell">{s.score}</td>
                     <td>
                       <span className={`status-badge ${s.status.toLowerCase()}`}>
@@ -418,12 +413,12 @@ const handleScanRecord = async () => {
       {showFeedback && (
         <div className="scan-modal-overlay" onClick={() => setShowFeedback(null)}>
           <div className="scan-modal-content" style={{maxHeight: '80vh', overflowY: 'auto'}} onClick={e => e.stopPropagation()}>
-            <div className="scan-title-banner">
+            <div className="scan-title-banner feedback-title-banner">
               <FileText size={20} />
               <span>{showFeedback.name} — {showFeedback.exam}</span>
               <button className="scan-close-btn" onClick={() => setShowFeedback(null)}><X size={20} /></button>
             </div>
-            <div style={{padding: '20px'}}>
+            <div className="feedback-modal-body">
               {showFeedback?.image_url && (
                 <img 
                   src={showFeedback.image_url} 
@@ -437,8 +432,11 @@ const handleScanRecord = async () => {
               </div>
               {showFeedback.feedback ? showFeedback.feedback.split('\n').filter(Boolean).map((line, i) => {
                 const isWrong = line.includes('Wrong') || line.includes('❌');
-                // Extract only "Q1: Student answered 'X'"
-                const displayLine = line.split('|')[0].trim();
+                const displayLine = line
+                  .split('|')[0]
+                  .trim()
+                  .replace(/:\s*Student answered\s+/i, ': ')
+                  .replace(/^(\s*Q\d+:\s*)"([^"]+)"$/, '$1$2');
                 
                 return (
                   <div key={i} className={`feedback-row ${isWrong ? 'wrong' : 'correct'}`}>
