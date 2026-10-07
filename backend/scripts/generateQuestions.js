@@ -120,22 +120,21 @@ function getGenAIClient() {
   return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 }
 
-async function callGeminiWithFailover(prompt, imageBuffer = null) {
+async function callGeminiWithFailover(prompt, attachmentBuffer = null, mimeType = 'image/jpeg', maxAttempts = 5, stopAfterBusy = false) {
   const genai = getGenAIClient();
-  const MAX_ATTEMPTS = 5;
 
   for (const modelName of GEMINI_MODELS) {
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const payload = imageBuffer
+        const payload = attachmentBuffer
           ? [
               { text: prompt },
               {
                 inlineData: {
-                  data: Buffer.isBuffer(imageBuffer)
-                    ? imageBuffer.toString('base64')
-                    : Buffer.from(imageBuffer).toString('base64'),
-                  mimeType: 'image/jpeg',
+                  data: Buffer.isBuffer(attachmentBuffer)
+                    ? attachmentBuffer.toString('base64')
+                    : Buffer.from(attachmentBuffer).toString('base64'),
+                  mimeType,
                 },
               },
             ]
@@ -162,14 +161,15 @@ async function callGeminiWithFailover(prompt, imageBuffer = null) {
         }
 
         if (status === 503 || status === 429 || message.includes('503') || message.includes('429') || message.includes('high demand') || message.includes('overloaded')) {
-          if (attempt < MAX_ATTEMPTS) {
+          if (attempt < maxAttempts) {
             const baseDelay = 1500 * Math.pow(1.8, attempt - 1);
             const jitter = Math.random() * 800;
             const backoffMs = Math.min(baseDelay + jitter, 10000);
-            console.warn(`[Gemini Retry] ${modelName} 503/high demand (Attempt ${attempt}/5). Waiting${(backoffMs/1000).toFixed(1)}s...`);
+            console.warn(`[Gemini Retry] ${modelName} 503/high demand (Attempt ${attempt}/${maxAttempts}). Waiting${(backoffMs/1000).toFixed(1)}s...`);
             await new Promise(r => setTimeout(r, backoffMs));
             continue;
           }
+          if (stopAfterBusy) throw error;
           break;
         }
 
@@ -179,6 +179,80 @@ async function callGeminiWithFailover(prompt, imageBuffer = null) {
   }
 
   throw new Error('All Gemini models are currently busy.');
+}
+
+async function extractPdfTextFallback(pdfBuffer) {
+  const pdfModule = require('pdf-parse');
+  let extractedText = '';
+
+  if (typeof pdfModule === 'function') {
+    const result = await pdfModule(pdfBuffer);
+    extractedText = result?.text || '';
+  } else {
+    const PDFParse = pdfModule.PDFParse || pdfModule.default?.PDFParse;
+    if (typeof PDFParse !== 'function') {
+      throw new Error('pdf-parse does not expose a supported parser in this runtime.');
+    }
+
+    const parser = new PDFParse({ data: pdfBuffer });
+    try {
+      const result = await parser.getText();
+      extractedText = result?.text || '';
+    } finally {
+      await parser.destroy();
+    }
+  }
+
+  const text = extractedText.trim();
+  if (!text) {
+    throw new Error('No embedded text was found in the PDF; OCR fallback is disabled.');
+  }
+  return text;
+}
+
+async function generateQuestionsWithGroq(text, numberOfQuestions, questionTypes, customPrompt) {
+  if (!process.env.GROQ_API_KEY) {
+    throw new Error('GROQ_API_KEY is not set; cannot generate questions from the extracted PDF text.');
+  }
+
+  const prompt = `Generate exactly ${numberOfQuestions} quiz questions from this extracted lesson text.
+Use only these question types: ${questionTypes}.
+${customPrompt?.trim() ? `Additional teacher instructions: ${customPrompt.trim()}\n` : ''}
+Return a JSON object with a "questions" array. Each question must have "question", "options", "correctAnswer", and "type" fields.
+
+Lesson text:
+"""
+${text.slice(0, 12000)}
+"""`;
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'qwen/qwen3.8-27b',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.4,
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Groq question generation failed (${response.status}): ${errorText}`);
+  }
+
+  const result = await response.json();
+  const content = result.choices?.[0]?.message?.content;
+  if (typeof content !== 'string') {
+    throw new Error('Groq returned no JSON content for PDF question generation.');
+  }
+  const parsed = JSON.parse(content);
+  if (!parsed || !Array.isArray(parsed.questions)) {
+    throw new Error('Groq response did not contain a questions array.');
+  }
+  return JSON.stringify(parsed.questions);
 }
 
 // JSON schema that Gemini must conform to for each question
@@ -199,14 +273,15 @@ const QUESTION_SCHEMA = {
 /**
  * Uses Google Gemini (gemini-3.6-flash) to generate quiz questions from text.
  *
- * @param {string} text              - Source passage to generate questions from
+ * @param {string|Buffer} text       - Source passage or uploaded PDF buffer
  * @param {string|number|null} examId - DB exam ID (used to persist questions)
  * @param {number} numberOfQuestions  - How many questions to request
  * @param {string[]} questionTypes    - Subset of: ['multiple_choice','true_false','identification']
  * @param {string} customPrompt       - Optional extra instructions for the AI
+ * @param {string} mimeType           - MIME type of the source file, when available
  * @returns {Promise<Array>}          - Array of question objects
  */
-async function generateQuizFromText(text, examId, numberOfQuestions = 10, questionTypes = ['multiple_choice', 'true_false', 'identification'], customPrompt = '') {
+async function generateQuizFromText(text, examId, numberOfQuestions = 10, questionTypes = ['multiple_choice', 'true_false', 'identification'], customPrompt = '', mimeType = '') {
   // ── Guard: API key must be present ──────────────────────────────────────
   if (!process.env.GEMINI_API_KEY) {
     console.error('[generateQuizFromText] GEMINI_API_KEY is missing. Returning empty question list.');
@@ -238,7 +313,10 @@ async function generateQuizFromText(text, examId, numberOfQuestions = 10, questi
       ? `\nAdditional instructions from the teacher:\n"${customPrompt.trim()}"\n`
       : '';
 
-    const prompt = `You are an expert quiz maker.
+    const isPdf = Buffer.isBuffer(text) || mimeType === 'application/pdf';
+    const prompt = isPdf
+      ? `Extract lesson concepts and generate ${numberOfQuestions} quiz questions from this attached PDF based on these options:${allowedTypes}. Return strictly valid JSON.`
+      : `You are an expert quiz maker.
 
 Analyze the following passage and generate exactly ${numberOfQuestions} quiz questions.
 Only use these question types: ${allowedTypeNames}.
@@ -256,16 +334,31 @@ ${text.slice(0, 12000)}
 
 JSON output:`;
 
-    const response = await callGeminiWithFailover(prompt);
+    let rawText;
+    if (isPdf) {
+      if (!Buffer.isBuffer(text)) {
+        throw new Error('A PDF buffer is required when the MIME type is application/pdf.');
+      }
+      try {
+        const response = await callGeminiWithFailover(prompt, text, 'application/pdf', 3, true);
+        rawText = response.text?.trim() ?? '';
+      } catch (geminiError) {
+        console.warn('[generateQuizFromText] Gemini PDF request failed; trying extracted-text fallback:', geminiError.message);
+        const extractedText = await extractPdfTextFallback(text);
+        rawText = await generateQuestionsWithGroq(extractedText, numberOfQuestions, allowedTypes, customPrompt);
+      }
+    } else {
+      const response = await callGeminiWithFailover(prompt);
+      rawText = response.text?.trim() ?? '';
+    }
 
     // ── Parse response ───────────────────────────────────────────────────
-    const rawText = response.text?.trim() ?? '';
     let parsed;
     try {
       parsed = JSON.parse(rawText);
     } catch (parseErr) {
-      console.error('[generateQuizFromText] Failed to parse Gemini JSON response:', rawText.slice(0, 500));
-      throw new Error('Gemini returned malformed JSON.');
+      console.error('[generateQuizFromText] Failed to parse AI JSON response:', rawText.slice(0, 500));
+      throw new Error('AI returned malformed JSON.');
     }
 
     if (!Array.isArray(parsed)) {
@@ -290,7 +383,7 @@ JSON output:`;
       }
     }
 
-    console.log(`[generateQuizFromText] Generated ${questions.length} questions via Gemini AI.`);
+    console.log(`[generateQuizFromText] Generated ${questions.length} questions via AI.`);
     return questions;
 
   } catch (error) {

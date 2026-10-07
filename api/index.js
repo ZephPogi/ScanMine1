@@ -667,7 +667,9 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
     if (file) {
       const { publicUrl } = await uploadFile(file.buffer, file.originalname, file.mimetype);
       fileUrl = publicUrl;
-      text = await extractText(file.buffer, file.mimetype);
+      if (file.mimetype !== 'application/pdf') {
+        text = await extractText(file.buffer, file.mimetype);
+      }
     }
 
     const examRes = await db.query(
@@ -677,7 +679,11 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
     const examId = examRes.rows[0].id;
 
     let questions = [];
-    if (text) questions = await generateQuizFromText(text, examId, parseInt(numberOfQuestions) || 10, questionTypes, customPrompt || '');
+    if (file?.mimetype === 'application/pdf') {
+      questions = await generateQuizFromText(file.buffer, examId, parseInt(numberOfQuestions) || 10, questionTypes, customPrompt || '', file.mimetype);
+    } else if (text) {
+      questions = await generateQuizFromText(text, examId, parseInt(numberOfQuestions) || 10, questionTypes, customPrompt || '');
+    }
     res.json({ message: 'Exam created successfully', examId, questions });
   } catch (error) {
     console.error('QUIZ GENERATION ERROR:', error);
