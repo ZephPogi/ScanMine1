@@ -130,6 +130,8 @@ const SectionDetails = ({ section, onBack }) => {
   const [quizLessonFile, setQuizLessonFile] = useState(null);
   const [questionBreakdown, setQuestionBreakdown] = useState(DEFAULT_QUESTION_BREAKDOWN);
   const [generatedQuestions, setGeneratedQuestions] = useState([]);
+  const [editingQuestionIndex, setEditingQuestionIndex] = useState(null);
+  const [questionDraft, setQuestionDraft] = useState(null);
   const quizSaveInProgressRef = useRef(false);
   const [generatedExamId, setGeneratedExamId] = useState(null);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
@@ -522,6 +524,8 @@ const SectionDetails = ({ section, onBack }) => {
     setShowQuizGeneratorModal(false);
     setQuizLessonFile(null);
     setGeneratedQuestions([]);
+    setEditingQuestionIndex(null);
+    setQuestionDraft(null);
     setGeneratedExamId(null);
     setQuizError('');
     setCustomPrompt('');
@@ -553,6 +557,8 @@ const SectionDetails = ({ section, onBack }) => {
 
     setQuizError('');
     setGeneratedQuestions([]);
+    setEditingQuestionIndex(null);
+    setQuestionDraft(null);
     setGeneratedExamId(null);
     setIsGeneratingQuiz(true);
     try {
@@ -598,6 +604,50 @@ const SectionDetails = ({ section, onBack }) => {
     } finally {
       setIsGeneratingQuiz(false);
     }
+  };
+
+  const startEditingQuestion = (index, question) => {
+    const multipleChoiceDetails = getMultipleChoiceDetails(question);
+    const answer = cleanAnswer(question.correctAnswer || question.answer_text || question.correct_answer || '');
+    setEditingQuestionIndex(index);
+    setQuestionDraft({
+      ...question,
+      question: question.question || question.question_text || '',
+      options: question.type === 'multiple_choice'
+        ? Array.from({ length: 4 }, (_, optionIndex) => multipleChoiceDetails.options[optionIndex] || '')
+        : question.options,
+      correctAnswer: question.type === 'multiple_choice'
+        ? multipleChoiceDetails.letter || ''
+        : question.type === 'true_false'
+          ? (/^false\b/i.test(answer) ? 'False' : /^true\b/i.test(answer) ? 'True' : '')
+          : answer
+    });
+  };
+
+  const finishEditingQuestion = (saveChanges) => {
+    if (saveChanges && questionDraft && editingQuestionIndex !== null) {
+      setGeneratedQuestions(previous => previous.map((question, index) => {
+        if (index !== editingQuestionIndex) return question;
+        const updatedQuestion = {
+          ...question,
+          ...questionDraft,
+          question: questionDraft.question,
+          correctAnswer: questionDraft.correctAnswer
+        };
+        if (Object.prototype.hasOwnProperty.call(question, 'question_text')) {
+          updatedQuestion.question_text = questionDraft.question;
+        }
+        if (Object.prototype.hasOwnProperty.call(question, 'answer_text')) {
+          updatedQuestion.answer_text = questionDraft.correctAnswer;
+        }
+        if (Object.prototype.hasOwnProperty.call(question, 'correct_answer')) {
+          updatedQuestion.correct_answer = questionDraft.correctAnswer;
+        }
+        return updatedQuestion;
+      }));
+    }
+    setEditingQuestionIndex(null);
+    setQuestionDraft(null);
   };
 
   const handleSaveAndAssignQuiz = async () => {
@@ -654,6 +704,8 @@ const SectionDetails = ({ section, onBack }) => {
       setShowQuizGeneratorModal(false);
       setQuizLessonFile(null);
       setGeneratedQuestions([]);
+      setEditingQuestionIndex(null);
+      setQuestionDraft(null);
       setGeneratedExamId(null);
       setQuizError('');
       setCustomPrompt('');
@@ -699,24 +751,127 @@ const SectionDetails = ({ section, onBack }) => {
     if (generatedQuestions.length === 0) return alert('No questions to download');
 
     const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text('ScanMine Answer Key', 105, 20, { align: 'center' });
-    doc.setFontSize(12);
+    const margin = 15;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const contentWidth = pageWidth - margin * 2;
+    const lineHeight = 5;
+    const questionGroups = Array.from(generatedQuestions.reduce((groups, question, index) => {
+      const type = question.type || 'other';
+      if (!groups.has(type)) groups.set(type, []);
+      groups.get(type).push({ question, index });
+      return groups;
+    }, new Map()));
+    const typeLabels = {
+      multiple_choice: 'MULTIPLE CHOICE',
+      true_false: 'TRUE / FALSE',
+      identification: 'IDENTIFICATION'
+    };
+    const romanNumerals = ['I', 'II', 'III', 'IV', 'V', 'VI'];
+    let yPosition = 0;
 
-    let yPosition = 40;
-    generatedQuestions.forEach((q, index) => {
-      const ans = q.type === 'multiple_choice'
-        ? getMultipleChoiceDetails(q).answer
-        : cleanAnswer(q.correctAnswer || q.answer_text || '');
-      const qText = q.question || q.question_text || `Question ${index + 1}`;
-      const line = `${ans.padEnd(15)} ${index + 1}. ${qText}`;
-      doc.text(line, 20, yPosition);
-      yPosition += 10;
+    const drawPageHeader = () => {
+      doc.setTextColor(15, 23, 42);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.text('SCANMINE EXAM ANSWER KEY', pageWidth / 2, 20, { align: 'center' });
 
-      if (yPosition > 280) {
-        doc.addPage();
-        yPosition = 20;
+      const details = `Exam Title: ${examTitle || 'Untitled Exam'}   |   Total Questions: ${generatedQuestions.length}   |   Date: ${new Date().toLocaleDateString()}`;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      const detailLines = doc.splitTextToSize(details, contentWidth - 8);
+      const detailsY = 26;
+      const detailsHeight = Math.max(12, detailLines.length * 4.5 + 5);
+      doc.setFillColor(241, 245, 249);
+      doc.roundedRect(margin, detailsY, contentWidth, detailsHeight, 2, 2, 'F');
+      doc.setTextColor(51, 65, 85);
+      doc.text(detailLines, margin + 4, detailsY + 6);
+      const ruleY = detailsY + detailsHeight + 5;
+      doc.setDrawColor(16, 185, 129);
+      doc.setLineWidth(0.8);
+      doc.line(margin, ruleY, pageWidth - margin, ruleY);
+      return ruleY + 9;
+    };
+
+    const addPage = () => {
+      doc.addPage();
+      yPosition = drawPageHeader();
+    };
+    const ensureSpace = (height) => {
+      if (yPosition + height > pageHeight - margin) addPage();
+    };
+    const writeWrappedText = (text, x, width, fontSize, fontStyle, color) => {
+      doc.setFont('helvetica', fontStyle);
+      doc.setFontSize(fontSize);
+      doc.setTextColor(...color);
+      const lines = doc.splitTextToSize(String(text || ''), width);
+      lines.forEach(line => {
+        ensureSpace(lineHeight);
+        doc.text(line, x, yPosition);
+        yPosition += lineHeight;
+      });
+    };
+
+    yPosition = drawPageHeader();
+    questionGroups.forEach(([type, items], groupIndex) => {
+      if (questionGroups.length > 1) {
+        ensureSpace(12);
+        doc.setFillColor(238, 242, 255);
+        doc.roundedRect(margin, yPosition - 4, contentWidth, 9, 1.5, 1.5, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(67, 56, 202);
+        const sectionLabel = typeLabels[type] || type.replace(/[_-]/g, ' ').toUpperCase();
+        doc.text(`PART ${romanNumerals[groupIndex] || groupIndex + 1}: ${sectionLabel}`, margin + 3, yPosition + 2);
+        yPosition += 12;
       }
+
+      items.forEach(({ question, index }) => {
+        const questionText = question.question || question.question_text || `Question ${index + 1}`;
+        writeWrappedText(`${index + 1}. ${questionText}`, margin, contentWidth, 10, 'bold', [30, 41, 59]);
+        yPosition += 1;
+
+        if (question.type === 'multiple_choice') {
+          const options = getMultipleChoiceDetails(question).options;
+          for (let row = 0; row < 2; row += 1) {
+            const leftIndex = row * 2;
+            const rightIndex = leftIndex + 1;
+            const columnWidth = (contentWidth - 8) / 2;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            const leftLines = doc.splitTextToSize(
+              `${String.fromCharCode(65 + leftIndex)}) ${options[leftIndex] || ''}`,
+              columnWidth
+            );
+            const rightLines = doc.splitTextToSize(
+              `${String.fromCharCode(65 + rightIndex)}) ${options[rightIndex] || ''}`,
+              columnWidth
+            );
+            const rowLines = Math.max(leftLines.length, rightLines.length);
+            for (let lineIndex = 0; lineIndex < rowLines; lineIndex += 1) {
+              ensureSpace(lineHeight);
+              doc.setTextColor(71, 85, 105);
+              if (leftLines[lineIndex]) doc.text(leftLines[lineIndex], margin + 3, yPosition);
+              if (rightLines[lineIndex]) doc.text(rightLines[lineIndex], margin + 4 + columnWidth, yPosition);
+              yPosition += lineHeight;
+            }
+          }
+        }
+
+        const answer = question.type === 'multiple_choice'
+          ? getMultipleChoiceDetails(question).letter || cleanAnswer(question.correctAnswer || question.answer_text || '')
+          : cleanAnswer(question.correctAnswer || question.answer_text || question.correct_answer || '');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        const answerLines = doc.splitTextToSize(`Correct Answer: ${answer || 'N/A'}`, contentWidth - 8);
+        const answerBoxHeight = answerLines.length * 4.5 + 4;
+        ensureSpace(answerBoxHeight);
+        doc.setFillColor(236, 253, 245);
+        doc.roundedRect(margin, yPosition - 3, contentWidth, answerBoxHeight, 1.5, 1.5, 'F');
+        doc.setTextColor(4, 120, 87);
+        doc.text(answerLines, margin + 4, yPosition + 1);
+        yPosition += answerBoxHeight + 6;
+      });
     });
 
     doc.save('ScanMine-Answer-Key.pdf');
@@ -1565,20 +1720,117 @@ const SectionDetails = ({ section, onBack }) => {
                   <h4 className="quiz-preview-title">📋 Generated Questions Preview ({generatedQuestions.length})</h4>
                   <div className="quiz-preview-list">
                     {generatedQuestions.map((q, index) => (
-                      <div key={index} className="quiz-preview-item">
-                        <span className="quiz-preview-type">{q.type?.replace('_', ' ')}</span>
-                        <p className="quiz-preview-q">{index + 1}. {q.question || q.question_text}</p>
-                        <p className="quiz-preview-ans">✓ {q.type === 'multiple_choice'
-                          ? getMultipleChoiceDetails(q).answer
-                          : q.correctAnswer || q.answer_text}</p>
-                        {q.options?.length > 0 && (
-                          <div className="quiz-preview-opts">
-                            {getMultipleChoiceDetails(q).options.map((opt, i) => (
-                              <span key={i} className={`quiz-opt-chip${q.type === 'multiple_choice' && i === getMultipleChoiceDetails(q).optionIndex ? ' quiz-opt-correct' : ''}`}>
-                                {opt}
-                              </span>
+                      <div key={index} className={`quiz-preview-item${editingQuestionIndex === index ? ' is-editing' : ''}`}>
+                        <div className="quiz-preview-card-header">
+                          <span className="quiz-preview-type">{q.type?.replace('_', ' ')}</span>
+                          {editingQuestionIndex === index ? (
+                            <div className="quiz-preview-edit-actions">
+                              <button
+                                type="button"
+                                className="quiz-preview-edit-btn quiz-preview-done-btn"
+                                onClick={() => finishEditingQuestion(true)}
+                                aria-label={`Save edits to question ${index + 1}`}
+                              >
+                                <Check size={15} /> Done
+                              </button>
+                              <button
+                                type="button"
+                                className="quiz-preview-edit-btn quiz-preview-cancel-btn"
+                                onClick={() => finishEditingQuestion(false)}
+                                aria-label={`Cancel edits to question ${index + 1}`}
+                              >
+                                <X size={15} /> Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="quiz-preview-edit-btn"
+                              onClick={() => startEditingQuestion(index, q)}
+                              disabled={isSavingQuiz || isGeneratingQuiz}
+                              aria-label={`Edit question ${index + 1}`}
+                            >
+                              <Pencil size={15} /> Edit
+                            </button>
+                          )}
+                        </div>
+                        {editingQuestionIndex === index && questionDraft ? (
+                          <div className="quiz-preview-editor">
+                            <label className="quiz-preview-edit-label" htmlFor={`quiz-question-${index}`}>
+                              Question
+                            </label>
+                            <textarea
+                              id={`quiz-question-${index}`}
+                              className="quiz-preview-edit-input quiz-preview-question-input"
+                              value={questionDraft.question}
+                              onChange={event => setQuestionDraft(previous => ({ ...previous, question: event.target.value }))}
+                              rows={3}
+                            />
+                            {q.type === 'multiple_choice' && ['A', 'B', 'C', 'D'].map((letter, optionIndex) => (
+                              <label className="quiz-preview-edit-label" htmlFor={`quiz-option-${index}-${letter}`} key={letter}>
+                                Option {letter}
+                                <input
+                                  id={`quiz-option-${index}-${letter}`}
+                                  className="quiz-preview-edit-input"
+                                  value={questionDraft.options[optionIndex]}
+                                  onChange={event => setQuestionDraft(previous => ({
+                                    ...previous,
+                                    options: previous.options.map((option, currentIndex) => (
+                                      currentIndex === optionIndex ? event.target.value : option
+                                    ))
+                                  }))}
+                                />
+                              </label>
                             ))}
+                            <label className="quiz-preview-edit-label" htmlFor={`quiz-answer-${index}`}>
+                              Correct Answer
+                              {q.type === 'multiple_choice' ? (
+                                <select
+                                  id={`quiz-answer-${index}`}
+                                  className="quiz-preview-edit-input"
+                                  value={questionDraft.correctAnswer}
+                                  onChange={event => setQuestionDraft(previous => ({ ...previous, correctAnswer: event.target.value }))}
+                                >
+                                  <option value="">Select an answer</option>
+                                  {['A', 'B', 'C', 'D'].map(letter => <option value={letter} key={letter}>{letter}</option>)}
+                                </select>
+                              ) : q.type === 'true_false' ? (
+                                <select
+                                  id={`quiz-answer-${index}`}
+                                  className="quiz-preview-edit-input"
+                                  value={questionDraft.correctAnswer}
+                                  onChange={event => setQuestionDraft(previous => ({ ...previous, correctAnswer: event.target.value }))}
+                                >
+                                  <option value="">Select an answer</option>
+                                  <option value="True">True</option>
+                                  <option value="False">False</option>
+                                </select>
+                              ) : (
+                                <input
+                                  id={`quiz-answer-${index}`}
+                                  className="quiz-preview-edit-input"
+                                  value={questionDraft.correctAnswer}
+                                  onChange={event => setQuestionDraft(previous => ({ ...previous, correctAnswer: event.target.value }))}
+                                />
+                              )}
+                            </label>
                           </div>
+                        ) : (
+                          <>
+                            <p className="quiz-preview-q">{index + 1}. {q.question || q.question_text}</p>
+                            <p className="quiz-preview-ans">✓ {q.type === 'multiple_choice'
+                              ? getMultipleChoiceDetails(q).answer
+                              : q.correctAnswer || q.answer_text}</p>
+                            {q.options?.length > 0 && (
+                              <div className="quiz-preview-opts">
+                                {getMultipleChoiceDetails(q).options.map((opt, i) => (
+                                  <span key={i} className={`quiz-opt-chip${q.type === 'multiple_choice' && i === getMultipleChoiceDetails(q).optionIndex ? ' quiz-opt-correct' : ''}`}>
+                                    {opt}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     ))}
@@ -1587,7 +1839,7 @@ const SectionDetails = ({ section, onBack }) => {
                     <button
                       className="save-assign-btn"
                       onClick={handleSaveAndAssignQuiz}
-                      disabled={isSavingQuiz || isGeneratingQuiz}
+                      disabled={isSavingQuiz || isGeneratingQuiz || editingQuestionIndex !== null}
                     >
                       {isSavingQuiz ? (
                         <span className="quiz-btn-loading">
@@ -1599,7 +1851,7 @@ const SectionDetails = ({ section, onBack }) => {
                     <button
                       className="save-assign-btn quiz-download-btn"
                       onClick={handleDownloadAnswerKey}
-                      disabled={isSavingQuiz || isGeneratingQuiz}
+                      disabled={isSavingQuiz || isGeneratingQuiz || editingQuestionIndex !== null}
                       style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
                     >
                       📥 Download ScanMine Answer Key
