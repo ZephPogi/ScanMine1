@@ -463,6 +463,37 @@ export default function LandingPage() {
             </Link>
           </motion.div>
 
+          <motion.aside
+            className="lp-guidelines-card"
+            aria-labelledby="lp-guidelines-title"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.75 }}
+          >
+            <div className="lp-guidelines-header">
+              <span className="lp-guidelines-badge">PLEASE READ</span>
+              <h2 id="lp-guidelines-title">System Guidelines &amp; Concurrency Limits</h2>
+            </div>
+            <ol className="lp-guidelines-list">
+              <li>
+                <h3>1. Student scanning workflow</h3>
+                <p>
+                  Scan quizzes one student at a time. When a student finishes, the student or
+                  teacher should request permission to scan using that specific student&apos;s account
+                  before moving on to the next submission.
+                </p>
+              </li>
+              <li>
+                <h3>2. System concurrency &amp; capacity (maximum 10 scans)</h3>
+                <p>
+                  ScanMine allows up to 10 active scan requests at any given second. If 50 students
+                  submit at once, the additional requests are queued or must wait briefly. This limit
+                  helps preserve grading accuracy and prevent server crashes or API timeouts.
+                </p>
+              </li>
+            </ol>
+          </motion.aside>
+
           {/* Mini trust cards */}
           <motion.div
             className="lp-hero-cards"

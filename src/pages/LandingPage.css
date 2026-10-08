@@ -207,6 +207,73 @@
   transform: translateY(-2px);
 }
 
+.lp-guidelines-card {
+  width: min(100%, 720px);
+  box-sizing: border-box;
+  margin: 32px auto 0;
+  padding: 22px 24px;
+  text-align: left;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #059669;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.lp-guidelines-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.lp-guidelines-badge {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.lp-guidelines-header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.lp-guidelines-list {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lp-guidelines-list li + li {
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.lp-guidelines-list h3 {
+  margin: 0 0 5px;
+  color: #1e293b;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.lp-guidelines-list p {
+  margin: 0;
+  color: #475569;
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+
 /* Floating cards beneath hero */
 .lp-hero-cards {
   display: flex;
@@ -1088,6 +1155,8 @@
   .lp-section-inner.reverse { direction: ltr; }
   .lp-graphic-stage { min-height: auto; }
   .lp-hero-headline { font-size: 2.2rem; letter-spacing: -0.5px; }
+  .lp-guidelines-card { padding: 18px; }
+  .lp-guidelines-header { align-items: flex-start; flex-direction: column; gap: 8px; }
   .s3-stage { gap: 16px; }
   .s3-phone { width: 80px; height: 160px; }
   .s3-dashboard { width: 140px; }
