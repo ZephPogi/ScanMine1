@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import AuthBrandPanel from '../components/AuthBrandPanel';
 import './ForgotPassword.css';
 
 // Simple toast notification component
@@ -64,28 +65,16 @@ const ForgotPassword = () => {
   };
 
   return (
-    <div className="forgot-container">
+    <div className="auth-page">
       {/* Toast Notification */}
       {toast && <Toast message={toast.message} type={toast.type} />}
 
-      {/* LEFT SIDE: Branding */}
-      <div className="forgot-left">
-        <div className="branding-wrapper">
-          <h1 className="brand-name">ScanMine</h1>
-          <p className="brand-description">
-            Automated Answer Sheet Checking and Quiz Generator System.
-            Regain access to your account quickly and securely.
-          </p>
-          <div className="scan-graphic">
-            <div className="scanner-line"></div>
-          </div>
-        </div>
-      </div>
+      <AuthBrandPanel />
 
       {/* RIGHT SIDE: Form */}
-      <div className="forgot-right">
-        <div className="form-wrapper">
-          <div className="form-header">
+      <div className="auth-form-side">
+        <div className="auth-form-card">
+          <div className="auth-form-header">
             <h2>Reset Password</h2>
             <p>Enter your email to receive a password reset link.</p>
           </div>
@@ -117,7 +106,9 @@ const ForgotPassword = () => {
           )}
 
           <p className="register-text">
-            Remembered your password? <Link to="/login" className="register-link">Back to Login</Link>
+            Remembered your password? <Link to="/login" className="register-link">Login here</Link>
+            {' · '}
+            <Link to="/signup" className="register-link">Register Now</Link>
           </p>
         </div>
       </div>

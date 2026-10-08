@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import AuthBrandPanel from '../components/AuthBrandPanel';
 import './ResetPassword.css';
 
 // Simple toast notification component
@@ -100,23 +101,15 @@ const ResetPassword = () => {
   };
 
   return (
-    <div className="reset-container">
+    <div className="auth-page">
       {/* Toast Notification */}
       {toast && <Toast message={toast.message} type={toast.type} />}
 
-      <div className="reset-left">
-        <div className="branding-wrapper">
-          <h1 className="brand-name">ScanMine</h1>
-          <p className="brand-description">
-            Automated Answer Sheet Checking and Quiz Generator System.
-            Securely set a new password for your account.
-          </p>
-        </div>
-      </div>
+      <AuthBrandPanel />
 
-      <div className="reset-right">
-        <div className="form-wrapper">
-          <div className="form-header">
+      <div className="auth-form-side">
+        <div className="auth-form-card">
+          <div className="auth-form-header">
             <h2>Set New Password</h2>
             <p>Please enter a secure new password.</p>
           </div>
@@ -192,11 +185,15 @@ const ResetPassword = () => {
                 {loading ? 'Updating Password...' : 'Change Password'}
               </button>
 
-              <p className="register-text" style={{marginTop: '20px'}}>
-                <Link to="/login" className="register-link">Cancel & Back to Login</Link>
-              </p>
             </form>
           )}
+          <p className="register-text">
+            <Link to="/login" className="register-link">Login here</Link>
+            {' · '}
+            <Link to="/signup" className="register-link">Register Now</Link>
+            {' · '}
+            <Link to="/forgot-password" className="register-link">Forgot Password?</Link>
+          </p>
         </div>
       </div>
     </div>

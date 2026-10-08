@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import AuthBrandPanel from '../components/AuthBrandPanel';
 import './Login.css';
 
 const Login = () => {
@@ -79,36 +80,13 @@ const Login = () => {
   };
 
   return (
-    <div className="login-container">
-      {/* LEFT SIDE: Branding */}
-      <div className="login-left">
-        <div className="branding-wrapper">
-          <h1 className="brand-name">ScanMine</h1>
-          <p className="brand-description">
-            Automated Answer Sheet Checking and Quiz Generator System.
-            Empowering educators and students through automation.
-          </p>
-          <div className="scan-graphic">
-            <div className="scanner-line"></div>
-          </div>
-        </div>
-      </div>
+    <div className="auth-page">
+      <AuthBrandPanel />
 
       {/* RIGHT SIDE: Login Form */}
-      <div className="login-right">
-        <div className="form-wrapper">
-          {/* Logo */}
-          <div className="form-logo">
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2"/>
-              <path d="M7 8h10M7 12h6M7 16h8"/>
-              <line x1="16" y1="14" x2="20" y2="18"/>
-              <circle cx="18" cy="16" r="2"/>
-            </svg>
-            <span>ScanMine</span>
-          </div>
-
-          <div className="form-header">
+      <div className="auth-form-side">
+        <div className="auth-form-card">
+          <div className="auth-form-header">
             <h2>Welcome Back</h2>
             <p>Please log in to your account.</p>
           </div>

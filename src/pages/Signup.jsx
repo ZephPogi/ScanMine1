@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { UserPlus } from 'lucide-react';
-import logo from '../assets/Logo.png';
 import { supabase } from '../supabaseClient';
+import AuthBrandPanel from '../components/AuthBrandPanel';
 import './Signup.css';
 
 const Signup = () => {
@@ -129,30 +128,13 @@ const Signup = () => {
 
 
   return (
-    <div className="signup-container">
-      {/* LEFT SIDE: Branding */}
-      <div className="signup-left">
-        <div className="branding-content">
-          <div className="logo-section">
-            <img src={logo} alt="ScanMine Logo" className="app-logo" />
-            <h1 className="brand-text">ScanMine</h1>
-          </div>
-          <p className="tagline">
-            Join the future of classroom automation. <br />
-            <span>Create your account to get started.</span>
-          </p>
-          
-          <div className="visual-box-signup">
-             <div className="pulse-circle"></div>
-             <div className="user-plus-icon"><UserPlus size={48} /></div>
-          </div>
-        </div>
-      </div>
+    <div className="auth-page">
+      <AuthBrandPanel />
 
       {/* RIGHT SIDE: Signup Form */}
-      <div className="signup-right">
-        <div className="form-container">
-          <div className="welcome-msg">
+      <div className="auth-form-side">
+        <div className="auth-form-card">
+          <div className="auth-form-header">
             <h2>Create Account</h2>
             <p>Register as a {activeRole} to ScanMine</p>
           </div>
@@ -273,6 +255,8 @@ const Signup = () => {
 
           <p className="login-link">
             Already have an account? <Link to="/login">Login here</Link>
+            {' · '}
+            <Link to="/forgot-password">Forgot Password?</Link>
           </p>
         </div>
       </div>
