@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import SectionDetails from './SectionDetails';
 import Sidebar from './Sidebar';
 import { BookOpen, Plus, X, Users, Trash2, Copy, Check, Loader2, AlertTriangle, Eye } from 'lucide-react';
 import './TeacherClass.css';
 
 const TeacherClass = () => {
-  const [selectedSection, setSelectedSection] = useState(null);
+  const location = useLocation();
+  const [selectedSection, setSelectedSection] = useState(() => location.state?.section || null);
+  const [openQuizOnSelectedSection, setOpenQuizOnSelectedSection] = useState(() => Boolean(location.state?.openQuizGenerator));
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newClass, setNewClass] = useState({ name: '', subject: '' });
   const [classes, setClasses] = useState([]);
@@ -118,7 +121,16 @@ const TeacherClass = () => {
   };
 
   if (selectedSection) {
-    return <SectionDetails section={selectedSection} onBack={() => setSelectedSection(null)} />;
+    return (
+      <SectionDetails
+        section={selectedSection}
+        initialOpenQuizGenerator={openQuizOnSelectedSection}
+        onBack={() => {
+          setSelectedSection(null);
+          setOpenQuizOnSelectedSection(false);
+        }}
+      />
+    );
   }
 
   return (

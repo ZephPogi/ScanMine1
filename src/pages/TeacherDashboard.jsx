@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import './TeacherDashboard.css';
 import Sidebar from './Sidebar';
-import { Users, FileText, TrendingUp, Camera, BookOpen, User, ChevronRight, ClipboardList } from 'lucide-react';
+import { Users, FileText, TrendingUp, Camera, BookOpen, ChevronRight, ClipboardList, Sparkles, Activity, ArrowUpRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const TeacherDashboard = () => {
@@ -11,6 +11,7 @@ const TeacherDashboard = () => {
     classAverage: "0.0",
     recentActivity: []
   });
+  const [teacherClasses, setTeacherClasses] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -20,10 +21,17 @@ const TeacherDashboard = () => {
     const fetchDashboardData = async () => {
       if (!user.id) return;
       try {
-        const response = await fetch(`/api/dashboard?teacherId=${user.id}`);
-        if (response.ok) {
-          const data = await response.json();
+        const [dashboardResponse, classesResponse] = await Promise.all([
+          fetch(`/api/dashboard?teacherId=${user.id}`),
+          fetch(`/api/classes?teacherId=${user.id}`)
+        ]);
+        if (dashboardResponse.ok) {
+          const data = await dashboardResponse.json();
           setDashboardData(data);
+        }
+        if (classesResponse.ok) {
+          const classes = await classesResponse.json();
+          setTeacherClasses(Array.isArray(classes) ? classes : []);
         }
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
@@ -43,13 +51,35 @@ const TeacherDashboard = () => {
     return <span className="badge warning">Retake</span>;
   };
 
-  const firstName = (user.name || 'Teacher').split(' ')[0];
+  const firstName = (user.name || 'Teacher').trim().split(/\s+/)[0];
+  const recentActivity = Array.isArray(dashboardData.recentActivity) ? dashboardData.recentActivity : [];
+  const averageScore = Number.parseFloat(dashboardData.classAverage) || 0;
+  const getCurrentSection = () => {
+    try {
+      const section = JSON.parse(localStorage.getItem('currentSection') || 'null');
+      if (section?.id) return section;
+    } catch (error) {
+      console.error('Unable to read the saved class section:', error);
+    }
+    return teacherClasses.find(section => section?.id) || null;
+  };
+  const handleScanAnswerSheet = () => {
+    const section = getCurrentSection();
+    if (!section) {
+      navigate('/classes');
+      return;
+    }
+    navigate('/auto-grading-results', { state: { section, openScanModal: true } });
+  };
+  const handleGenerateQuiz = () => {
+    navigate('/classes', { state: { section: getCurrentSection(), openQuizGenerator: true } });
+  };
 
   const stats = [
     { id: 1, label: "Total Students", value: dashboardData.totalStudents.toString(), icon: Users, color: 'indigo', bgClass: 'bg-indigo', trend: "", trendClass: "neutral" },
     { id: 2, label: "Quizzes Checked", value: dashboardData.quizzesChecked.toString(), icon: FileText, color: 'blue', bgClass: 'bg-blue', trend: "", trendClass: "neutral" },
     { id: 3, label: "Average Score", value: `${dashboardData.classAverage}%`, icon: TrendingUp, color: 'emerald', bgClass: 'bg-emerald', trend: "", trendClass: "positive" },
-    { id: 4, label: "Pending Scans", value: "0", icon: Camera, color: 'amber', bgClass: 'bg-amber', trend: "Action Required", trendClass: "warning" },
+    { id: 4, label: "Pending Scans", value: dashboardData.pendingScans === null || dashboardData.pendingScans === undefined ? "—" : String(dashboardData.pendingScans), icon: Camera, color: 'amber', bgClass: 'bg-amber', trend: dashboardData.pendingScans === null || dashboardData.pendingScans === undefined ? "" : dashboardData.pendingScans ? "Action Required" : "All caught up", trendClass: dashboardData.pendingScans ? "warning" : "positive" },
   ];
 
   // Skeleton rows for loading state
@@ -73,8 +103,9 @@ const TeacherDashboard = () => {
         {/* ── Header ── */}
         <header className="dashboard-header">
           <div className="dashboard-header-text">
-            <h1>Welcome back, <span>{firstName}</span> 👋</h1>
-            <p>Here's what's happening with your classes today.</p>
+            <p className="dashboard-eyebrow">TEACHER DASHBOARD</p>
+            <h1>Welcome back, <span>{firstName}</span> <span className="dashboard-wave" aria-hidden="true">👋</span></h1>
+            <p>Here&apos;s what&apos;s happening with your classes today.</p>
           </div>
           <button className="primary-action-btn" onClick={() => navigate('/classes')}>
             <BookOpen size={17} />
@@ -129,7 +160,7 @@ const TeacherDashboard = () => {
                 <tbody>
                   {loading ? (
                     <SkeletonRows />
-                  ) : dashboardData.recentActivity.length === 0 ? (
+                  ) : recentActivity.length === 0 ? (
                     <tr className="empty-state-row">
                       <td colSpan="4">
                         <div className="empty-state-content">
@@ -142,7 +173,7 @@ const TeacherDashboard = () => {
                       </td>
                     </tr>
                   ) : (
-                    dashboardData.recentActivity.map((activity, index) => (
+                    recentActivity.map((activity, index) => (
                       <tr key={index}>
                         <td>{activity.student_name}</td>
                         <td>{activity.subject}</td>
@@ -156,29 +187,91 @@ const TeacherDashboard = () => {
             </div>
           </section>
 
+          <div className="dashboard-side-column">
           {/* Quick Actions Panel */}
-          <section className="dashboard-card">
+          <section className="dashboard-card quick-actions-card">
             <div className="card-header">
-              <h3>Quick Actions</h3>
+              <div>
+                <p className="card-eyebrow">GET THINGS DONE</p>
+                <h3>Quick Actions</h3>
+              </div>
             </div>
             <div className="quick-actions-panel">
-              <button className="quick-action-btn" onClick={() => navigate('/classes')}>
-                <div className="quick-action-icon indigo"><BookOpen size={18} /></div>
-                <span className="quick-action-label">My Classes</span>
-                <ChevronRight size={16} className="quick-action-arrow" />
+              <button className="quick-action-btn scan-action" onClick={handleScanAnswerSheet}>
+                <div className="quick-action-icon emerald"><Camera size={19} /></div>
+                <span className="quick-action-label">
+                  <strong>Scan Answer Sheet</strong>
+                  <small>Open the grading scanner</small>
+                </span>
+                <ArrowUpRight size={16} className="quick-action-arrow" />
               </button>
-              <button className="quick-action-btn" onClick={() => navigate('/profile')}>
-                <div className="quick-action-icon blue"><User size={18} /></div>
-                <span className="quick-action-label">My Profile</span>
-                <ChevronRight size={16} className="quick-action-arrow" />
+              <button className="quick-action-btn quiz-action" onClick={handleGenerateQuiz}>
+                <div className="quick-action-icon indigo"><Sparkles size={19} /></div>
+                <span className="quick-action-label">
+                  <strong>Generate AI Quiz</strong>
+                  <small>Start from a class section</small>
+                </span>
+                <ArrowUpRight size={16} className="quick-action-arrow" />
               </button>
-              <button className="quick-action-btn" onClick={() => navigate('/classes')}>
-                <div className="quick-action-icon emerald"><TrendingUp size={18} /></div>
-                <span className="quick-action-label">View Class Grades</span>
+              <button className="quick-action-btn classes-action" onClick={() => navigate('/classes')}>
+                <div className="quick-action-icon blue"><BookOpen size={19} /></div>
+                <span className="quick-action-label">
+                  <strong>My Classes</strong>
+                  <small>View students and exams</small>
+                </span>
                 <ChevronRight size={16} className="quick-action-arrow" />
               </button>
             </div>
           </section>
+
+          <section className="dashboard-card performance-card">
+            <div className="card-header">
+              <div>
+                <p className="card-eyebrow">AT A GLANCE</p>
+                <h3>Class Performance Overview</h3>
+              </div>
+              <div className="performance-header-icon"><Activity size={17} /></div>
+            </div>
+            <div className="performance-score-row">
+              <div>
+                <span className="performance-label">Average score</span>
+                <strong>{dashboardData.classAverage}%</strong>
+              </div>
+              <span className="performance-range">Class-wide</span>
+            </div>
+            <div
+              className="performance-progress-track"
+              role="progressbar"
+              aria-label="Class average score"
+              aria-valuenow={Math.max(0, Math.min(100, averageScore))}
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <span style={{ width: `${Math.max(0, Math.min(100, averageScore))}%` }} />
+            </div>
+            <div className="performance-stats">
+              <div>
+                <span className="performance-stat-icon indigo"><Users size={15} /></span>
+                <span><strong>{dashboardData.totalStudents}</strong><small>Students</small></span>
+              </div>
+              <div>
+                <span className="performance-stat-icon emerald"><FileText size={15} /></span>
+                <span><strong>{dashboardData.quizzesChecked}</strong><small>Quizzes checked</small></span>
+              </div>
+            </div>
+            <div className="performance-activity">
+              <span className="performance-activity-dot" />
+              <span>
+                {recentActivity.length > 0
+                  ? `Latest result: ${recentActivity[0].student_name || 'Student'}`
+                  : 'Recent student activity will appear here.'}
+              </span>
+            </div>
+            <button className="performance-view-link" onClick={() => navigate('/classes')}>
+              View class details <ChevronRight size={15} />
+            </button>
+          </section>
+          </div>
         </div>
       </main>
     </div>

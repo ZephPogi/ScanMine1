@@ -109,7 +109,7 @@ const parseScanMineText = (rawText) => {
   return parsedQuestions;
 };
 
-const SectionDetails = ({ section, onBack }) => {
+const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) => {
   const navigate = useNavigate();
   const [students, setStudents] = useState([]);
   const [exams, setExams] = useState([]);
@@ -126,7 +126,7 @@ const SectionDetails = ({ section, onBack }) => {
   const [parsedOCRData, setParsedOCRData] = useState(null);
   const [formattedAnswersToSave, setFormattedAnswersToSave] = useState('');
 
-  const [showQuizGeneratorModal, setShowQuizGeneratorModal] = useState(false);
+  const [showQuizGeneratorModal, setShowQuizGeneratorModal] = useState(initialOpenQuizGenerator);
   const [quizLessonFile, setQuizLessonFile] = useState(null);
   const [questionBreakdown, setQuestionBreakdown] = useState(DEFAULT_QUESTION_BREAKDOWN);
   const [generatedQuestions, setGeneratedQuestions] = useState([]);
