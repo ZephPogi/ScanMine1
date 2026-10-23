@@ -8,7 +8,19 @@ const AuthBrandPanel = () => (
     <div className="auth-brand-glow auth-brand-glow-two" />
     <div className="auth-brand-content">
       <Link className="auth-brand-logo" to="/" aria-label="ScanMine home">
-        <img src="/logo.png" alt="ScanMine Logo" className="w-10 h-10 rounded-xl shadow-lg shadow-cyan-500/20 object-contain" />
+        <img
+          src="/logo.png"
+          alt="ScanMine Logo"
+          style={{
+            width: 40,
+            height: 40,
+            minWidth: 40,
+            maxWidth: 40,
+            objectFit: 'cover',
+            borderRadius: 10,
+            flexShrink: 0
+          }}
+        />
         <span>ScanMine</span>
       </Link>
       <div className="auth-brand-copy">

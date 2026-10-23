@@ -39,6 +39,16 @@
   letter-spacing: -0.3px;
 }
 
+.navbar-logo-img {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  max-width: 36px;
+  object-fit: cover;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
 .lp-nav-logo-icon {
   width: 32px;
   height: 32px;
