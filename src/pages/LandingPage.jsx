@@ -399,9 +399,7 @@ export default function LandingPage() {
       {/* ── Nav ── */}
       <nav className="lp-nav">
         <div className="lp-nav-logo">
-          <div className="lp-nav-logo-icon">
-            <ScanLine size={16} />
-          </div>
+          <img src="/logo.png" alt="ScanMine Logo" className="w-8 h-8 rounded-lg object-contain" />
           ScanMine
         </div>
         <div className="lp-nav-actions">

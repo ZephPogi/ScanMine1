@@ -15,7 +15,7 @@ const Sidebar = () => {
     <aside className="sidebar">
       {/* ── Brand ── */}
       <div className="sidebar-brand">
-        <div className="brand-logo">S</div>
+        <img src="/logo.png" alt="ScanMine Logo" className="w-8 h-8 rounded-lg object-contain" />
         <h2>ScanMine</h2>
       </div>
 
