@@ -15,6 +15,44 @@ const cleanAnswer = (ans) => {
   return String(ans).replace(/^(?:Answer:\s*)+/i, '').trim();
 };
 
+const parseStudentName = (name) => {
+  const parts = (name || '').trim().replace(/\s+/g, ' ').split(' ').filter(Boolean);
+  const firstName = parts.shift() || '';
+  const middleInitial = parts.length > 1 && /^[A-Za-z]\.?$/.test(parts[0])
+    ? parts.shift().replace('.', '').toUpperCase()
+    : '';
+  return { firstName, middleInitial, lastName: parts.join(' ') };
+};
+
+const getAnswerQuestionType = (answer) => {
+  const normalizedAnswer = cleanAnswer(answer);
+  if (/^[A-D]$/i.test(normalizedAnswer)) return 'multiple_choice';
+  if (/^(true|false)$/i.test(normalizedAnswer)) return 'true_false';
+  return 'identification';
+};
+
+const parseAttachAnswers = (rawAnswers) => {
+  const normalizedInput = String(rawAnswers || '').trim();
+  if (!normalizedInput) return [];
+
+  const numberedInput = normalizedInput.replace(/\s+(\d+\s*[.)]\s*)/g, ', $1');
+  const numberedAnswers = [...numberedInput.matchAll(/(\d+)\s*[.)]\s*([^,;\n]+)/g)];
+  const answers = numberedAnswers.length
+    ? numberedAnswers.map((match) => match[2].trim())
+    : normalizedInput.split(/[,;\s]+/).map(answer => answer.trim()).filter(Boolean);
+
+  return answers.map((answer, index) => {
+    const correctAnswer = answer.replace(/^([A-D])[.)]$/i, '$1');
+    const type = getAnswerQuestionType(correctAnswer);
+    return {
+      questionText: `Question ${index + 1}`,
+      correctAnswer,
+      type,
+      options: type === 'multiple_choice' ? ['', '', '', ''] : []
+    };
+  });
+};
+
 const getMultipleChoiceDetails = (question) => {
   const optionLetters = ['A', 'B', 'C', 'D'];
   const options = Array.isArray(question?.options)
@@ -118,6 +156,12 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   const [examQuestions, setExamQuestions] = useState({ manual: [], generated: [] });
   const [examFile, setExamFile] = useState(null);
   const [manualAnswers, setManualAnswers] = useState('');
+  const [parsedAttachQuestions, setParsedAttachQuestions] = useState([]);
+  const [attachEditingQuestionIndex, setAttachEditingQuestionIndex] = useState(null);
+  const [attachQuestionDraft, setAttachQuestionDraft] = useState(null);
+  const [isEditingExamKey, setIsEditingExamKey] = useState(false);
+  const [examKeyDraft, setExamKeyDraft] = useState([]);
+  const [isSavingExamKey, setIsSavingExamKey] = useState(false);
   const [examTitle, setExamTitle] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [answerKeyImage, setAnswerKeyImage] = useState(null);
@@ -142,7 +186,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentSubmissions, setStudentSubmissions] = useState([]);
   const [isEditingStudentName, setIsEditingStudentName] = useState(false);
-  const [studentNameDraft, setStudentNameDraft] = useState('');
+  const [studentNameDraft, setStudentNameDraft] = useState({ firstName: '', middleInitial: '', lastName: '' });
   const [studentNameSaving, setStudentNameSaving] = useState(false);
   const [studentNameError, setStudentNameError] = useState('');
   const totalQuestions = questionBreakdown.reduce(
@@ -218,6 +262,8 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   const handleViewExam = async (exam) => {
     if (!exam) return;
     setShowExamDetails(exam);
+    setIsEditingExamKey(false);
+    setExamKeyDraft([]);
     setParsedOCRData(null);
     setExamSubmissions([]);
     try {
@@ -244,7 +290,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
     setSelectedStudent(student);
     setStudentSubmissions([]);
     setIsEditingStudentName(false);
-    setStudentNameDraft(student.name || '');
+    setStudentNameDraft(parseStudentName(student.name));
     setStudentNameError('');
     try {
       const response = await fetch(`/api/student/${student.user_id}/grades/${section.id}`);
@@ -259,9 +305,15 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
 
   const handleSaveStudentName = async (event) => {
     event.preventDefault();
-    const normalizedName = studentNameDraft.trim().replace(/\s+/g, ' ');
-    if (!normalizedName) {
-      setStudentNameError('Student name cannot be empty.');
+    const firstName = studentNameDraft.firstName.trim().replace(/\s+/g, ' ');
+    const middleInitial = studentNameDraft.middleInitial.trim().replace(/\.$/, '').toUpperCase();
+    const lastName = studentNameDraft.lastName.trim().replace(/\s+/g, ' ');
+    if (!firstName || !lastName) {
+      setStudentNameError('First and last name are required.');
+      return;
+    }
+    if (middleInitial && !/^[A-Z]$/.test(middleInitial)) {
+      setStudentNameError('Middle initial must be a single letter.');
       return;
     }
 
@@ -275,7 +327,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
       const response = await fetch(`/api/students/${selectedStudent.user_id}/name`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ classId: section.id, name: normalizedName }),
+        body: JSON.stringify({ classId: section.id, firstName, middleInitial, lastName }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to update student name');
@@ -283,10 +335,16 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
       setSelectedStudent((current) => ({ ...current, ...data.user }));
       setStudents((current) => current.map((student) => (
         String(student.user_id) === String(selectedStudent.user_id)
-          ? { ...student, name: data.user.name }
+          ? {
+            ...student,
+            name: data.user.name,
+            first_name: data.user.first_name,
+            middle_initial: data.user.middle_initial,
+            last_name: data.user.last_name
+          }
           : student
       )));
-      setStudentNameDraft(data.user.name);
+      setStudentNameDraft({ firstName, middleInitial, lastName });
       setIsEditingStudentName(false);
     } catch (error) {
       setStudentNameError(error.message || 'Failed to update student name.');
@@ -463,15 +521,85 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
     }
   };
 
+  const startEditingAttachQuestion = (index, question) => {
+    setAttachEditingQuestionIndex(index);
+    setAttachQuestionDraft({
+      ...question,
+      options: question.type === 'multiple_choice'
+        ? Array.from({ length: 4 }, (_, optionIndex) => question.options?.[optionIndex] || '')
+        : []
+    });
+  };
+
+  const finishEditingAttachQuestion = (saveChanges) => {
+    if (saveChanges && attachQuestionDraft && attachEditingQuestionIndex !== null) {
+      setParsedAttachQuestions(previous => previous.map((question, index) => (
+        index === attachEditingQuestionIndex
+          ? { ...question, ...attachQuestionDraft }
+          : question
+      )));
+    }
+    setAttachEditingQuestionIndex(null);
+    setAttachQuestionDraft(null);
+  };
+
+  const startEditingExamKey = () => {
+    setExamKeyDraft((examQuestions?.manual || []).map((question, index) => {
+      const correctAnswer = cleanAnswer(question.correct_answer || question.correctAnswer || '');
+      return {
+        questionText: question.question_text || question.questionText || `Question ${index + 1}`,
+        correctAnswer,
+        type: question.type || getAnswerQuestionType(correctAnswer),
+        options: question.options || []
+      };
+    }));
+    setIsEditingExamKey(true);
+  };
+
+  const handleSaveExamKey = async () => {
+    if (!showExamDetails?.id || examKeyDraft.length === 0) return;
+    if (examKeyDraft.some(question => !question.questionText.trim() || !question.correctAnswer.trim())) {
+      alert('Each answer key item needs question text and a correct answer.');
+      return;
+    }
+
+    setIsSavingExamKey(true);
+    try {
+      const response = await fetch('/api/upload-answer-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ examId: showExamDetails.id, answers: examKeyDraft })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to update answer key');
+
+      const questionsResponse = await fetch(`/api/exams/${showExamDetails.id}/questions`);
+      if (!questionsResponse.ok) throw new Error('Answer key was saved, but the updated questions could not be loaded.');
+      setExamQuestions(await questionsResponse.json() || { manual: [], generated: [] });
+      setIsEditingExamKey(false);
+      setExamKeyDraft([]);
+      alert(data.message || 'Answer key updated successfully.');
+    } catch (error) {
+      console.error('Error updating answer key:', error);
+      alert(`Failed to update answer key: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsSavingExamKey(false);
+    }
+  };
+
   const handleSaveAndAssign = async () => {
-    if (!examTitle) return alert('Please enter an exam title');
+    if (!examTitle.trim()) return alert('Please enter an exam title');
+    if (attachEditingQuestionIndex !== null) return alert('Finish editing the current answer key item before saving.');
+    if (parsedAttachQuestions.some(question => !question.questionText.trim() || !question.correctAnswer.trim())) {
+      return alert('Each parsed answer needs question text and a correct answer.');
+    }
 
     setIsSaving(true);
     try {
       const formData = new FormData();
       formData.append('teacherId', user?.id || '');
       formData.append('classId', section?.id || '');
-      formData.append('title', examTitle);
+      formData.append('title', examTitle.trim());
       if (examFile) formData.append('lessonFile', examFile);
 
       const examResponse = await fetch('/api/generate-quiz', {
@@ -485,15 +613,22 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
         throw new Error(examData?.error || 'Failed to save exam');
       }
 
-      if (examData?.examId && manualAnswers) {
-        await fetch('/api/upload-answer-key', {
+      if (parsedAttachQuestions.length > 0) {
+        if (!examData?.examId) throw new Error('Exam was created without an ID, so its answer key could not be linked.');
+        const answerKeyResponse = await fetch('/api/upload-answer-key', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             examId: examData.examId,
-            answers: manualAnswers
+            answers: parsedAttachQuestions.map(question => ({
+              ...question,
+              correctAnswer: question.correctAnswer.trim(),
+              questionText: question.questionText.trim()
+            }))
           })
         });
+        const answerKeyData = await answerKeyResponse.json();
+        if (!answerKeyResponse.ok) throw new Error(answerKeyData.error || 'Failed to save the answer key.');
       }
 
       alert('Exam and Key saved successfully!');
@@ -512,6 +647,9 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
     setShowAttachModal(false);
     setExamFile(null);
     setManualAnswers('');
+    setParsedAttachQuestions([]);
+    setAttachEditingQuestionIndex(null);
+    setAttachQuestionDraft(null);
     setAnswerKeyImage(null);
   };
 
@@ -1102,55 +1240,205 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
       {showAttachModal && (
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal-content attach-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-bar">
-              <span className="modal-prof-label">ScanMine Professor Console</span>
-              <button className="modal-close-btn" onClick={closeModal}>×</button>
-            </div>
-
-            <div className="modal-title-banner">Attach Exam with Answer Key</div>
-
-            <div className="upload-section">
-              <label className="upload-label">Exam Title</label>
-              <input
-                type="text"
-                className="create-input"
-                placeholder="e.g. Algebra Midterm"
-                value={examTitle}
-                onChange={(e) => setExamTitle(e.target.value)}
-              />
-            </div>
-
-            <div className="upload-section">
-              <label className="upload-label">📄 Exam Questions File (Optional)</label>
-              <div className="upload-row" onClick={() => examInputRef.current && examInputRef.current.click()}>
-                <span className="upload-placeholder">
-                  {examFile?.name ? examFile.name : 'Upload PDF / Word / Image'}
-                </span>
-                <input
-                  type="file"
-                  ref={examInputRef}
-                  style={{ display: 'none' }}
-                  onChange={handleExamFileChange}
-                />
-                <button className="browse-btn exam-browse">Browse</button>
+            <header className="attach-modal-header">
+              <div>
+                <span className="attach-modal-category">EXAM SETUP</span>
+                <h2>Attach Exam &amp; Answer Key</h2>
+                <p>Upload an exam PDF/Image or define answer keys manually</p>
               </div>
+              <button type="button" className="ai-quiz-close" onClick={closeModal} disabled={isSaving} aria-label="Close exam setup">×</button>
+            </header>
+
+            <div className="attach-modal-body">
+              <section className="attach-form-section">
+                <label className="ai-quiz-label" htmlFor="attach-exam-title">1. Exam Title</label>
+                <input
+                  id="attach-exam-title"
+                  type="text"
+                  className="ai-quiz-input"
+                  placeholder="e.g. Algebra Midterm"
+                  value={examTitle}
+                  onChange={(e) => setExamTitle(e.target.value)}
+                />
+              </section>
+
+              <section className="attach-form-section">
+                <span className="ai-quiz-label">2. Upload Exam File (Optional)</span>
+                <div
+                  className="attach-file-dropzone"
+                  onClick={() => examInputRef.current && examInputRef.current.click()}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') examInputRef.current?.click();
+                  }}
+                >
+                  <span className="attach-file-name">{examFile?.name || 'Drop your exam file here'}</span>
+                  <span className="attach-file-hint">PDF, Word document, or image</span>
+                  <input
+                    type="file"
+                    ref={examInputRef}
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    style={{ display: 'none' }}
+                    onClick={event => event.stopPropagation()}
+                    onChange={handleExamFileChange}
+                  />
+                  <button
+                    type="button"
+                    className="ai-quiz-browse"
+                    onClick={event => {
+                      event.stopPropagation();
+                      examInputRef.current && examInputRef.current.click();
+                    }}
+                  >
+                    Browse
+                  </button>
+                </div>
+              </section>
+
+              <section className="attach-form-section">
+                <div className="attach-section-heading">
+                  <div>
+                    <span className="attach-modal-category">ANSWER KEY</span>
+                    <h3>3. Answer Key Input &amp; Automatic Item Parsing</h3>
+                    <p>Enter numbered answers or a comma/space-separated list.</p>
+                  </div>
+                </div>
+                <textarea
+                  className="ai-quiz-input ai-quiz-textarea attach-answer-input"
+                  aria-label="Raw answer key"
+                  placeholder="e.g. 1. A, 2. B, 3. C or A, B, C, True, Newton"
+                  value={manualAnswers}
+                  onChange={(event) => {
+                    setManualAnswers(event.target.value);
+                    setParsedAttachQuestions(parseAttachAnswers(event.target.value));
+                    setAttachEditingQuestionIndex(null);
+                    setAttachQuestionDraft(null);
+                  }}
+                />
+              </section>
+
+              {parsedAttachQuestions.length > 0 && (
+                <section className="ai-quiz-preview attach-answer-preview">
+                  <h4 className="quiz-preview-title">Parsed Answer Key &amp; Questions Preview ({parsedAttachQuestions.length})</h4>
+                  <div className="quiz-preview-list">
+                    {parsedAttachQuestions.map((question, index) => (
+                      <article
+                        key={`attach-question-${index}`}
+                        className={`quiz-preview-item${attachEditingQuestionIndex === index ? ' is-editing' : ''}`}
+                      >
+                        <div className="quiz-preview-card-header">
+                          <span className="quiz-preview-type">
+                            {question.type === 'multiple_choice'
+                              ? 'MULTIPLE CHOICE'
+                              : question.type === 'true_false'
+                                ? 'TRUE / FALSE'
+                                : 'IDENTIFICATION'}
+                          </span>
+                          {attachEditingQuestionIndex === index ? (
+                            <div className="quiz-preview-edit-actions">
+                              <button type="button" className="quiz-preview-edit-btn quiz-preview-done-btn" onClick={() => finishEditingAttachQuestion(true)}>
+                                <Check size={15} /> Done
+                              </button>
+                              <button type="button" className="quiz-preview-edit-btn quiz-preview-cancel-btn" onClick={() => finishEditingAttachQuestion(false)}>
+                                <X size={15} /> Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="quiz-preview-edit-btn"
+                              onClick={() => startEditingAttachQuestion(index, question)}
+                              disabled={isSaving}
+                            >
+                              <Pencil size={15} /> Edit
+                            </button>
+                          )}
+                        </div>
+                        {attachEditingQuestionIndex === index && attachQuestionDraft ? (
+                          <div className="quiz-preview-editor">
+                            <label className="quiz-preview-edit-label">
+                              Question Text
+                              <textarea
+                                className="quiz-preview-edit-input quiz-preview-question-input"
+                                value={attachQuestionDraft.questionText}
+                                onChange={event => setAttachQuestionDraft(previous => ({ ...previous, questionText: event.target.value }))}
+                                rows={3}
+                              />
+                            </label>
+                            {question.type === 'multiple_choice' && ['A', 'B', 'C', 'D'].map((letter, optionIndex) => (
+                              <label className="quiz-preview-edit-label" key={letter}>
+                                Option {letter}
+                                <input
+                                  className="quiz-preview-edit-input"
+                                  value={attachQuestionDraft.options[optionIndex]}
+                                  onChange={event => setAttachQuestionDraft(previous => ({
+                                    ...previous,
+                                    options: previous.options.map((option, currentIndex) => (
+                                      currentIndex === optionIndex ? event.target.value : option
+                                    ))
+                                  }))}
+                                />
+                              </label>
+                            ))}
+                            <label className="quiz-preview-edit-label">
+                              Correct Answer
+                              {question.type === 'multiple_choice' ? (
+                                <select
+                                  className="quiz-preview-edit-input"
+                                  value={attachQuestionDraft.correctAnswer}
+                                  onChange={event => setAttachQuestionDraft(previous => ({ ...previous, correctAnswer: event.target.value }))}
+                                >
+                                  {['A', 'B', 'C', 'D'].map(letter => <option key={letter} value={letter}>{letter}</option>)}
+                                </select>
+                              ) : question.type === 'true_false' ? (
+                                <select
+                                  className="quiz-preview-edit-input"
+                                  value={attachQuestionDraft.correctAnswer}
+                                  onChange={event => setAttachQuestionDraft(previous => ({ ...previous, correctAnswer: event.target.value }))}
+                                >
+                                  <option value="True">True</option>
+                                  <option value="False">False</option>
+                                </select>
+                              ) : (
+                                <input
+                                  className="quiz-preview-edit-input"
+                                  value={attachQuestionDraft.correctAnswer}
+                                  onChange={event => setAttachQuestionDraft(previous => ({ ...previous, correctAnswer: event.target.value }))}
+                                />
+                              )}
+                            </label>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="quiz-preview-q">{index + 1}. {question.questionText}</p>
+                            <p className="quiz-preview-ans">✓ Correct answer: {question.correctAnswer}</p>
+                            {question.type === 'multiple_choice' && (
+                              <div className="quiz-preview-opts">
+                                {['A', 'B', 'C', 'D'].map((letter, optionIndex) => (
+                                  <span
+                                    key={letter}
+                                    className={`quiz-opt-chip${question.correctAnswer.toUpperCase() === letter ? ' quiz-opt-correct' : ''}`}
+                                  >
+                                    {letter}{question.options?.[optionIndex] ? `. ${question.options[optionIndex]}` : ''}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
 
-            <div className="manual-section">
-              <p className="manual-divider">Define Answer Key (Optional - Space or Comma separated)</p>
-              <textarea
-                className="manual-textarea"
-                placeholder="e.g. A, B, C, Newton, 10.5..."
-                value={manualAnswers}
-                onChange={(e) => setManualAnswers(e.target.value)}
-              />
-            </div>
-
-            <div className="modal-footer">
+            <div className="modal-footer attach-modal-footer">
               <button
                 className="save-assign-btn"
                 onClick={handleSaveAndAssign}
-                disabled={isSaving}
+                disabled={isSaving || attachEditingQuestionIndex !== null}
               >
                 {isSaving ? 'Saving...' : 'Save & Link Key'}
               </button>
@@ -1204,17 +1492,17 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
 
                 <button
                   className="exam-action-button"
-                  onClick={() => {
-                    wakeHuggingFaceSpace();
-                    const currentAnswers = examQuestions?.manual?.map(a => cleanAnswer(a.correct_answer)).filter(Boolean).join(', ') || '';
-                    setExamTitle(showExamDetails?.title || '');
-                    setManualAnswers(currentAnswers);
-                    setShowAttachModal(true);
-                  }}
-                  title="Edit or manually enter answer key"
+                  onClick={isEditingExamKey
+                    ? () => {
+                      setIsEditingExamKey(false);
+                      setExamKeyDraft([]);
+                    }
+                    : startEditingExamKey}
+                  title={isEditingExamKey ? 'Cancel answer key edits' : 'Edit answer key'}
+                  disabled={isSavingExamKey}
                 >
-                  <Edit size={15} />
-                  Edit Key
+                  {isEditingExamKey ? <X size={15} /> : <Edit size={15} />}
+                  {isEditingExamKey ? 'Cancel Edit' : 'Edit Key'}
                 </button>
 
                 {showExamDetails?.file_path && (
@@ -1234,17 +1522,78 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
               {/* Left Column: Answer Keys & OCR */}
               <div className="exam-details-left">
                 <div className="details-section exam-detail-card">
-                  <h4>Manual Answer Key ({examQuestions?.manual?.length || 0})</h4>
+                  <div className="exam-key-heading">
+                    <h4>Manual Answer Key ({examQuestions?.manual?.length || 0})</h4>
+                    {isEditingExamKey && (
+                      <button
+                        type="button"
+                        className="exam-action-button exam-key-save"
+                        onClick={handleSaveExamKey}
+                        disabled={isSavingExamKey}
+                      >
+                        {isSavingExamKey ? 'Saving...' : 'Save Key'}
+                      </button>
+                    )}
+                  </div>
                   <div className="questions-list">
                     {examQuestions?.manual && examQuestions.manual.length > 0 ? (
                       examQuestions.manual.map((a, idx) => a ? (
                         <div key={a.id || `manual-${idx}`} className="question-item">
-                          <p><strong>{idx + 1}. {a.question_text || `Question ${idx + 1}`}</strong></p>
-                          <p className="ans-text" style={{ color: '#059669', fontWeight: 'bold' }}>
-                            Answer: {a.type === 'multiple_choice' || (Array.isArray(a.options) && a.options.length > 0)
-                              ? getMultipleChoiceDetails({ ...a, correctAnswer: a.correct_answer }).answer
-                              : cleanAnswer(a.correct_answer) || 'N/A'}
-                          </p>
+                          {isEditingExamKey ? (
+                            <div className="exam-key-editor">
+                              <label>
+                                <span>Question {idx + 1}</span>
+                                <textarea
+                                  value={examKeyDraft[idx]?.questionText || ''}
+                                  onChange={event => setExamKeyDraft(previous => previous.map((question, questionIndex) => (
+                                    questionIndex === idx ? { ...question, questionText: event.target.value } : question
+                                  )))}
+                                  rows={2}
+                                />
+                              </label>
+                              <label>
+                                <span>Correct Answer</span>
+                                {examKeyDraft[idx]?.type === 'multiple_choice' ? (
+                                  <select
+                                    value={examKeyDraft[idx]?.correctAnswer || ''}
+                                    onChange={event => setExamKeyDraft(previous => previous.map((question, questionIndex) => (
+                                      questionIndex === idx ? { ...question, correctAnswer: event.target.value } : question
+                                    )))}
+                                  >
+                                    <option value="">Select an answer</option>
+                                    {['A', 'B', 'C', 'D'].map(letter => <option key={letter} value={letter}>{letter}</option>)}
+                                  </select>
+                                ) : examKeyDraft[idx]?.type === 'true_false' ? (
+                                  <select
+                                    value={examKeyDraft[idx]?.correctAnswer || ''}
+                                    onChange={event => setExamKeyDraft(previous => previous.map((question, questionIndex) => (
+                                      questionIndex === idx ? { ...question, correctAnswer: event.target.value } : question
+                                    )))}
+                                  >
+                                    <option value="">Select an answer</option>
+                                    <option value="True">True</option>
+                                    <option value="False">False</option>
+                                  </select>
+                                ) : (
+                                  <input
+                                    value={examKeyDraft[idx]?.correctAnswer || ''}
+                                    onChange={event => setExamKeyDraft(previous => previous.map((question, questionIndex) => (
+                                      questionIndex === idx ? { ...question, correctAnswer: event.target.value } : question
+                                    )))}
+                                  />
+                                )}
+                              </label>
+                            </div>
+                          ) : (
+                            <>
+                              <p><strong>{idx + 1}. {a.question_text || `Question ${idx + 1}`}</strong></p>
+                              <p className="ans-text" style={{ color: '#059669', fontWeight: 'bold' }}>
+                                Answer: {a.type === 'multiple_choice' || (Array.isArray(a.options) && a.options.length > 0)
+                                  ? getMultipleChoiceDetails({ ...a, correctAnswer: a.correct_answer }).answer
+                                  : cleanAnswer(a.correct_answer) || 'N/A'}
+                              </p>
+                            </>
+                          )}
                         </div>
                       ) : null)
                     ) : (
@@ -1439,7 +1788,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                   <button
                     type="button"
                     onClick={() => {
-                      setStudentNameDraft(selectedStudent.name || '');
+                      setStudentNameDraft(parseStudentName(selectedStudent.name));
                       setStudentNameError('');
                       setIsEditingStudentName(true);
                     }}
@@ -1467,11 +1816,31 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                 <form onSubmit={handleSaveStudentName} style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
                   <input
                     type="text"
-                    aria-label="Student full name"
-                    value={studentNameDraft}
-                    onChange={(event) => setStudentNameDraft(event.target.value)}
+                    aria-label="First name"
+                    placeholder="First Name"
+                    value={studentNameDraft.firstName}
+                    onChange={(event) => setStudentNameDraft((current) => ({ ...current, firstName: event.target.value }))}
                     disabled={studentNameSaving}
                     autoFocus
+                    style={{ flex: '1 1 220px', minWidth: 0, padding: '9px 11px', border: '1px solid #cbd5e1', borderRadius: '8px', font: 'inherit' }}
+                  />
+                  <input
+                    type="text"
+                    aria-label="Middle initial"
+                    placeholder="M.I."
+                    maxLength={2}
+                    value={studentNameDraft.middleInitial}
+                    onChange={(event) => setStudentNameDraft((current) => ({ ...current, middleInitial: event.target.value }))}
+                    disabled={studentNameSaving}
+                    style={{ flex: '0 1 70px', minWidth: 0, padding: '9px 11px', border: '1px solid #cbd5e1', borderRadius: '8px', font: 'inherit' }}
+                  />
+                  <input
+                    type="text"
+                    aria-label="Last name"
+                    placeholder="Last Name"
+                    value={studentNameDraft.lastName}
+                    onChange={(event) => setStudentNameDraft((current) => ({ ...current, lastName: event.target.value }))}
+                    disabled={studentNameSaving}
                     style={{ flex: '1 1 220px', minWidth: 0, padding: '9px 11px', border: '1px solid #cbd5e1', borderRadius: '8px', font: 'inherit' }}
                   />
                   <button
@@ -1486,7 +1855,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                     type="button"
                     disabled={studentNameSaving}
                     onClick={() => {
-                      setStudentNameDraft(selectedStudent.name || '');
+                      setStudentNameDraft(parseStudentName(selectedStudent.name));
                       setStudentNameError('');
                       setIsEditingStudentName(false);
                     }}

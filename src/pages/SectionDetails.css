@@ -2347,3 +2347,253 @@
     padding: 12px 10px;
     box-sizing: border-box;
 }
+
+/* Attach exam modal */
+.modal-content.attach-modal {
+    display: flex;
+    flex-direction: column;
+    width: min(760px, 96vw);
+    max-width: 96vw;
+    max-height: 92vh;
+    color: #0f172a;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+}
+
+.attach-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 22px 24px;
+    background: #ffffff;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.attach-modal-category {
+    display: inline-block;
+    margin-bottom: 8px;
+    padding: 4px 8px;
+    color: #5b21b6;
+    background: #f5f3ff;
+    border: 1px solid #ddd6fe;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+}
+
+.attach-modal-header h2,
+.attach-section-heading h3 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.2rem;
+    font-weight: 750;
+}
+
+.attach-modal-header p,
+.attach-section-heading p {
+    margin: 6px 0 0;
+    color: #64748b;
+    font-size: 0.88rem;
+}
+
+.attach-modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 22px 24px;
+    overflow-y: auto;
+    background: #f8fafc;
+}
+
+.attach-form-section {
+    padding: 18px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+}
+
+.attach-section-heading {
+    margin-bottom: 14px;
+}
+
+.attach-section-heading h3 {
+    font-size: 0.98rem;
+}
+
+.attach-file-dropzone {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 22px 16px;
+    color: #64748b;
+    text-align: center;
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.attach-file-dropzone:hover,
+.attach-file-dropzone:focus-visible {
+    background: #f1f5f9;
+    border-color: #059669;
+    outline: none;
+}
+
+.attach-file-name {
+    max-width: 100%;
+    overflow: hidden;
+    color: #334155;
+    font-size: 0.9rem;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.attach-file-hint {
+    color: #64748b;
+    font-size: 0.78rem;
+}
+
+.attach-answer-input {
+    min-height: 105px;
+    resize: vertical;
+}
+
+.attach-answer-preview {
+    margin-top: 0;
+    padding: 18px;
+    background: #ffffff;
+}
+
+.attach-answer-preview .quiz-preview-list {
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+.attach-answer-preview .quiz-preview-item {
+    border-color: #e2e8f0;
+    background: #ffffff;
+}
+
+.attach-answer-preview .quiz-preview-type {
+    color: #5b21b6;
+    background: #f5f3ff;
+    border-color: #ddd6fe;
+}
+
+.attach-modal-footer {
+    justify-content: flex-end;
+    padding: 16px 24px;
+    background: #ffffff;
+    border-top: 1px solid #f1f5f9;
+}
+
+.attach-modal-footer .save-assign-btn {
+    min-height: 44px;
+    padding: 0 20px;
+    color: #ffffff;
+    background: #059669;
+    border-radius: 10px;
+    box-shadow: 0 4px 14px rgba(5, 150, 105, 0.2);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.attach-modal-footer .save-assign-btn:hover:not(:disabled) {
+    background: #047857;
+    box-shadow: 0 6px 18px rgba(5, 150, 105, 0.28);
+    transform: translateY(-1px);
+}
+
+.attach-modal-footer .save-assign-btn:disabled {
+    transform: none;
+}
+
+.exam-key-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.exam-key-heading h4 {
+    flex: 1;
+}
+
+.exam-action-button.exam-key-save {
+    flex: 0 0 auto;
+    color: #ffffff;
+    background: #059669;
+    border-color: #059669;
+}
+
+.exam-action-button.exam-key-save:hover:not(:disabled) {
+    color: #ffffff;
+    background: #047857;
+    border-color: #047857;
+}
+
+.exam-key-editor {
+    display: grid;
+    gap: 12px;
+}
+
+.exam-key-editor label {
+    display: grid;
+    gap: 6px;
+    color: #475569;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.exam-key-editor input,
+.exam-key-editor select,
+.exam-key-editor textarea {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 9px 10px;
+    color: #0f172a;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+.exam-key-editor textarea {
+    resize: vertical;
+}
+
+.exam-key-editor input:focus,
+.exam-key-editor select:focus,
+.exam-key-editor textarea:focus {
+    outline: 2px solid #d1fae5;
+    border-color: #059669;
+}
+
+@media (max-width: 520px) {
+    .attach-modal-header,
+    .attach-modal-body {
+        padding: 18px;
+    }
+
+    .attach-form-section {
+        padding: 14px;
+    }
+
+    .attach-modal-footer {
+        padding: 14px 18px;
+    }
+
+    .exam-key-heading {
+        flex-wrap: wrap;
+    }
+}
