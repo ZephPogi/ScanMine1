@@ -892,8 +892,8 @@
 .ai-quiz-modal {
     display: flex;
     flex-direction: column;
-    width: 640px;
-    max-width: 96vw;
+    width: 95%;
+    max-width: 650px;
     max-height: 90vh;
     overflow: hidden;
     color: #0f172a;
@@ -1844,17 +1844,18 @@
     max-height: 94vh;
     display: flex;
     flex-direction: column;
-    width: min(1180px, 96vw);
+    width: min(900px, 95vw);
+    max-width: 900px;
+    margin: 0 auto;
     overflow: hidden;
     box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
 }
 
 .exam-details-header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 20px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
     padding: 21px 25px;
     border-bottom: 1px solid #e3e9e5;
     background: #ffffff;
@@ -1868,6 +1869,9 @@
 }
 
 .exam-details-heading {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
     gap: 14px;
     min-width: 0;
 }
@@ -1928,6 +1932,8 @@
 }
 
 .exam-details-actions {
+    width: 100%;
+    justify-content: flex-start;
     gap: 8px;
     flex-wrap: wrap;
 }
@@ -1953,6 +1959,8 @@
 
 .exam-action-button {
     padding: 0 12px;
+    flex: 0 1 auto;
+    white-space: nowrap;
 }
 
 .exam-action-button:hover,
@@ -1986,10 +1994,11 @@
 
 .exam-details-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
-    align-items: start;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    align-items: stretch;
     gap: 16px;
     padding: 18px;
+    flex: 1;
     overflow-y: auto;
     min-height: 0;
     background: #f4f6f5;
@@ -1997,8 +2006,10 @@
 
 .exam-details-left {
     display: grid;
-    align-content: start;
-    gap: 16px;
+    grid-template-rows: minmax(0, 1fr);
+    align-content: stretch;
+    height: 100%;
+    min-height: 0;
     min-width: 0;
 }
 
@@ -2008,6 +2019,12 @@
     border: 1px solid #e1e7e3;
     border-radius: 9px;
     background: #ffffff;
+}
+
+.exam-details-left > .exam-detail-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 
 .exam-card-heading {
@@ -2030,6 +2047,9 @@
 }
 
 .exam-detail-card .questions-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
     padding: 7px 12px;
     border: 1px solid #e8eeea;
     border-radius: 7px;
@@ -2619,16 +2639,26 @@
 }
 
 @media (min-width: 1024px), (orientation: landscape) {
-    .details-modal,
-    .modal-content.attach-modal,
-    .ai-quiz-modal {
+    .details-modal {
+        width: min(900px, 95vw);
+        max-width: 900px;
+        max-height: 90vh;
+    }
+
+    .modal-content.attach-modal {
         width: min(92vw, 64rem);
         max-width: 92vw;
         max-height: 90vh;
     }
 
+    .ai-quiz-modal {
+        width: 95%;
+        max-width: 650px;
+        max-height: 90vh;
+    }
+
     .exam-details-grid {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
     }
 
     .attach-modal-body {
@@ -2663,20 +2693,12 @@
     }
 
     .ai-quiz-modal-body {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        align-content: start;
-        align-items: start;
-        gap: 0 20px;
-    }
-
-    .ai-quiz-modal-body > .ai-quiz-field:nth-child(-n+5) {
-        grid-column: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0;
     }
 
     .ai-quiz-modal-body > .ai-quiz-preview {
-        grid-column: 2;
-        grid-row: 1 / span 5;
         min-width: 0;
         margin-top: 0;
     }

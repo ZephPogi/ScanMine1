@@ -115,43 +115,6 @@ const wakeHuggingFaceSpace = () => {
     .catch((err) => console.log('🔥 [Pre-Warm] Ping initiated:', err.message));
 };
 
-const parseScanMineText = (rawText) => {
-  if (!rawText) return [];
-  let currentCandidate = null;
-  const parsedQuestions = [];
-  const lines = rawText.split('\n');
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    // Skip Multiple Choice options and Headers
-    if (line.match(/^[A-D]\)/) || line.startsWith('PART') || line.startsWith('Note:')) {
-      continue;
-    }
-
-    // The Anchor Split: Hunt for the Number + Dot anywhere in the line
-    const anchorMatch = line.match(/(\d+)\s*\.\s*(.*)/);
-
-    if (anchorMatch) {
-      const questionNum = parseInt(anchorMatch[1], 10);
-      const questionText = anchorMatch[2].trim();
-      const rawAnswer = line.substring(0, anchorMatch.index).trim();
-      const resolvedAnswer = rawAnswer ? rawAnswer : (currentCandidate || "?");
-
-      parsedQuestions.push({
-        questionText: questionText,
-        correctAnswer: cleanAnswer(resolvedAnswer)
-      });
-
-      currentCandidate = null;
-      continue;
-    }
-    currentCandidate = line;
-  }
-  return parsedQuestions;
-};
-
 const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) => {
   const navigate = useNavigate();
   const [students, setStudents] = useState([]);
@@ -172,12 +135,6 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   const [submissionClockNow, setSubmissionClockNow] = useState(Date.now());
   const [isTogglingSubmission, setIsTogglingSubmission] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [answerKeyImage, setAnswerKeyImage] = useState(null);
-  const [isProcessingOCR, setIsProcessingOCR] = useState(false);
-
-  const [parsedOCRData, setParsedOCRData] = useState(null);
-  const [formattedAnswersToSave, setFormattedAnswersToSave] = useState('');
-
   const [showQuizGeneratorModal, setShowQuizGeneratorModal] = useState(initialOpenQuizGenerator);
   const [quizLessonFile, setQuizLessonFile] = useState(null);
   const [questionBreakdown, setQuestionBreakdown] = useState(DEFAULT_QUESTION_BREAKDOWN);
@@ -222,7 +179,6 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   const searchTimeoutRef = useRef(null);
 
   const examInputRef = useRef(null);
-  const answerKeyInputRef = useRef(null);
   const quizFileRef = useRef(null);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -278,7 +234,6 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
     setShowExamDetails(exam);
     setIsEditingExamKey(false);
     setExamKeyDraft([]);
-    setParsedOCRData(null);
     setExamSubmissions([]);
     try {
       // Fetch questions
@@ -469,104 +424,6 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
     if (e.target.files && e.target.files[0]) setExamFile(e.target.files[0]);
   };
 
-  const handleAnswerKeyImageChange = (e) => {
-    if (e.target.files && e.target.files[0]) setAnswerKeyImage(e.target.files[0]);
-  };
-
-  const handleProcessOCR = async (examId) => {
-    if (!answerKeyImage) return alert('Please select an answer key image first');
-
-    setIsProcessingOCR(true);
-    try {
-      const formData = new FormData();
-      formData.append('image', answerKeyImage);
-      formData.append('examId', examId);
-
-      const response = await fetch('/api/test-ocr', {
-        method: 'POST',
-        body: formData
-      });
-
-      const data = await response.json();
-      if (response.ok && data?.text) {
-        alert('OCR processed successfully!');
-
-        const structuredData = parseScanMineText(data.text);
-        setParsedOCRData(structuredData);
-
-        const finalAnswersString = structuredData.map(q => q?.correctAnswer || '').join(', ');
-        setFormattedAnswersToSave(finalAnswersString);
-
-        // Keep answerKeyImage visible so user can preview the PDF/Image while reviewing answers
-      } else {
-        alert('OCR processing failed: ' + (data?.error || 'No text extracted.'));
-      }
-    } catch (error) {
-      console.error('OCR error:', error);
-      alert('Error processing OCR: ' + (error?.message || 'Unknown error'));
-    } finally {
-      setIsProcessingOCR(false);
-    }
-  };
-
-  const handleSaveOCRToDatabase = async () => {
-    // CHANGE: Check for parsedOCRData instead of formattedAnswersToSave
-    if (!parsedOCRData || parsedOCRData.length === 0 || !showExamDetails?.id) {
-      return alert('No valid OCR data to save');
-    }
-
-    try {
-      // Upload file to storage first to get the URL
-      let pdfUrl = null;
-      if (answerKeyImage) {
-        const uploadFormData = new FormData();
-        uploadFormData.append('file', answerKeyImage);
-        uploadFormData.append('examId', showExamDetails.id);
-
-        const uploadResponse = await fetch('/api/upload-answer-key-file', {
-          method: 'POST',
-          body: uploadFormData
-        });
-
-        if (uploadResponse.ok) {
-          const uploadData = await uploadResponse.json();
-          pdfUrl = uploadData.publicUrl;
-        }
-      }
-
-      const response = await fetch('/api/upload-answer-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          examId: showExamDetails.id,
-          // CHANGE: Send the structured array directly!
-          answers: parsedOCRData,
-          pdfUrl: pdfUrl
-        })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        alert(result.message); // Will now say "Successfully saved X answers!"
-
-        // Refresh UI
-        const questionsResponse = await fetch(`/api/exams/${showExamDetails.id}/questions`);
-        if (questionsResponse.ok) {
-          const questionsData = await questionsResponse.json();
-          setExamQuestions(questionsData || { manual: [], generated: [] });
-        }
-        setParsedOCRData(null);
-        setAnswerKeyImage(null); // Clear file after successful save
-      } else {
-        const errorData = await response.json();
-        alert('Failed to save: ' + (errorData?.error || 'Unknown error'));
-      }
-    } catch (error) {
-      console.error('Error saving OCR to database:', error);
-      alert('Error saving answer key: ' + (error?.message || 'Unknown error'));
-    }
-  };
-
   const startEditingAttachQuestion = (index, question) => {
     setAttachEditingQuestionIndex(index);
     setAttachQuestionDraft({
@@ -697,7 +554,6 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
     setParsedAttachQuestions([]);
     setAttachEditingQuestionIndex(null);
     setAttachQuestionDraft(null);
-    setAnswerKeyImage(null);
   };
 
   const handleQuizFileChange = (e) => {
@@ -1603,7 +1459,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
             </div>
 
             <div className="modal-body exam-details-grid">
-              {/* Left Column: Answer Keys & OCR */}
+              {/* Left Column: Manual Answer Key */}
               <div className="exam-details-left">
                 <div className="details-section exam-detail-card">
                   <div className="exam-key-heading">
@@ -1686,63 +1542,6 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                   </div>
                 </div>
 
-                <div className="details-section exam-detail-card exam-ocr-card">
-                  <h4 style={{ margin: '0 0 10px 0' }}>OCR Answer Key Extraction</h4>
-                  <div className="upload-row" onClick={() => answerKeyInputRef.current && answerKeyInputRef.current.click()} style={{ marginBottom: '10px' }}>
-                    <span className="upload-placeholder">
-                      {answerKeyImage?.name ? answerKeyImage.name : 'Upload Official Answer Key PDF/Image'}
-                    </span>
-                    <input
-                      type="file"
-                      ref={answerKeyInputRef}
-                      style={{ display: 'none' }}
-                      accept=".jpg,.jpeg,.png,.pdf"
-                      onChange={handleAnswerKeyImageChange}
-                    />
-                    <button className="browse-btn exam-browse">Browse</button>
-                  </div>
-
-                  <button
-                    className="save-assign-btn"
-                    onClick={() => handleProcessOCR(showExamDetails.id)}
-                    disabled={isProcessingOCR || !answerKeyImage}
-                    style={{ width: '100%', marginBottom: '10px' }}
-                  >
-                    {isProcessingOCR ? 'Scanning Document...' : 'Extract Answers via OCR'}
-                  </button>
-
-                  {parsedOCRData && parsedOCRData.length > 0 && (
-                    <div style={{ marginTop: '15px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '15px' }}>
-                      <h5 style={{ margin: '0 0 10px 0', color: '#334155' }}>Preview: {parsedOCRData.length} Answers Detected</h5>
-                      <div style={{ maxHeight: '200px', overflowY: 'auto', marginBottom: '15px', padding: '10px', background: '#f1f5f9', borderRadius: '6px' }}>
-                        {parsedOCRData.map((item, i) => item ? (
-                          <div key={`parsed-${i}`} style={{ marginBottom: '8px', fontSize: '13px', display: 'flex', justifyContent: 'space-between' }}>
-                            <span style={{ color: '#475569' }}>{item?.questionText ? item.questionText.substring(0, 30) : 'Question'}...</span>
-                            <strong style={{ color: '#16a34a' }}>{cleanAnswer(item?.correctAnswer) || '?'}</strong>
-                          </div>
-                        ) : null)}
-                      </div>
-
-                      <button
-                        onClick={handleSaveOCRToDatabase}
-                        style={{
-                          width: '100%',
-                          padding: '10px 16px',
-                          background: '#2563eb',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)'
-                        }}
-                      >
-                        Save to Database
-                      </button>
-                    </div>
-                  )}
-                </div>
               </div>
 
               {/* Right Column: Student Progress */}
