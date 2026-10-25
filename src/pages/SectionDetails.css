@@ -405,6 +405,7 @@
     animation: fadeIn 0.3s ease;
     padding: 20px;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .modal-content.attach-modal {
@@ -1841,13 +1842,14 @@
 .details-modal {
     background: #ffffff;
     border-radius: 12px;
-    max-height: 94vh;
+    max-height: 85vh;
     display: flex;
     flex-direction: column;
-    width: min(900px, 95vw);
-    max-width: 900px;
+    width: 92%;
+    max-width: 1000px;
     margin: 0 auto;
     overflow: hidden;
+    overflow-x: hidden;
     box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
 }
 
@@ -1994,14 +1996,19 @@
 
 .exam-details-grid {
     display: grid;
-    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     align-items: stretch;
-    gap: 16px;
+    gap: 1.25rem;
     padding: 18px;
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     min-height: 0;
     background: #f4f6f5;
+}
+
+.exam-details-grid > * {
+    min-width: 0;
 }
 
 .exam-details-left {
@@ -2015,6 +2022,7 @@
 
 .exam-detail-card {
     min-width: 0;
+    overflow-x: hidden;
     padding: 18px;
     border: 1px solid #e1e7e3;
     border-radius: 9px;
@@ -2050,6 +2058,7 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 7px 12px;
     border: 1px solid #e8eeea;
     border-radius: 7px;
@@ -2080,15 +2089,16 @@
 
 .exam-progress-list {
     max-height: 390px;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
     border-top: 1px solid #e8eeea;
 }
 
 .exam-progress-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    display: flex;
     align-items: center;
-    gap: 10px;
+    justify-content: space-between;
+    gap: 0.75rem;
     padding: 11px 2px;
     border-bottom: 1px solid #e8eeea;
 }
@@ -2098,15 +2108,19 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 5px;
+    flex: 1;
     min-width: 0;
 }
 
 .exam-progress-name {
     width: 100%;
+    min-width: 0;
     color: #253831;
     font-size: 0.84rem;
     font-weight: 700;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .exam-verified-badge,
@@ -2114,6 +2128,8 @@
 .exam-pending-label {
     font-size: 0.67rem;
     font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .exam-verified-badge {
@@ -2132,10 +2148,14 @@
     padding: 7px 10px;
     background: #e7f3ee;
     color: #176b55;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .exam-student-actions {
     display: flex;
+    flex-shrink: 0;
+    flex-wrap: nowrap;
     gap: 5px;
 }
 
@@ -2334,11 +2354,15 @@
     .modal-content.attach-modal,
     .modal-content.quiz-modal,
     .modal-content.qa-modal,
-    .modal-content.quiz-taking-modal,
-    .details-modal {
+    .modal-content.quiz-taking-modal {
         width: 95%;
         max-width: 95vw;
         margin: 0 auto;
+    }
+
+    .details-modal {
+        width: 92%;
+        max-width: 1000px;
     }
 
     .exam-details-header {
@@ -2355,18 +2379,7 @@
     }
 
     .exam-details-grid {
-        grid-template-columns: minmax(0, 1fr);
         padding: 12px;
-    }
-
-    .exam-progress-row {
-        grid-template-columns: minmax(0, 1fr) auto;
-    }
-
-    .exam-student-actions,
-    .exam-progress-row > .exam-row-action {
-        grid-column: 2;
-        justify-self: end;
     }
 }
 
@@ -2639,12 +2652,6 @@
 }
 
 @media (min-width: 1024px), (orientation: landscape) {
-    .details-modal {
-        width: min(900px, 95vw);
-        max-width: 900px;
-        max-height: 90vh;
-    }
-
     .modal-content.attach-modal {
         width: min(92vw, 64rem);
         max-width: 92vw;
@@ -2655,10 +2662,6 @@
         width: 95%;
         max-width: 650px;
         max-height: 90vh;
-    }
-
-    .exam-details-grid {
-        grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
     }
 
     .attach-modal-body {
@@ -2709,19 +2712,6 @@
 }
 
 @media (min-width: 1024px) {
-    .details-modal-content,
-    .details-modal,
-    .exam-details-modal {
-        width: 90vw;
-        max-width: 1180px;
-    }
-
-    .exam-modal-body-grid,
-    .exam-details-grid {
-        grid-template-columns: minmax(460px, 1fr) 1fr;
-        gap: 1.5rem;
-    }
-
     .answer-key-scroll-list,
     .exam-details-grid .questions-list {
         padding: 12px;
@@ -2736,5 +2726,11 @@
     .exam-details-grid .questions-list .question-item > p:first-child {
         font-size: 0.9375rem;
         line-height: 1.5;
+    }
+}
+
+@media (min-width: 768px) {
+    .exam-details-grid {
+        grid-template-columns: 1fr 1fr;
     }
 }
