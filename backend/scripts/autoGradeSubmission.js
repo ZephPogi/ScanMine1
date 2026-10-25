@@ -112,6 +112,7 @@ async function callGroqVisionFallback(imageBuffer) {
       },
     ],
     temperature: 0.1,
+    max_tokens: 350,
     response_format: { type: 'json_object' },
   });
   const MAX_GROQ_ATTEMPTS = 3;
@@ -140,11 +141,20 @@ async function callGroqVisionFallback(imageBuffer) {
 
     if (response.status === 429 || response.status === 503) {
       const errorText = await response.text();
-      lastError = new Error(`Groq Vision request failed (${response.status}): ${errorText}`);
+      const isRateLimit = response.status === 429;
+      lastError = new Error(isRateLimit
+        ? 'Groq Vision rate limit exceeded (HTTP 429).'
+        : `Groq Vision request failed (${response.status}): ${errorText}`);
+      if (isRateLimit) {
+        lastError.code = 'GROQ_RATE_LIMIT';
+        console.warn(`[Groq Rate Limit] HTTP 429 (attempt ${attempt}/${MAX_GROQ_ATTEMPTS}).`);
+      }
       if (attempt === MAX_GROQ_ATTEMPTS) break;
 
       const backoffMs = Math.min(1000 * Math.pow(1.5, attempt - 1), 5000);
-      console.warn(`[Groq Retry] Groq API error or rate limit (Attempt ${attempt}/3). Retrying in ${(backoffMs/1000).toFixed(1)}s...`);
+      if (!isRateLimit) {
+        console.warn(`[Groq Retry] Groq API error or rate limit (Attempt ${attempt}/${MAX_GROQ_ATTEMPTS}). Retrying in ${(backoffMs/1000).toFixed(1)}s...`);
+      }
       await new Promise(r => setTimeout(r, backoffMs));
       continue;
     }
@@ -634,7 +644,9 @@ async function parseStudentAnswers(ocrText, totalQuestions = 0, correctAnswers =
           applyAiResponse(groqResult);
           console.log('[Parser] Groq Vision answers applied:', answers);
         } catch (groqErr) {
-          console.error('[Parser] Groq Vision timed out/failed:', groqErr.message);
+          if (groqErr.code !== 'GROQ_RATE_LIMIT') {
+            console.error('[Parser] Groq Vision timed out/failed:', groqErr.message);
+          }
           const timeoutError = new Error('All OCR vision engines timed out.');
           timeoutError.code = 'VISION_FALLBACK_TIMEOUT';
           throw timeoutError;
