@@ -1,7 +1,7 @@
 /* eslint-disable */
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Search, UserPlus, UserMinus, Download, Camera, Edit, Sparkles, Eye, Upload, X, Check, Pencil, ArrowUp, ArrowDown } from 'lucide-react';
+import { Trash2, Search, UserPlus, UserMinus, Download, Camera, Edit, Sparkles, Eye, Upload, X, Check, Pencil, ArrowUp, ArrowDown, Lock, LockOpen } from 'lucide-react';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
@@ -149,6 +149,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   const [customPrompt, setCustomPrompt] = useState('');
   const [examSubmissions, setExamSubmissions] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedSubmissionPreview, setSelectedSubmissionPreview] = useState(null);
   const [studentSubmissions, setStudentSubmissions] = useState([]);
   const [isEditingStudentName, setIsEditingStudentName] = useState(false);
   const [studentNameDraft, setStudentNameDraft] = useState({ firstName: '', middleInitial: '', lastName: '' });
@@ -304,6 +305,10 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
     }
   };
 
+  const handleViewSubmission = (student, submission) => {
+    setSelectedSubmissionPreview({ ...submission, student_name: student.name });
+  };
+
   const handleSaveStudentName = async (event) => {
     event.preventDefault();
     const firstName = studentNameDraft.firstName.trim().replace(/\s+/g, ' ');
@@ -356,7 +361,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
 
   const handleDeleteExam = async (e, examId) => {
     e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this exam? All student results for this exam will also be deleted.')) return;
+    if (!window.confirm('Are you sure you want to delete this quiz? All student results for this quiz will also be deleted.')) return;
 
     try {
       const response = await fetch(`/api/exams/${examId}`, { method: 'DELETE' });
@@ -491,7 +496,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   };
 
   const handleSaveAndAssign = async () => {
-    if (!examTitle.trim()) return alert('Please enter an exam title');
+    if (!examTitle.trim()) return alert('Please enter a quiz title');
     if (attachEditingQuestionIndex !== null) return alert('Finish editing the current answer key item before saving.');
     if (parsedAttachQuestions.some(question => !question.questionText.trim() || !question.correctAnswer.trim())) {
       return alert('Each parsed answer needs question text and a correct answer.');
@@ -514,11 +519,11 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
       const examData = await examResponse.json();
 
       if (!examResponse.ok) {
-        throw new Error(examData?.error || 'Failed to save exam');
+        throw new Error(examData?.error || 'Failed to save quiz');
       }
 
       if (parsedAttachQuestions.length > 0) {
-        if (!examData?.examId) throw new Error('Exam was created without an ID, so its answer key could not be linked.');
+        if (!examData?.examId) throw new Error('The quiz was created without an ID, so its answer key could not be linked.');
         const answerKeyResponse = await fetch('/api/upload-answer-key', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -535,7 +540,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
         if (!answerKeyResponse.ok) throw new Error(answerKeyData.error || 'Failed to save the answer key.');
       }
 
-      alert('Exam and Key saved successfully!');
+      alert('Quiz and key saved successfully!');
       fetchExams();
       closeModal();
     } catch (error) {
@@ -588,7 +593,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
       return;
     }
     if (!examTitle) {
-      setQuizError('Please enter an exam title.');
+      setQuizError('Please enter a quiz title.');
       return;
     }
     if (totalQuestions === 0) {
@@ -729,7 +734,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
 
       if (response.status === 404) {
         if (!generatedExamId) {
-          throw new Error('Missing exam ID. Generate the quiz again before saving.');
+          throw new Error('Missing quiz ID. Generate the quiz again before saving.');
         }
         response = await fetch('/api/upload-answer-key', {
           method: 'POST',
@@ -817,9 +822,9 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
       doc.setTextColor(15, 23, 42);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(16);
-      doc.text('SCANMINE EXAM ANSWER KEY', pageWidth / 2, 20, { align: 'center' });
+      doc.text('SCANMINE QUIZ ANSWER KEY', pageWidth / 2, 20, { align: 'center' });
 
-      const details = `Exam Title: ${examTitle || 'Untitled Exam'}   |   Total Questions: ${generatedQuestions.length}   |   Date: ${new Date().toLocaleDateString()}`;
+      const details = `Quiz Title: ${examTitle || 'Untitled Quiz'}   |   Total Questions: ${generatedQuestions.length}   |   Date: ${new Date().toLocaleDateString()}`;
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       const detailLines = doc.splitTextToSize(details, contentWidth - 8);
@@ -939,7 +944,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
         return {
           'Subject': section.subject,
           'Section': section.name,
-          'Exam Name': showExamDetails.title,
+          'Quiz Name': showExamDetails.title,
           'Student Name': s.name,
           'Status': 'Graded',
           'Points Earned': sub?.points_earned ?? 0,
@@ -950,7 +955,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
       ...pendingStudents.map(s => ({
         'Subject': section.subject,
         'Section': section.name,
-        'Exam Name': showExamDetails.title,
+        'Quiz Name': showExamDetails.title,
         'Student Name': s.name,
         'Status': 'Pending',
         'Points Earned': 0,
@@ -1086,12 +1091,12 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
 
           <aside className="actions-sidebar">
             <div className="action-card exam-management">
-              <h4>Exam Management</h4>
+              <h4>Quiz Management</h4>
               <button className="btn-action primary" onClick={() => {
                 wakeHuggingFaceSpace();
                 setShowAttachModal(true);
               }}>
-                Attach Exam & Key
+                Attach Quiz & Key
               </button>
               <button className="btn-action success" onClick={() => {
                 wakeHuggingFaceSpace();
@@ -1103,7 +1108,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
             </div>
 
             <div className="action-card">
-              <h4>Exams In Class</h4>
+              <h4>Quizzes In Class</h4>
               <div className="exam-list">
                 {exams && exams.length > 0 ? (
                   exams.map((exam, idx) => exam ? (
@@ -1117,20 +1122,20 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                     >
                       <div className="exam-icon">📄</div>
                       <div className="exam-info">
-                        <h4>{exam.title || 'Untitled Exam'}</h4>
+                        <h4>{exam.title || 'Untitled Quiz'}</h4>
                         <p>{exam.created_at ? new Date(exam.created_at).toLocaleDateString() : 'No date'}</p>
                       </div>
                       <button
                         className="delete-exam-btn"
                         onClick={(e) => handleDeleteExam(e, exam.id)}
-                        title="Delete Exam"
+                        title="Delete Quiz"
                       >
                         <Trash2 size={16} />
                       </button>
                     </div>
                   ) : null)
                 ) : (
-                  <p style={{ fontSize: '14px', color: '#666' }}>No exams posted yet.</p>
+                  <p style={{ fontSize: '14px', color: '#666' }}>No quizzes posted yet.</p>
                 )}
               </div>
             </div>
@@ -1147,16 +1152,16 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
           <div className="modal-content attach-modal" onClick={(e) => e.stopPropagation()}>
             <header className="attach-modal-header">
               <div>
-                <span className="attach-modal-category">EXAM SETUP</span>
-                <h2>Attach Exam &amp; Answer Key</h2>
-                <p>Upload an exam PDF/Image or define answer keys manually</p>
+                <span className="attach-modal-category">QUIZ SETUP</span>
+                <h2>Attach Quiz &amp; Answer Key</h2>
+                <p>Upload a quiz PDF/Image or define answer keys manually</p>
               </div>
-              <button type="button" className="ai-quiz-close" onClick={closeModal} disabled={isSaving} aria-label="Close exam setup">×</button>
+              <button type="button" className="ai-quiz-close" onClick={closeModal} disabled={isSaving} aria-label="Close quiz setup">×</button>
             </header>
 
             <div className="attach-modal-body">
               <section className="attach-form-section">
-                <label className="ai-quiz-label" htmlFor="attach-exam-title">1. Exam Title</label>
+                <label className="ai-quiz-label" htmlFor="attach-exam-title">1. Quiz Title</label>
                 <input
                   id="attach-exam-title"
                   type="text"
@@ -1184,7 +1189,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
               </section>
 
               <section className="attach-form-section">
-                <span className="ai-quiz-label">2. Upload Exam File (Optional)</span>
+                <span className="ai-quiz-label">2. Upload Quiz File (Optional)</span>
                 <div
                   className="attach-file-dropzone"
                   onClick={() => examInputRef.current && examInputRef.current.click()}
@@ -1194,7 +1199,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                     if (event.key === 'Enter' || event.key === ' ') examInputRef.current?.click();
                   }}
                 >
-                  <span className="attach-file-name">{examFile?.name || 'Drop your exam file here'}</span>
+                  <span className="attach-file-name">{examFile?.name || 'Drop your quiz file here'}</span>
                   <span className="attach-file-hint">PDF, Word document, or image</span>
                   <input
                     type="file"
@@ -1374,7 +1379,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
             <div className="exam-details-header">
               <div className="exam-details-heading">
                 <div>
-                  <span className="exam-details-eyebrow">EXAM DETAILS</span>
+                  <span className="exam-details-eyebrow">QUIZ DETAILS</span>
                   <h2>{showExamDetails?.title || 'Untitled'}</h2>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
@@ -1392,13 +1397,13 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                   type="button"
                   onClick={handleToggleSubmissions}
                   disabled={isTogglingSubmission}
-                  title={isSubmissionWindowOpen(showExamDetails, submissionClockNow) ? 'Close this exam to submissions' : 'Re-open submissions for this exam'}
+                  title={isSubmissionWindowOpen(showExamDetails, submissionClockNow) ? 'Close this quiz to submissions' : 'Re-open submissions for this quiz'}
                 >
                   {isTogglingSubmission
                     ? 'Updating...'
                     : isSubmissionWindowOpen(showExamDetails, submissionClockNow)
-                      ? '🔒 Lock Submissions'
-                      : '🔓 Re-open Submissions'}
+                      ? <><Lock size={14} />Lock Submissions</>
+                      : <><LockOpen size={14} />Re-open Submissions</>}
                 </button>
 
                 <button
@@ -1415,7 +1420,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                       }
                     });
                   }}
-                  title="Scan student papers for this exam"
+                  title="Scan student papers for this quiz"
                 >
                   <Camera size={16} />
                   Scan Papers
@@ -1454,7 +1459,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                     <Eye size={17} />
                   </button>
                 )}
-                <button className="exam-icon-action exam-close-action" onClick={() => setShowExamDetails(null)} aria-label="Close exam details">×</button>
+                <button className="exam-icon-action exam-close-action" onClick={() => setShowExamDetails(null)} aria-label="Close quiz details">×</button>
               </div>
             </div>
 
@@ -1580,14 +1585,14 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                               {sub.points_earned ?? 0}/{sub.total_items ?? '?'}
                             </span>
                             <div className="exam-student-actions">
-                              <button className="exam-row-action" onClick={() => handleViewStudent(s)} title={`View ${s.name}'s details`} aria-label={`View ${s.name}'s details`}>
+                              <button className="exam-row-action" onClick={() => handleViewSubmission(s, sub)} title={`View ${s.name}'s scanned paper and graded answers`} aria-label={`View ${s.name}'s scanned paper and graded answers`}>
                                 <Eye size={15} />
                               </button>
                               <button
                                 className="exam-row-action"
-                                onClick={() => navigate('/auto-grading-results', { state: { section, examId: showExamDetails.id, studentId: s.user_id, openScanModal: true, role: user?.role, studentName: user?.name || user?.fullName } })}
-                                title={`Re-scan ${s.name}'s paper`}
-                                aria-label={`Re-scan ${s.name}'s paper`}
+                                onClick={() => handleViewSubmission(s, sub)}
+                                title={`View ${s.name}'s scanned paper and graded answers`}
+                                aria-label={`View ${s.name}'s scanned paper and graded answers`}
                               >
                                 <Camera size={15} />
                               </button>
@@ -1626,6 +1631,93 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
               </section>
             </div>
           </div>
+        </div>
+      )}
+
+      {selectedSubmissionPreview && (
+        <div className="submission-preview-overlay" onClick={() => setSelectedSubmissionPreview(null)}>
+          <section
+            className="submission-preview-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="submission-preview-title"
+            onClick={event => event.stopPropagation()}
+          >
+            <header className="submission-preview-header">
+              <div>
+                <span className="submission-preview-eyebrow">GRADED SUBMISSION</span>
+                <h2 id="submission-preview-title">{selectedSubmissionPreview.student_name} — {showExamDetails?.title || 'Quiz'}</h2>
+              </div>
+              <div className="submission-preview-header-actions">
+                <span className="submission-preview-score">
+                  {selectedSubmissionPreview.points_earned ?? 0}/{selectedSubmissionPreview.total_items ?? '?'}
+                </span>
+                <button
+                  type="button"
+                  className="exam-icon-action"
+                  onClick={() => setSelectedSubmissionPreview(null)}
+                  aria-label="Close submission preview"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </header>
+            <div className="submission-preview-grid">
+              <div className="submission-preview-image-panel">
+                <h3>Scanned Paper</h3>
+                {selectedSubmissionPreview.image_url ? (
+                  <img src={selectedSubmissionPreview.image_url} alt={`${selectedSubmissionPreview.student_name}'s scanned paper`} />
+                ) : (
+                  <p className="submission-preview-empty">No scanned paper image is available for this submission.</p>
+                )}
+              </div>
+              <div className="submission-preview-answers-panel">
+                <h3>Graded Answers</h3>
+                {selectedSubmissionPreview.feedback ? (
+                  <ol className="submission-preview-answer-list">
+                    {selectedSubmissionPreview.feedback.split('\n').filter(Boolean).map((line, index) => {
+                      const parts = line.split('|').map(part => part.trim());
+                      const result = parts.find(part => /(?:✅\s*Correct|❌\s*Wrong|\bWrong\b)/i.test(part)) || '';
+                      const isCorrect = /✅\s*Correct/i.test(result);
+                      return (
+                        <li className={isCorrect ? 'is-correct' : 'is-wrong'} key={`${index}-${line}`}>
+                          <span className="submission-preview-question">{parts[0]}</span>
+                          {parts.slice(1).filter(part => part !== result).map((part, partIndex) => (
+                            <span className="submission-preview-answer" key={`${partIndex}-${part}`}>{part}</span>
+                          ))}
+                          {result && <span className="submission-preview-result">{result}</span>}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                ) : (
+                  <p className="submission-preview-empty">No itemized grading feedback is available for this submission.</p>
+                )}
+              </div>
+            </div>
+            <footer className="submission-preview-footer">
+              <button
+                type="button"
+                className="exam-action-button"
+                onClick={() => {
+                  setSelectedSubmissionPreview(null);
+                  navigate('/auto-grading-results', {
+                    state: {
+                      section,
+                      examId: selectedSubmissionPreview.exam_id || showExamDetails?.id,
+                      studentId: selectedSubmissionPreview.student_id,
+                      openScanModal: true,
+                      role: user?.role,
+                      studentName: selectedSubmissionPreview.student_name
+                    }
+                  });
+                }}
+              >
+                <Camera size={16} />
+                Re-scan Paper
+              </button>
+            </footer>
+          </section>
         </div>
       )}
 
@@ -1759,7 +1851,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
               {/* Completed Section */}
               <div>
                 <h4 style={{ margin: '0 0 12px 0', fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Completed Assessments ({studentSubmissions.length})
+                  Completed Quizzes ({studentSubmissions.length})
                 </h4>
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
                   {studentSubmissions.length > 0 ? (
@@ -1796,7 +1888,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
               {/* Pending Section */}
               <div>
                 <h4 style={{ margin: '0 0 12px 0', fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Pending Assessments ({exams.filter(e => !studentSubmissions.some(sub => sub.exam_title === e.title)).length})
+                  Pending Quizzes ({exams.filter(e => !studentSubmissions.some(sub => sub.exam_title === e.title)).length})
                 </h4>
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
                   {exams
@@ -1858,7 +1950,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
 
             <div className="ai-quiz-modal-body">
               <div className="ai-quiz-field">
-                <label className="ai-quiz-label" htmlFor="quiz-exam-title">Exam Title</label>
+                <label className="ai-quiz-label" htmlFor="quiz-exam-title">Quiz Title</label>
                 <input
                   id="quiz-exam-title"
                   type="text"

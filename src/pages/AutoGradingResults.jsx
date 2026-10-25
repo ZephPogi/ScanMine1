@@ -1,7 +1,7 @@
 import imageCompression from 'browser-image-compression';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Eye, Trash2, Edit, X, CheckCircle, Clock, FileText } from 'lucide-react';
+import { Camera, Eye, Trash2, Edit, X, CheckCircle, Clock, FileText, Plus } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import './AutoGradingResults.css';
 import Sidebar from './Sidebar';
@@ -167,7 +167,7 @@ const fetchStudents = useCallback(async () => {
 
 const handleScanRecord = async () => {
     if (!selectedStudentId || !selectedExamId) {
-      alert('Please select a student and an exam first.');
+      alert('Please select a student and a quiz first.');
       return;
     }
     
@@ -233,7 +233,7 @@ const handleScanRecord = async () => {
       const data = await response.json();
       // Optimistic UI Update
       const studentName = students.find(s => s.id === parseInt(selectedStudentId))?.name || 'Student';
-      const examTitle = exams.find(e => e.id === parseInt(selectedExamId))?.title || 'Exam';
+      const examTitle = exams.find(e => e.id === parseInt(selectedExamId))?.title || 'Quiz';
 
       const totalScore = data.result.totalScore || 0;
       const maxScore = data.result.maxScore || 1;
@@ -275,7 +275,7 @@ const handleScanRecord = async () => {
 
   const handleManualGrade = async () => {
     if (!selectedStudentId || !selectedExamId) {
-      alert('Please select a student and an exam first.');
+      alert('Please select a student and a quiz first.');
       return;
     }
     if (!manualAnswers.trim()) {
@@ -297,7 +297,7 @@ const handleScanRecord = async () => {
       if (!response.ok) throw new Error(data.error || 'Failed to grade');
       
       const studentName = students.find(s => s.id === parseInt(selectedStudentId))?.name || 'Student';
-      const examTitle = exams.find(e => e.id === parseInt(selectedExamId))?.title || 'Exam';
+      const examTitle = exams.find(e => e.id === parseInt(selectedExamId))?.title || 'Quiz';
       const percentage = data.result.maxScore > 0
         ? ((data.result.totalScore / data.result.maxScore) * 100).toFixed(0)
         : 0;
@@ -367,7 +367,7 @@ const handleScanRecord = async () => {
               <thead>
                 <tr>
                   <th>Student</th>
-                  <th>Exam</th>
+                  <th>Quiz</th>
                   <th>Score</th>
                   <th>Status</th>
                   <th>Action</th>
@@ -501,13 +501,13 @@ const handleScanRecord = async () => {
             </div>
 
             <div className="scan-step">
-              <h4 className="scan-step-title">Step 2: Select Exam</h4>
+              <h4 className="scan-step-title">Step 2: Select Quiz</h4>
               <select 
                 className="scan-search-input" 
                 value={selectedExamId} 
                 onChange={(e) => setSelectedExamId(e.target.value)}
               >
-                <option value="">-- Select Exam --</option>
+                <option value="">-- Select Quiz --</option>
                 {exams.map(e => (
                   <option key={e.id} value={e.id}>{e.title}</option>
                 ))}
@@ -569,7 +569,7 @@ const handleScanRecord = async () => {
                             aria-label={`Delete page ${index + 1}`}
                             disabled={isScanning}
                           >
-                            ✕
+                            <X size={14} />
                           </button>
                         </div>
                       ))}
@@ -585,7 +585,8 @@ const handleScanRecord = async () => {
                         disabled={isScanning}
                       >
                         <Camera size={18} />
-                        <span>{scannedPages.length ? '➕ Add Another Page / Back Side' : 'Open Camera'}</span>
+                        {scannedPages.length > 0 && <Plus size={16} aria-hidden="true" />}
+                        <span>{scannedPages.length ? 'Add Another Page / Back Side' : 'Open Camera'}</span>
                       </button>
                       <input
                         type="file"
@@ -599,8 +600,7 @@ const handleScanRecord = async () => {
                       />
                       <button
                         type="button"
-                        className="browse-btn"
-                        style={{width: '100%'}}
+                        className="scan-upload-outline-button w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium border border-slate-300 rounded-lg transition-colors flex items-center justify-center gap-2"
                         onClick={() => scanFileRef.current?.click()}
                         disabled={isScanning}
                       >
@@ -640,7 +640,7 @@ const handleScanRecord = async () => {
                 >
                   {isScanning
                     ? <><Clock size={16} /><span>Scanning...</span></>
-                    : <><CheckCircle size={16} /><span>Grade Exam ({scannedPages.length} {scannedPages.length === 1 ? 'Page' : 'Pages'})</span></>}
+                    : <><CheckCircle size={16} /><span>Grade Quiz ({scannedPages.length} {scannedPages.length === 1 ? 'Page' : 'Pages'})</span></>}
                 </button>
               </div>
             )}
