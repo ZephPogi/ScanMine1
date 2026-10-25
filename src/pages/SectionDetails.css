@@ -2707,3 +2707,34 @@
         max-height: 62vh;
     }
 }
+
+@media (min-width: 1024px) {
+    .details-modal-content,
+    .details-modal,
+    .exam-details-modal {
+        width: 90vw;
+        max-width: 1180px;
+    }
+
+    .exam-modal-body-grid,
+    .exam-details-grid {
+        grid-template-columns: minmax(460px, 1fr) 1fr;
+        gap: 1.5rem;
+    }
+
+    .answer-key-scroll-list,
+    .exam-details-grid .questions-list {
+        padding: 12px;
+    }
+
+    .answer-key-scroll-list .question-item,
+    .exam-details-grid .questions-list .question-item {
+        padding: 12px 14px;
+    }
+
+    .answer-key-scroll-list .question-item > p:first-child,
+    .exam-details-grid .questions-list .question-item > p:first-child {
+        font-size: 0.9375rem;
+        line-height: 1.5;
+    }
+}
