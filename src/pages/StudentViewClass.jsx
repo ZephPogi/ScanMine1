@@ -2,7 +2,23 @@ import imageCompression from 'browser-image-compression';
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Camera, X, CheckCircle, Clock } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 import './StudentViewClass.css';
+
+const isExamSubmissionOpen = (exam, now) => {
+  const deadline = exam?.submission_deadline ? new Date(exam.submission_deadline).getTime() : null;
+  return Boolean(exam?.is_submission_open) && (deadline === null || now <= deadline);
+};
+
+const formatSubmissionCountdown = (milliseconds) => {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0
+    ? `${hours}h ${minutes}m ${seconds}s`
+    : `${minutes}m ${seconds}s`;
+};
 
 const StudentViewClass = () => {
   const navigate = useNavigate();
@@ -13,6 +29,7 @@ const StudentViewClass = () => {
   const [exams, setExams] = useState([]);
   const [assessments, setAssessments] = useState([]);
   const [loadingGrades, setLoadingGrades] = useState(true);
+  const [submissionClockNow, setSubmissionClockNow] = useState(Date.now());
   
   // Scan Modal State
   const [showScanModal, setShowScanModal] = useState(false);
@@ -26,6 +43,8 @@ const StudentViewClass = () => {
   const scanFileRef = useRef(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const selectedExam = exams.find(exam => String(exam.id) === String(selectedExamId));
+  const selectedExamIsOpen = selectedExam ? isExamSubmissionOpen(selectedExam, submissionClockNow) : false;
 
   useEffect(() => {
     if (section?.id) {
@@ -34,6 +53,11 @@ const StudentViewClass = () => {
       fetchGrades();
     }
   }, [section]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => setSubmissionClockNow(Date.now()), 1000);
+    return () => clearInterval(intervalId);
+  }, []);
 
   const fetchGrades = async () => {
     if (!user.id || !section?.id) return;
@@ -113,6 +137,10 @@ const StudentViewClass = () => {
       alert('Please select an exam first.');
       return;
     }
+    if (!selectedExamIsOpen) {
+      setScanError('Submission window is closed for this exam.');
+      return;
+    }
     
     let imageToUpload = scanFile;
     if (capturedImage) {
@@ -147,8 +175,13 @@ const StudentViewClass = () => {
       formData.append('studentName', user?.name || user?.fullName || '');
       formData.append('studentPaper', imageToUpload, 'captured_paper.jpg');
 
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session?.access_token) throw new Error('Your session has expired. Please sign in again.');
+
       const response = await fetch('/api/upload-paper', {
         method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
         body: formData
       });
 
@@ -203,15 +236,47 @@ const StudentViewClass = () => {
           <aside className="actions-sidebar">
             <div className="action-card" style={{ padding: '40px 30px', textAlign: 'center', background: 'white', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
               <h4 style={{ fontSize: '1.4rem', marginBottom: '25px', color: '#1e293b' }}>Student Actions</h4>
-              
-              <button 
-                className="btn-action primary" 
-                style={{ padding: '18px', fontSize: '1.15rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', width: '100%', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)', marginBottom: '30px' }}
-                onClick={() => setShowScanModal(true)}
-              >
-                <Camera size={20} />
-                Scan / Upload My Answer Sheet
-              </button>
+              <div className="submission-exam-list">
+                {exams.length === 0 ? (
+                  <p className="submission-exam-empty">No exams are assigned to this class yet.</p>
+                ) : exams.map(exam => {
+                  const isOpen = isExamSubmissionOpen(exam, submissionClockNow);
+                  const deadlineTime = exam.submission_deadline
+                    ? new Date(exam.submission_deadline).getTime()
+                    : null;
+                  return (
+                    <article className="submission-exam-card" key={exam.id}>
+                      <div className="submission-exam-card-heading">
+                        <strong>{exam.title}</strong>
+                        {isOpen ? (
+                          deadlineTime ? (
+                            <span className="submission-window-badge submission-window-countdown">
+                              ⏱️ Closes in {formatSubmissionCountdown(deadlineTime - submissionClockNow)}
+                            </span>
+                          ) : (
+                            <span className="submission-window-badge submission-window-open">Submissions Open</span>
+                          )
+                        ) : (
+                          <span className="submission-window-badge submission-window-closed">Submission Closed</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="submission-exam-scan"
+                        disabled={!isOpen}
+                        onClick={() => {
+                          setSelectedExamId(String(exam.id));
+                          setScanError('');
+                          setShowScanModal(true);
+                        }}
+                      >
+                        <Camera size={17} />
+                        Scan / Upload Paper
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
 
               <div className="smg-table-card" style={{ marginTop: '30px', textAlign: 'left' }}>
                 <h3 className="smg-table-title" style={{ fontSize: '1.2rem', marginBottom: '15px', color: '#1e293b', fontWeight: '700' }}>Detailed Assessment Results</h3>
@@ -285,9 +350,19 @@ const StudentViewClass = () => {
               >
                 <option value="">-- Choose Exam --</option>
                 {exams.map(e => (
-                  <option key={e.id} value={e.id}>{e.title}</option>
+                  <option key={e.id} value={e.id}>
+                    {e.title}{isExamSubmissionOpen(e, submissionClockNow) ? '' : ' (Submission Closed)'}
+                  </option>
                 ))}
               </select>
+              {selectedExamId && !selectedExamIsOpen && (
+                <p className="submission-closed-notice" role="status">Submission Closed</p>
+              )}
+              {selectedExamIsOpen && selectedExam?.submission_deadline && (
+                <p className="submission-countdown-notice" role="status">
+                  ⏱️ Closes in {formatSubmissionCountdown(new Date(selectedExam.submission_deadline).getTime() - submissionClockNow)}
+                </p>
+              )}
             </div>
 
             <div className="upload-section" style={{ padding: '10px 32px 30px' }}>
@@ -295,10 +370,12 @@ const StudentViewClass = () => {
               
               {!isCameraOpen && !capturedImage && (
                 <div style={{ display: 'flex', gap: '15px', marginTop: '10px' }}>
-                  <button className="browse-btn exam-browse" style={{ flex: 1, padding: '14px', fontSize: '1rem', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer' }} onClick={startCamera}>
+                  <button className="browse-btn exam-browse" style={{ flex: 1, padding: '14px', fontSize: '1rem', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer' }} onClick={startCamera} disabled={!selectedExamIsOpen}>
                     <Camera size={18} style={{ verticalAlign: 'middle', marginRight: '8px' }} /> Open Camera
                   </button>
-                  <div className="upload-row" style={{ flex: 1, margin: 0, border: '2px dashed #cbd5e1', borderRadius: '10px', padding: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#f8fafc' }} onClick={() => scanFileRef.current.click()}>
+                  <div className="upload-row" style={{ flex: 1, margin: 0, border: '2px dashed #cbd5e1', borderRadius: '10px', padding: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: selectedExamIsOpen ? 'pointer' : 'not-allowed', background: '#f8fafc', opacity: selectedExamIsOpen ? 1 : 0.6 }} onClick={() => {
+                    if (selectedExamIsOpen) scanFileRef.current.click();
+                  }}>
                     <input
                       type="file"
                       ref={scanFileRef}
@@ -340,9 +417,9 @@ const StudentViewClass = () => {
               <button
                 className="save-assign-btn"
                 onClick={handleScanRecord}
-                disabled={isScanning || !selectedExamId || (!scanFile && !capturedImage)}
+                disabled={isScanning || !selectedExamId || !selectedExamIsOpen || (!scanFile && !capturedImage)}
                 style={{ 
-                  opacity: (isScanning || !selectedExamId || (!scanFile && !capturedImage)) ? 0.6 : 1,
+                  opacity: (isScanning || !selectedExamId || !selectedExamIsOpen || (!scanFile && !capturedImage)) ? 0.6 : 1,
                   width: '100%',
                   display: 'flex',
                   justifyContent: 'center',

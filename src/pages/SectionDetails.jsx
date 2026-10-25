@@ -104,6 +104,11 @@ const DEFAULT_QUESTION_BREAKDOWN = [
   { id: 'identification', label: 'Identification', count: 0, enabled: false }
 ];
 
+const isSubmissionWindowOpen = (exam, now = Date.now()) => {
+  const deadline = exam?.submission_deadline ? new Date(exam.submission_deadline).getTime() : null;
+  return Boolean(exam?.is_submission_open) && (deadline === null || now <= deadline);
+};
+
 const wakeHuggingFaceSpace = () => {
   fetch('https://zephpogi-scanmine-trocr.hf.space/', { mode: 'no-cors' })
     .then(() => console.log('🔥 [Pre-Warm] Sent wakeup ping to Hugging Face Space'))
@@ -163,6 +168,9 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   const [examKeyDraft, setExamKeyDraft] = useState([]);
   const [isSavingExamKey, setIsSavingExamKey] = useState(false);
   const [examTitle, setExamTitle] = useState('');
+  const [submissionDurationMinutes, setSubmissionDurationMinutes] = useState('');
+  const [submissionClockNow, setSubmissionClockNow] = useState(Date.now());
+  const [isTogglingSubmission, setIsTogglingSubmission] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [answerKeyImage, setAnswerKeyImage] = useState(null);
   const [isProcessingOCR, setIsProcessingOCR] = useState(false);
@@ -226,6 +234,12 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
     }
   }, [showAttachModal, showExamDetails, showQuizGeneratorModal]);
 
+  useEffect(() => {
+    if (!showExamDetails) return undefined;
+    const intervalId = setInterval(() => setSubmissionClockNow(Date.now()), 1000);
+    return () => clearInterval(intervalId);
+  }, [showExamDetails]);
+
   const fetchStudents = useCallback(async () => {
     try {
       const response = await fetch(`/api/classes/${section?.id}/students`);
@@ -282,6 +296,38 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
       }
     } catch (error) {
       console.error('Error fetching exam details:', error);
+    }
+  };
+
+  const handleToggleSubmissions = async () => {
+    if (!showExamDetails?.id || isTogglingSubmission) return;
+    const nextOpen = !isSubmissionWindowOpen(showExamDetails, submissionClockNow);
+    setIsTogglingSubmission(true);
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session?.access_token) throw new Error('Your session has expired. Please sign in again.');
+
+      const response = await fetch(`/api/exams/${showExamDetails.id}/toggle-submission`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ is_submission_open: nextOpen })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to update submission status');
+
+      const updatedExam = { ...showExamDetails, ...data };
+      setShowExamDetails(updatedExam);
+      setExams(previous => previous.map(exam => (
+        String(exam.id) === String(updatedExam.id) ? { ...exam, ...data } : exam
+      )));
+    } catch (error) {
+      alert(error.message || 'Failed to update submission status.');
+    } finally {
+      setIsTogglingSubmission(false);
     }
   };
 
@@ -600,6 +646,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
       formData.append('teacherId', user?.id || '');
       formData.append('classId', section?.id || '');
       formData.append('title', examTitle.trim());
+      formData.append('submissionDurationMinutes', submissionDurationMinutes);
       if (examFile) formData.append('lessonFile', examFile);
 
       const examResponse = await fetch('/api/generate-quiz', {
@@ -708,6 +755,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
       formData.append('numberOfQuestions', String(totalQuestions));
       formData.append('questionBreakdown', JSON.stringify(activeQuestionBreakdown));
       formData.append('customPrompt', customPrompt.trim());
+      formData.append('submissionDurationMinutes', submissionDurationMinutes);
 
       const response = await fetch('/api/generate-quiz', {
         method: 'POST',
@@ -812,6 +860,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
         teacherId: user?.id || '',
         classId: section?.id || '',
         title: examTitle,
+        submissionDurationMinutes,
         questions: normalizedQuestions,
         answers
       };
@@ -1263,6 +1312,22 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
               </section>
 
               <section className="attach-form-section">
+                <label className="ai-quiz-label" htmlFor="attach-exam-duration">Submission Window</label>
+                <select
+                  id="attach-exam-duration"
+                  className="ai-quiz-input"
+                  value={submissionDurationMinutes}
+                  onChange={event => setSubmissionDurationMinutes(event.target.value)}
+                >
+                  <option value="">No Limit (Default)</option>
+                  <option value="15">15 Minutes</option>
+                  <option value="30">30 Minutes</option>
+                  <option value="60">1 Hour</option>
+                  <option value="120">2 Hours</option>
+                </select>
+              </section>
+
+              <section className="attach-form-section">
                 <span className="ai-quiz-label">2. Upload Exam File (Optional)</span>
                 <div
                   className="attach-file-dropzone"
@@ -1456,11 +1521,30 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                   <span className="exam-details-eyebrow">EXAM DETAILS</span>
                   <h2>{showExamDetails?.title || 'Untitled'}</h2>
                 </div>
-                <span className="exam-items-pill">
-                  {(examQuestions?.manual?.length || 0) + (examQuestions?.generated?.length || 0)} items
-                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                  <span className={`exam-submission-status${isSubmissionWindowOpen(showExamDetails, submissionClockNow) ? ' is-open' : ' is-closed'}`}>
+                    {isSubmissionWindowOpen(showExamDetails, submissionClockNow) ? '🟢 Submissions Open' : '🔴 Submissions Closed'}
+                  </span>
+                  <span className="exam-items-pill">
+                    {(examQuestions?.manual?.length || 0) + (examQuestions?.generated?.length || 0)} items
+                  </span>
+                </div>
               </div>
               <div className="exam-details-actions">
+                <button
+                  className="exam-action-button"
+                  type="button"
+                  onClick={handleToggleSubmissions}
+                  disabled={isTogglingSubmission}
+                  title={isSubmissionWindowOpen(showExamDetails, submissionClockNow) ? 'Close this exam to submissions' : 'Re-open submissions for this exam'}
+                >
+                  {isTogglingSubmission
+                    ? 'Updating...'
+                    : isSubmissionWindowOpen(showExamDetails, submissionClockNow)
+                      ? '🔒 Lock Submissions'
+                      : '🔓 Re-open Submissions'}
+                </button>
+
                 <button
                   className="exam-action-button exam-action-primary"
                   onClick={() => {
@@ -1984,6 +2068,22 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                   value={examTitle}
                   onChange={(e) => setExamTitle(e.target.value)}
                 />
+              </div>
+
+              <div className="ai-quiz-field">
+                <label className="ai-quiz-label" htmlFor="quiz-exam-duration">Submission Window</label>
+                <select
+                  id="quiz-exam-duration"
+                  className="ai-quiz-input"
+                  value={submissionDurationMinutes}
+                  onChange={event => setSubmissionDurationMinutes(event.target.value)}
+                >
+                  <option value="">No Limit (Default)</option>
+                  <option value="15">15 Minutes</option>
+                  <option value="30">30 Minutes</option>
+                  <option value="60">1 Hour</option>
+                  <option value="120">2 Hours</option>
+                </select>
               </div>
 
               <div className="ai-quiz-field">

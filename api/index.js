@@ -944,7 +944,7 @@ app.post('/api/upload-paper', authenticateProfileRequest, (req, res, next) => {
       const { submission_deadline: submissionDeadline, is_submission_open: isSubmissionOpen } = examResult.rows[0];
       const isExpired = submissionDeadline && new Date() > new Date(submissionDeadline);
       if (!isSubmissionOpen || isExpired) {
-        return res.status(403).json({ error: 'Submission window is closed for this exam.' });
+        return res.status(403).json({ error: 'Submissions for this exam are closed.' });
       }
     } else if (req.authenticatedUser.role !== 'teacher') {
       return res.status(403).json({ error: 'Only students and teachers can submit exam papers' });

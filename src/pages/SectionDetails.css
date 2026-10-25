@@ -1907,6 +1907,26 @@
     color: #40534a;
 }
 
+.exam-submission-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 7px 11px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+.exam-submission-status.is-open {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.exam-submission-status.is-closed {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
 .exam-details-actions {
     gap: 8px;
     flex-wrap: wrap;
@@ -2595,5 +2615,73 @@
 
     .exam-key-heading {
         flex-wrap: wrap;
+    }
+}
+
+@media (min-width: 1024px), (orientation: landscape) {
+    .details-modal,
+    .modal-content.attach-modal,
+    .ai-quiz-modal {
+        width: min(92vw, 64rem);
+        max-width: 92vw;
+        max-height: 90vh;
+    }
+
+    .exam-details-grid {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .attach-modal-body {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        align-content: start;
+        align-items: start;
+        gap: 16px;
+    }
+
+    .attach-modal-body > .attach-form-section:nth-child(1),
+    .attach-modal-body > .attach-form-section:nth-child(2),
+    .attach-modal-body > .attach-form-section:nth-child(3),
+    .attach-modal-body > .attach-form-section:nth-child(4) {
+        grid-column: 1;
+    }
+
+    .attach-modal-body > .attach-answer-preview {
+        grid-column: 2;
+        grid-row: 1 / span 4;
+        min-width: 0;
+    }
+
+    .attach-answer-preview .quiz-preview-list,
+    .ai-quiz-preview .quiz-preview-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-content: start;
+        gap: 12px;
+        max-height: 55vh;
+        overflow-y: auto;
+    }
+
+    .ai-quiz-modal-body {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        align-content: start;
+        align-items: start;
+        gap: 0 20px;
+    }
+
+    .ai-quiz-modal-body > .ai-quiz-field:nth-child(-n+5) {
+        grid-column: 1;
+    }
+
+    .ai-quiz-modal-body > .ai-quiz-preview {
+        grid-column: 2;
+        grid-row: 1 / span 5;
+        min-width: 0;
+        margin-top: 0;
+    }
+
+    .ai-quiz-preview .quiz-preview-list {
+        max-height: 62vh;
     }
 }
