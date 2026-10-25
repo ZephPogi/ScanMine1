@@ -27,7 +27,7 @@ const AutoGradingResults = () => {
   const [students, setStudents] = useState([]);
   const [exams, setExams] = useState([]);
 
-  const [scanFile, setScanFile] = useState(null);
+  const [scannedPages, setScannedPages] = useState([]);
   const [scanError, setScanError] = useState('');
   const scanFileRef = useRef(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -37,7 +37,6 @@ const AutoGradingResults = () => {
   const [showFeedback, setShowFeedback] = useState(null); // stores feedback string
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const [capturedImage, setCapturedImage] = useState(null);
 
   const [studentResults, setStudentResults] = useState([]);
 
@@ -125,9 +124,8 @@ const fetchStudents = useCallback(async () => {
   };
 
   const startCamera = async () => {
+    if (scannedPages.length >= 3) return;
     setIsCameraOpen(true);
-    setScanFile(null);
-    setCapturedImage(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       if (videoRef.current) {
@@ -157,7 +155,10 @@ const fetchStudents = useCallback(async () => {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
       canvas.toBlob((blob) => {
-        setCapturedImage(blob);
+        if (blob) {
+          const page = new File([blob], `scanned_page_${scannedPages.length + 1}.jpg`, { type: 'image/jpeg' });
+          addScannedPage(page);
+        }
         stopCamera();
       }, 'image/jpeg');
     }
@@ -169,15 +170,7 @@ const handleScanRecord = async () => {
       return;
     }
     
-    // Get whichever file the user provided
-    let imageToUpload = scanFile;
-
-    // THE FIX: If using the webcam, convert the raw Blob into a true File object
-    if (capturedImage) {
-      imageToUpload = new File([capturedImage], 'captured_paper.jpg', { type: 'image/jpeg' });
-    }
-    
-    if (!imageToUpload) {
+    if (scannedPages.length === 0) {
       alert('Please capture a photo or upload an image.');
       return;
     }
@@ -185,23 +178,21 @@ const handleScanRecord = async () => {
     setScanError('');
     setIsScanning(true);
     try {
-      // --- AUTOMATIC COMPRESSION LOGIC START ---
-      console.log(`Original file size: ${(imageToUpload.size / 1024 / 1024).toFixed(2)} MB`);
-      
       const compressionOptions = {
         maxSizeMB: 4.5, // Safely under OCR.space's 5MB limit
         maxWidthOrHeight: 1920, // Keeps enough resolution for Engine 3 to read handwriting
         useWebWorker: true // Keeps the UI from freezing while compressing
       };
 
-      try {
-        imageToUpload = await imageCompression(imageToUpload, compressionOptions);
-        console.log(`Compressed file size: ${(imageToUpload.size / 1024 / 1024).toFixed(2)} MB`);
-      } catch (compressionError) {
-        console.error("Compression failed:", compressionError);
-        throw new Error("Failed to compress the image before uploading.");
+      const compressedPages = [];
+      for (const page of scannedPages) {
+        try {
+          compressedPages.push(await imageCompression(page.file, compressionOptions));
+        } catch (compressionError) {
+          console.error("Compression failed:", compressionError);
+          throw new Error(`Failed to compress page ${compressedPages.length + 1} before uploading.`);
+        }
       }
-      // --- AUTOMATIC COMPRESSION LOGIC END ---
 
       const formData = new FormData();
       formData.append('studentId', selectedStudentId);
@@ -209,8 +200,9 @@ const handleScanRecord = async () => {
       formData.append('role', location.state?.role || currentUser.role || '');
       formData.append('studentName', location.state?.studentName || currentUser.name || currentUser.fullName || '');
       
-      // Append the newly compressed image!
-      formData.append('studentPaper', imageToUpload, 'captured_paper.jpg');
+      compressedPages.forEach((page, index) => {
+        formData.append('pages', page, page.name || `scanned_page_${index + 1}.jpg`);
+      });
 
       const response = await fetch('/api/upload-paper', {
         method: 'POST',
@@ -248,9 +240,7 @@ const handleScanRecord = async () => {
 
       alert("Score recorded successfully!");
       
-      setShowScanModal(false);
-      setScanFile(null);
-      setCapturedImage(null);
+      closeScanModal();
       /*
       if (typeof fetchSubmissions === 'function') {
         await fetchSubmissions(selectedExamId); 
@@ -319,9 +309,26 @@ const handleScanRecord = async () => {
 
   const closeScanModal = () => {
     setShowScanModal(false);
-    setScanFile(null);
-    setCapturedImage(null);
+    scannedPages.forEach(page => URL.revokeObjectURL(page.previewUrl));
+    setScannedPages([]);
+    setScanError('');
     stopCamera();
+  };
+
+  const addScannedPage = (file) => {
+    if (!file) return;
+    if (scannedPages.length >= 3) {
+      setScanError('You can scan up to 3 pages per paper.');
+      return;
+    }
+    setScanError('');
+    setScannedPages([...scannedPages, { file, previewUrl: URL.createObjectURL(file) }]);
+  };
+
+  const removeScannedPage = (index) => {
+    const page = scannedPages[index];
+    if (page) URL.revokeObjectURL(page.previewUrl);
+    setScannedPages(pages => pages.filter((_, pageIndex) => pageIndex !== index));
   };
 
   return (
@@ -534,21 +541,56 @@ const handleScanRecord = async () => {
 
               {inputMode === 'scan' && (
                 <>
-                  {!isCameraOpen && !capturedImage && (
+                  {scannedPages.length > 0 && (
+                    <div className="scan-pages-strip" aria-label="Captured paper pages">
+                      {scannedPages.map((page, index) => (
+                        <div className="scan-page-thumbnail" key={`${page.file.name}-${index}`}>
+                          <img src={page.previewUrl} alt={`Page ${index + 1}`} />
+                          <span>{`Page ${index + 1} - ${index === 0 ? 'Front' : index === 1 ? 'Back' : `Page ${index + 1}`}`}</span>
+                          <button
+                            type="button"
+                            className="scan-page-remove"
+                            onClick={() => removeScannedPage(index)}
+                            aria-label={`Delete page ${index + 1}`}
+                            disabled={isScanning}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {!isCameraOpen && scannedPages.length < 3 && (
                     <div className="scan-capture-options">
-                      <button className="scan-record-btn" style={{marginBottom: '10px', width: '100%'}} onClick={startCamera}>
+                      <button
+                        className="scan-record-btn"
+                        style={{marginBottom: '10px', width: '100%'}}
+                        onClick={startCamera}
+                        disabled={isScanning}
+                      >
                         <Camera size={18} />
-                        <span>Open Camera</span>
+                        <span>{scannedPages.length ? '➕ Add Another Page / Back Side' : 'Open Camera'}</span>
                       </button>
-                      <div className="scan-capture-zone" onClick={() => scanFileRef.current.click()}>
-                        <input
-                          type="file"
-                          ref={scanFileRef}
-                          style={{ display: 'none' }}
-                          onChange={(e) => { if (e.target.files[0]) { setScanFile(e.target.files[0]); setCapturedImage(null); } }}
-                        />
-                        <p className="scan-capture-title">{scanFile ? scanFile.name : 'Or Upload Image'}</p>
-                      </div>
+                      <input
+                        type="file"
+                        ref={scanFileRef}
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          addScannedPage(e.target.files[0]);
+                          e.target.value = '';
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="browse-btn"
+                        style={{width: '100%'}}
+                        onClick={() => scanFileRef.current?.click()}
+                        disabled={isScanning}
+                      >
+                        <span>{scannedPages.length ? 'Upload Another Page' : 'Or Upload Image'}</span>
+                      </button>
                     </div>
                   )}
 
@@ -566,14 +608,8 @@ const handleScanRecord = async () => {
                     </div>
                   )}
 
-                  {capturedImage && (
-                    <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px'}}>
-                      <img src={URL.createObjectURL(capturedImage)} alt="Captured" style={{width: '100%', maxHeight: '250px', objectFit: 'contain'}} />
-                      <button className="scan-record-btn" onClick={() => setCapturedImage(null)} style={{background: '#ef4444', width: '100%'}}>
-                        <Trash2 size={18} />
-                        <span>Retake</span>
-                      </button>
-                    </div>
+                  {scannedPages.length === 3 && (
+                    <p className="scan-page-limit">Maximum of 3 pages reached.</p>
                   )}
                 </>
               )}
@@ -584,10 +620,12 @@ const handleScanRecord = async () => {
                 <button
                   className="scan-record-btn"
                   onClick={handleScanRecord}
-                  disabled={isScanning || !selectedStudentId || !selectedExamId || (!scanFile && !capturedImage)}
-                  style={{ opacity: (isScanning || !selectedStudentId || !selectedExamId || (!scanFile && !capturedImage)) ? 0.6 : 1 }}
+                  disabled={isScanning || !selectedStudentId || !selectedExamId || scannedPages.length === 0}
+                  style={{ opacity: (isScanning || !selectedStudentId || !selectedExamId || scannedPages.length === 0) ? 0.6 : 1 }}
                 >
-                  {isScanning ? <><Clock size={16} /><span>Scanning...</span></> : <><CheckCircle size={16} /><span>Scan & Record Score</span></>}
+                  {isScanning
+                    ? <><Clock size={16} /><span>Scanning...</span></>
+                    : <><CheckCircle size={16} /><span>Grade Exam ({scannedPages.length} {scannedPages.length === 1 ? 'Page' : 'Pages'})</span></>}
                 </button>
               </div>
             )}

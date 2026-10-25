@@ -667,8 +667,19 @@ async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null,
       };
     }
 
-    // 2. OCR - extract text from paper
-    const ocrText = await extractTextFromImage(imagePath, imageBuffer);
+    // 2. OCR each scanned page in sequence, preserving item numbering across pages.
+    const pageBuffers = Array.isArray(imageBuffer)
+      ? imageBuffer
+      : (imageBuffer ? [imageBuffer] : []);
+    const pageTexts = [];
+    if (pageBuffers.length > 0) {
+      for (const pageBuffer of pageBuffers) {
+        pageTexts.push(await extractTextFromImage(null, pageBuffer));
+      }
+    } else {
+      pageTexts.push(await extractTextFromImage(imagePath, imageBuffer));
+    }
+    const ocrText = pageTexts.filter(Boolean).join('\n');
 
     // 3. Parse student answers from OCR text.
     //    Pass the answer-key count so the parser pre-fills missing slots with '?'
@@ -684,10 +695,14 @@ async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null,
       ocrText,
       answerKeys.length,
       correctAnswers,
-      imageBuffer,
+      pageBuffers[0] || imageBuffer,
       requestBody.studentName
     );
-    const studentAnswers = parsedAnswers.answers;
+    const studentAnswers = Object.fromEntries(
+      Object.entries(parsedAnswers.answers).sort(([firstNumber], [secondNumber]) => (
+        Number(firstNumber) - Number(secondNumber)
+      ))
+    );
     const extractedStudentName = parsedAnswers.extractedStudentName;
 
     const userRole = (requestBody.role || requestBody.userRole || '').toLowerCase();

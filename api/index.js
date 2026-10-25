@@ -827,7 +827,10 @@ app.post('/api/upload-answer-key-file', upload.single('file'), async (req, res) 
 
 // --- STUDENT: UPLOAD PAPER ---
 app.post('/api/upload-paper', (req, res, next) => {
-  upload.single('studentPaper')(req, res, error => {
+  upload.fields([
+    { name: 'pages', maxCount: 3 },
+    { name: 'studentPaper', maxCount: 3 }
+  ])(req, res, error => {
     if (error) {
       return res.status(400).json({
         success: false,
@@ -838,8 +841,16 @@ app.post('/api/upload-paper', (req, res, next) => {
   });
 }, async (req, res) => {
   try {
-    const file = req.file;
-    if (!file) return res.status(400).json({ success: false, message: 'No image uploaded' });
+    const files = [
+      ...(req.files?.pages || []),
+      ...(req.files?.studentPaper || [])
+    ];
+    if (files.length === 0) {
+      return res.status(400).json({ success: false, message: 'No image uploaded' });
+    }
+    if (files.length > 3) {
+      return res.status(400).json({ success: false, message: 'A paper can contain at most 3 pages' });
+    }
     
     // Ensure these IDs are integers
     const studentId = parseInt(req.body.studentId);
@@ -849,12 +860,20 @@ app.post('/api/upload-paper', (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid Student or Exam ID' });
     }
 
-    const { publicUrl } = await uploadFile(file.buffer, file.originalname, file.mimetype);
+    const publicUrls = [];
+    for (const file of files) {
+      const { publicUrl } = await uploadFile(file.buffer, file.originalname, file.mimetype);
+      publicUrls.push(publicUrl);
+    }
 
-    // This is where the crash likely happens.
-    // We wrap it to see exactly what goes wrong.
-    // FIX: Pass file.buffer as imageBuffer (4th param), not as imagePath (3rd param)
-    const result = await gradeSubmission(examId, studentId, null, file.buffer, publicUrl, req.body);
+    const result = await gradeSubmission(
+      examId,
+      studentId,
+      null,
+      files.map(file => file.buffer),
+      publicUrls[0],
+      req.body
+    );
     
     res.json({ message: 'Paper graded successfully', result });
   } catch (error) {
@@ -1317,11 +1336,18 @@ app.put('/api/students/:studentId/name', authenticateProfileRequest, async (req,
       return res.status(403).json({ error: 'Only teachers can update student names' });
     }
 
-    const { classId, name } = req.body;
+    const { classId, firstName, middleInitial, lastName } = req.body;
     const studentId = req.params.studentId;
-    const normalizedName = typeof name === 'string' ? name.trim().replace(/\s+/g, ' ') : '';
-    if (!classId || !studentId || !normalizedName) {
-      return res.status(400).json({ error: 'Class, student, and name are required' });
+    const normalizedFirstName = typeof firstName === 'string' ? firstName.trim().replace(/\s+/g, ' ') : '';
+    const normalizedMiddleInitial = typeof middleInitial === 'string'
+      ? middleInitial.trim().replace(/\.$/, '').toUpperCase()
+      : '';
+    const normalizedLastName = typeof lastName === 'string' ? lastName.trim().replace(/\s+/g, ' ') : '';
+    if (!classId || !studentId || !normalizedFirstName || !normalizedLastName) {
+      return res.status(400).json({ error: 'Class, student, first name, and last name are required' });
+    }
+    if (normalizedMiddleInitial && !/^[A-Z]$/.test(normalizedMiddleInitial)) {
+      return res.status(400).json({ error: 'Middle initial must be a single letter' });
     }
 
     const classResult = await db.query(
@@ -1340,14 +1366,17 @@ app.put('/api/students/:studentId/name', authenticateProfileRequest, async (req,
       return res.status(403).json({ error: 'Student is not enrolled in this class' });
     }
 
-    const [firstName, ...lastNameParts] = normalizedName.split(' ');
-    const lastName = lastNameParts.join(' ') || null;
+    const normalizedName = [
+      normalizedFirstName,
+      normalizedMiddleInitial ? `${normalizedMiddleInitial}.` : '',
+      normalizedLastName
+    ].filter(Boolean).join(' ');
     const result = await db.query(
       `UPDATE Users
-       SET name = $1, first_name = $2, middle_initial = NULL, last_name = $3
-       WHERE id = $4 AND role = 'student'
+       SET name = $1, first_name = $2, middle_initial = $3, last_name = $4
+       WHERE id = $5 AND role = 'student'
        RETURNING id, name, first_name, middle_initial, last_name, email, role`,
-      [normalizedName, firstName, lastName, studentId]
+      [normalizedName, normalizedFirstName, normalizedMiddleInitial || null, normalizedLastName, studentId]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Student not found' });
 
