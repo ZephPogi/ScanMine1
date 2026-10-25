@@ -630,6 +630,40 @@ app.get('/api/exams', async (req, res) => {
   }
 });
 
+app.put('/api/exams/:id/toggle-submission', authenticateProfileRequest, async (req, res) => {
+  try {
+    if (req.authenticatedUser.role !== 'teacher') {
+      return res.status(403).json({ error: 'Only teachers can update exam submissions' });
+    }
+    const { is_submission_open: isSubmissionOpen } = req.body;
+    if (typeof isSubmissionOpen !== 'boolean') {
+      return res.status(400).json({ error: 'is_submission_open must be a boolean' });
+    }
+
+    const result = await db.query(
+      `UPDATE Exams
+       SET is_submission_open = $1,
+           submission_deadline = CASE
+             WHEN $1 = TRUE AND submission_deadline <= NOW() THEN NULL
+             ELSE submission_deadline
+           END
+       WHERE id = $2
+         AND EXISTS (
+           SELECT 1 FROM Classes
+           WHERE Classes.id = Exams.class_id
+             AND Classes.teacher_id = $3
+         )
+       RETURNING id, submission_deadline, is_submission_open`,
+      [isSubmissionOpen, req.params.id, req.authenticatedUser.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Exam not found' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('TOGGLE EXAM SUBMISSION ERROR:', error);
+    res.status(500).json({ error: 'Failed to update exam submissions' });
+  }
+});
+
 app.get('/api/classes/:id/students', async (req, res) => {
   try {
     const query = `
@@ -671,7 +705,13 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
   try {
     const file = req.file;
     // Keys match your frontend FormData
-    const { title, teacherId, classId, numberOfQuestions, customPrompt } = req.body;
+    const { title, teacherId, classId, numberOfQuestions, customPrompt, submissionDurationMinutes } = req.body;
+    const durationMinutes = submissionDurationMinutes === '' || submissionDurationMinutes == null
+      ? null
+      : Number(submissionDurationMinutes);
+    if (durationMinutes !== null && ![15, 30, 60, 120].includes(durationMinutes)) {
+      return res.status(400).json({ error: 'Invalid submission duration' });
+    }
 
     // questionTypes arrives as a JSON string: '["multiple_choice","true_false"]'
     let questionTypes = ['multiple_choice', 'true_false', 'identification'];
@@ -719,8 +759,17 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
     }
 
     const examRes = await db.query(
-      'INSERT INTO Exams (teacher_id, class_id, title, raw_text_content, file_path) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-      [teacherId, classId, title || 'Generated Quiz', text, fileUrl]
+      `INSERT INTO Exams (
+         teacher_id, class_id, title, raw_text_content, file_path,
+         submission_deadline, is_submission_open
+       )
+       VALUES (
+         $1, $2, $3, $4, $5,
+         CASE WHEN $6::int IS NULL THEN NULL ELSE NOW() + ($6::int * INTERVAL '1 minute') END,
+         TRUE
+       )
+       RETURNING id`,
+      [teacherId, classId, title || 'Generated Quiz', text, fileUrl, durationMinutes]
     );
     const examId = examRes.rows[0].id;
 
@@ -740,7 +789,13 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
 // --- TEACHER: SAVE GENERATED QUIZ AND ASSIGN TO CLASS ---
 app.post('/api/save-quiz', async (req, res) => {
   try {
-    const { examId, teacherId, classId, title, questions, answers } = req.body;
+    const { examId, teacherId, classId, title, questions, answers, submissionDurationMinutes } = req.body;
+    const durationMinutes = submissionDurationMinutes === '' || submissionDurationMinutes == null
+      ? null
+      : Number(submissionDurationMinutes);
+    if (durationMinutes !== null && ![15, 30, 60, 120].includes(durationMinutes)) {
+      return res.status(400).json({ error: 'Invalid submission duration' });
+    }
     const sourceQuestions = Array.isArray(questions) ? questions : [];
     const items = Array.isArray(answers) && answers.length
       ? answers.map((answer, index) => ({
@@ -775,10 +830,27 @@ app.post('/api/save-quiz', async (req, res) => {
         return res.status(400).json({ error: 'Missing examId or teacher/class' });
       }
       const examRes = await db.query(
-        'INSERT INTO Exams (teacher_id, class_id, title) VALUES ($1, $2, $3) RETURNING id',
-        [teacherId, classId, title || 'Generated Quiz']
+        `INSERT INTO Exams (teacher_id, class_id, title, submission_deadline, is_submission_open)
+         VALUES (
+           $1, $2, $3,
+           CASE WHEN $4::int IS NULL THEN NULL ELSE NOW() + ($4::int * INTERVAL '1 minute') END,
+           TRUE
+         )
+         RETURNING id`,
+        [teacherId, classId, title || 'Generated Quiz', durationMinutes]
       );
       id = examRes.rows[0].id;
+    } else if (Object.prototype.hasOwnProperty.call(req.body, 'submissionDurationMinutes')) {
+      await db.query(
+        `UPDATE Exams
+         SET submission_deadline = CASE
+               WHEN $1::int IS NULL THEN NULL
+               ELSE NOW() + ($1::int * INTERVAL '1 minute')
+             END,
+             is_submission_open = TRUE
+         WHERE id = $2`,
+        [durationMinutes, id]
+      );
     }
 
     await db.query('DELETE FROM answer_keys WHERE exam_id = $1', [id]);
@@ -826,7 +898,7 @@ app.post('/api/upload-answer-key-file', upload.single('file'), async (req, res) 
 });
 
 // --- STUDENT: UPLOAD PAPER ---
-app.post('/api/upload-paper', (req, res, next) => {
+app.post('/api/upload-paper', authenticateProfileRequest, (req, res, next) => {
   upload.fields([
     { name: 'pages', maxCount: 3 },
     { name: 'studentPaper', maxCount: 3 }
@@ -841,6 +913,7 @@ app.post('/api/upload-paper', (req, res, next) => {
   });
 }, async (req, res) => {
   try {
+    req.body.role = req.authenticatedUser.role;
     const files = [
       ...(req.files?.pages || []),
       ...(req.files?.studentPaper || [])
@@ -858,6 +931,23 @@ app.post('/api/upload-paper', (req, res, next) => {
 
     if (isNaN(studentId) || isNaN(examId)) {
       return res.status(400).json({ success: false, message: 'Invalid Student or Exam ID' });
+    }
+
+    if (req.authenticatedUser.role === 'student') {
+      const examResult = await db.query(
+        'SELECT submission_deadline, is_submission_open FROM Exams WHERE id = $1',
+        [examId]
+      );
+      if (examResult.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Exam not found' });
+      }
+      const { submission_deadline: submissionDeadline, is_submission_open: isSubmissionOpen } = examResult.rows[0];
+      const isExpired = submissionDeadline && new Date() > new Date(submissionDeadline);
+      if (!isSubmissionOpen || isExpired) {
+        return res.status(403).json({ error: 'Submission window is closed for this exam.' });
+      }
+    } else if (req.authenticatedUser.role !== 'teacher') {
+      return res.status(403).json({ error: 'Only students and teachers can submit exam papers' });
     }
 
     const publicUrls = [];
@@ -878,6 +968,12 @@ app.post('/api/upload-paper', (req, res, next) => {
     res.json({ message: 'Paper graded successfully', result });
   } catch (error) {
     console.error('CRITICAL GRADING ERROR:', error);
+    if (error.code === 'VISION_FALLBACK_TIMEOUT') {
+      return res.status(504).json({
+        success: false,
+        error: 'Processing timed out. Please try again.'
+      });
+    }
     if (error.code === 'NAME_MISMATCH') {
       return res.status(400).json({
         success: false,

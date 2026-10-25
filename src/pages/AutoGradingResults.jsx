@@ -2,6 +2,7 @@ import imageCompression from 'browser-image-compression';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Camera, Eye, Trash2, Edit, X, CheckCircle, Clock, FileText } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 import './AutoGradingResults.css';
 import Sidebar from './Sidebar';
 
@@ -204,18 +205,32 @@ const handleScanRecord = async () => {
         formData.append('pages', page, page.name || `scanned_page_${index + 1}.jpg`);
       });
 
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session?.access_token) throw new Error('Your session has expired. Please sign in again.');
+
       const response = await fetch('/api/upload-paper', {
         method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
         body: formData
       });
 
-      const data = await response.json();
       if (!response.ok) {
-        const error = new Error(data.message || data.error || 'Failed to grade paper');
-        error.code = data.code;
+        const text = await response.text();
+        let errorData = {};
+        try {
+          errorData = JSON.parse(text);
+        } catch (parseError) {
+          console.warn('Non-JSON grading error response:', parseError.message);
+        }
+        const error = new Error(response.status === 504
+          ? 'Server error (504): Processing timed out. Please try again.'
+          : errorData.message || errorData.error || `Server error (${response.status}): Failed to grade paper.`);
+        error.code = errorData.code;
         throw error;
       }
 
+      const data = await response.json();
       // Optimistic UI Update
       const studentName = students.find(s => s.id === parseInt(selectedStudentId))?.name || 'Student';
       const examTitle = exams.find(e => e.id === parseInt(selectedExamId))?.title || 'Exam';

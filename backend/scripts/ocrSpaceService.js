@@ -196,7 +196,7 @@ class OCRSpaceService {
     console.log('[HF Service] Target URL:', targetUrl);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     try {
       const hfResponse = await fetch(targetUrl, {
@@ -222,7 +222,7 @@ class OCRSpaceService {
         (hfErr.message && hfErr.message.toLowerCase().includes('timeout'));
 
       if (isTimeout) {
-        const timeoutErr = new Error('Hugging Face OCR service timed out after 8 seconds.');
+        const timeoutErr = new Error('Hugging Face OCR service timed out after 10 seconds.');
         timeoutErr.code = 'HF_TIMEOUT';
         throw timeoutErr;
       }
