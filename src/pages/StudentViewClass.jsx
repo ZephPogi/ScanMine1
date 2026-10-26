@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Camera, X, CheckCircle, Clock } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import './StudentViewClass.css';
+import './SectionDetails.css';
 
 const isExamSubmissionOpen = (exam, now) => {
   const deadline = exam?.submission_deadline ? new Date(exam.submission_deadline).getTime() : null;
@@ -26,6 +27,15 @@ const StudentViewClass = () => {
   const section = location.state?.section || JSON.parse(localStorage.getItem('currentSection') || '{}');
   
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const [dialog, setDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info',
+    confirmText: 'OK',
+    cancelText: 'Cancel',
+    onConfirm: null
+  });
   const [exams, setExams] = useState([]);
   const [assessments, setAssessments] = useState([]);
   const [loadingGrades, setLoadingGrades] = useState(true);
@@ -45,6 +55,28 @@ const StudentViewClass = () => {
   const canvasRef = useRef(null);
   const selectedExam = exams.find(exam => String(exam.id) === String(selectedExamId));
   const selectedExamIsOpen = selectedExam ? isExamSubmissionOpen(selectedExam, submissionClockNow) : false;
+
+  const showConfirm = (title, message, onConfirmCallback, confirmText = 'Confirm', cancelText = 'Cancel') => {
+    setDialog({ isOpen: true, title, message, type: 'confirm', confirmText, cancelText, onConfirm: onConfirmCallback });
+  };
+
+  const showAlert = (title, message, type = 'info', onConfirm = null) => {
+    if (type === 'confirm') {
+      showConfirm(title, message, onConfirm);
+      return;
+    }
+    setDialog({ isOpen: true, title, message, type, confirmText: 'OK', cancelText: 'Cancel', onConfirm });
+  };
+
+  const closeDialog = () => {
+    setDialog(current => ({ ...current, isOpen: false, onConfirm: null }));
+  };
+
+  const handleDialogConfirm = () => {
+    const onConfirm = dialog.onConfirm;
+    closeDialog();
+    if (onConfirm) onConfirm();
+  };
 
   useEffect(() => {
     if (section?.id) {
@@ -97,7 +129,7 @@ const StudentViewClass = () => {
       }
     } catch (err) {
       console.error("Error accessing camera:", err);
-      alert("Could not access camera. Please check permissions.");
+      showAlert('Camera unavailable', 'Could not access camera. Please check permissions.', 'error');
       setIsCameraOpen(false);
     }
   };
@@ -134,7 +166,7 @@ const StudentViewClass = () => {
 
   const handleScanRecord = async () => {
     if (!selectedExamId) {
-      alert('Please select an exam first.');
+      showAlert('Quiz required', 'Please select a quiz first.', 'warning');
       return;
     }
     if (!selectedExamIsOpen) {
@@ -148,7 +180,7 @@ const StudentViewClass = () => {
     }
     
     if (!imageToUpload) {
-      alert('Please capture a photo or upload an image.');
+      showAlert('Paper required', 'Please capture a photo or upload an image.', 'warning');
       return;
     }
 
@@ -196,10 +228,13 @@ const StudentViewClass = () => {
       const maxScore = data.result.maxScore || 1;
       const percentage = ((totalScore / maxScore) * 100).toFixed(0);
 
-      alert(`Score recorded successfully! You got ${percentage}%`);
       closeScanModal();
-      
-      navigate(`/student/grades/${section.id}`, { state: { section } });
+      showAlert(
+        'Submission recorded',
+        `Score recorded successfully! You got ${percentage}%.`,
+        'success',
+        () => navigate(`/student/grades/${section.id}`, { state: { section } })
+      );
     } catch (error) {
       console.error("Error grading:", error);
       if (error.code === 'NAME_MISMATCH') {
@@ -437,6 +472,30 @@ const StudentViewClass = () => {
                 }}
               >
                 {isScanning ? <><Clock size={20} /><span>Grading Your Paper...</span></> : <><CheckCircle size={20} /><span>Submit for Auto-Grading</span></>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {dialog.isOpen && (
+        <div className="custom-dialog-overlay" onClick={closeDialog}>
+          <div
+            className="custom-dialog-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="custom-dialog-title"
+            onClick={event => event.stopPropagation()}
+          >
+            <h2 id="custom-dialog-title" className="custom-dialog-title">{dialog.title}</h2>
+            <p className="custom-dialog-message">{dialog.message}</p>
+            <div className="custom-dialog-actions">
+              {dialog.type === 'confirm' && (
+                <button type="button" className="custom-dialog-cancel" onClick={closeDialog}>
+                  {dialog.cancelText}
+                </button>
+              )}
+              <button type="button" className="custom-dialog-confirm" onClick={handleDialogConfirm}>
+                {dialog.confirmText}
               </button>
             </div>
           </div>

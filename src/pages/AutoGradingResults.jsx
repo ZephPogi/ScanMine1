@@ -1,14 +1,24 @@
 import imageCompression from 'browser-image-compression';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Eye, Trash2, Edit, X, CheckCircle, Clock, FileText, Plus } from 'lucide-react';
+import { Camera, Eye, Trash2, Edit, X, Check, CheckCircle, Clock, FileText, Plus } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import './AutoGradingResults.css';
+import './SectionDetails.css';
 import Sidebar from './Sidebar';
 
 const AutoGradingResults = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [dialog, setDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info',
+    confirmText: 'OK',
+    cancelText: 'Cancel',
+    onConfirm: null
+  });
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   // Try to get section from location state, fallback to localStorage
   const [section] = useState(() => {
@@ -40,6 +50,24 @@ const AutoGradingResults = () => {
   const canvasRef = useRef(null);
 
   const [studentResults, setStudentResults] = useState([]);
+
+  const showAlert = (title, message, type = 'info', onConfirm = null) => {
+    setDialog({ isOpen: true, title, message, type, confirmText: 'OK', cancelText: 'Cancel', onConfirm });
+  };
+
+  const showConfirm = (title, message, onConfirmCallback, confirmText = 'Confirm', cancelText = 'Cancel') => {
+    setDialog({ isOpen: true, title, message, type: 'confirm', confirmText, cancelText, onConfirm: onConfirmCallback });
+  };
+
+  const closeDialog = () => {
+    setDialog(current => ({ ...current, isOpen: false, onConfirm: null }));
+  };
+
+  const handleDialogConfirm = () => {
+    const onConfirm = dialog.onConfirm;
+    closeDialog();
+    if (onConfirm) onConfirm();
+  };
 
   const fetchSubmissions = useCallback(async () => {
     try {
@@ -113,15 +141,24 @@ const fetchStudents = useCallback(async () => {
   }
 
   const handleDeleteSubmission = async (submissionId) => {
-    if (!window.confirm('Are you sure you want to delete this submission?')) return;
-    try {
-      const res = await fetch(`/api/submissions/${submissionId}`, { method: 'DELETE' });
-      if (res.ok) {
-        setStudentResults(prev => prev.filter(item => item.id !== submissionId));
+    showConfirm(
+      'Delete submission?',
+      'Are you sure you want to delete this submission?',
+      async () => {
+        try {
+          const res = await fetch(`/api/submissions/${submissionId}`, { method: 'DELETE' });
+          if (res.ok) {
+            setStudentResults(prev => prev.filter(item => item.id !== submissionId));
+          } else {
+            const data = await res.json();
+            showAlert('Delete failed', data.error || 'Failed to delete submission.', 'error');
+          }
+        } catch (err) {
+          console.error('Delete error:', err);
+          showAlert('Delete failed', err.message || 'Failed to delete submission.', 'error');
+        }
       }
-    } catch (err) {
-      console.error('Delete error:', err);
-    }
+    );
   };
 
   const startCamera = async () => {
@@ -134,7 +171,7 @@ const fetchStudents = useCallback(async () => {
       }
     } catch (err) {
       console.error("Error accessing camera:", err);
-      alert("Could not access camera. Please check permissions.");
+      showAlert('Camera unavailable', 'Could not access camera. Please check permissions.', 'error');
       setIsCameraOpen(false);
     }
   };
@@ -167,12 +204,12 @@ const fetchStudents = useCallback(async () => {
 
 const handleScanRecord = async () => {
     if (!selectedStudentId || !selectedExamId) {
-      alert('Please select a student and a quiz first.');
+    showAlert('Selection required', 'Please select a student and a quiz first.', 'warning');
       return;
     }
     
     if (scannedPages.length === 0) {
-      alert('Please capture a photo or upload an image.');
+    showAlert('Paper required', 'Please capture a photo or upload an image.', 'warning');
       return;
     }
 
@@ -253,7 +290,7 @@ const handleScanRecord = async () => {
 
       setStudentResults(prev => [newResult, ...prev.filter(r => !(r.name === studentName && r.exam === examTitle))]);
 
-      alert("Score recorded successfully!");
+      showAlert('Grading complete', 'Score recorded successfully.', 'success');
       
       closeScanModal();
       /*
@@ -266,7 +303,7 @@ const handleScanRecord = async () => {
       if (error.code === 'NAME_MISMATCH') {
         setScanError('❌ Name Mismatch: You can only scan your own paper.');
       } else {
-        alert("Error during scanning: " + error.message);
+        showAlert('Scanning failed', 'Error during scanning: ' + error.message, 'error');
       }
     } finally {
       setIsScanning(false);
@@ -275,11 +312,11 @@ const handleScanRecord = async () => {
 
   const handleManualGrade = async () => {
     if (!selectedStudentId || !selectedExamId) {
-      alert('Please select a student and a quiz first.');
+      showAlert('Selection required', 'Please select a student and a quiz first.', 'warning');
       return;
     }
     if (!manualAnswers.trim()) {
-      alert('Please enter the student answers.');
+      showAlert('Answers required', 'Please enter the student answers.', 'warning');
       return;
     }
     setIsScanning(true);
@@ -316,7 +353,7 @@ const handleScanRecord = async () => {
       setManualAnswers('');
       fetchSubmissions();
     } catch (err) {
-      alert('Error: ' + err.message);
+      showAlert('Grading failed', 'Error: ' + err.message, 'error');
     } finally {
       setIsScanning(false);
     }
@@ -453,7 +490,9 @@ const handleScanRecord = async () => {
                 <span className={`status-badge ${showFeedback.status.toLowerCase()}`}>{showFeedback.status}</span>
               </div>
               {showFeedback.feedback ? showFeedback.feedback.split('\n').filter(Boolean).map((line, i) => {
-                const isWrong = line.includes('Wrong') || line.includes('❌');
+                const parts = line.split('|').map(part => part.trim());
+                const result = parts.find(part => /(?:Correct|Wrong|Incorrect)\s*$/i.test(part)) || '';
+                const isWrong = /(?:Wrong|Incorrect)\s*$/i.test(result);
                 const displayLine = line
                   .split('|')[0]
                   .trim()
@@ -463,6 +502,14 @@ const handleScanRecord = async () => {
                 return (
                   <div key={i} className={`feedback-row ${isWrong ? 'wrong' : 'correct'}`}>
                     {displayLine}
+                    {result && (
+                      <span className={`feedback-row-status ${isWrong ? 'is-wrong' : 'is-correct'}`}>
+                        {isWrong
+                          ? <X className="w-4 h-4 text-red-600 inline-block mr-1" aria-hidden="true" />
+                          : <Check className="w-4 h-4 text-emerald-600 inline-block mr-1" aria-hidden="true" />}
+                        {isWrong ? 'Incorrect' : 'Correct'}
+                      </span>
+                    )}
                   </div>
                 );
               }) : <p style={{color:'#94a3b8'}}>No detailed feedback. Re-scan this student to generate feedback.</p>}
@@ -644,6 +691,30 @@ const handleScanRecord = async () => {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {dialog.isOpen && (
+        <div className="custom-dialog-overlay" onClick={closeDialog}>
+          <div
+            className="custom-dialog-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="custom-dialog-title"
+            onClick={event => event.stopPropagation()}
+          >
+            <h2 id="custom-dialog-title" className="custom-dialog-title">{dialog.title}</h2>
+            <p className="custom-dialog-message">{dialog.message}</p>
+            <div className="custom-dialog-actions">
+              {dialog.type === 'confirm' && (
+                <button type="button" className="custom-dialog-cancel" onClick={closeDialog}>
+                  {dialog.cancelText}
+                </button>
+              )}
+              <button type="button" className="custom-dialog-confirm" onClick={handleDialogConfirm}>
+                {dialog.confirmText}
+              </button>
+            </div>
           </div>
         </div>
       )}

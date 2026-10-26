@@ -117,6 +117,15 @@ const wakeHuggingFaceSpace = () => {
 
 const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) => {
   const navigate = useNavigate();
+  const [dialog, setDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info',
+    confirmText: 'OK',
+    cancelText: 'Cancel',
+    onConfirm: null
+  });
   const [students, setStudents] = useState([]);
   const [exams, setExams] = useState([]);
   const [showAttachModal, setShowAttachModal] = useState(false);
@@ -183,6 +192,24 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   const quizFileRef = useRef(null);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+  const showAlert = (title, message, type = 'info', onConfirm = null) => {
+    setDialog({ isOpen: true, title, message, type, confirmText: 'OK', cancelText: 'Cancel', onConfirm });
+  };
+
+  const showConfirm = (title, message, onConfirmCallback, confirmText = 'Confirm', cancelText = 'Cancel') => {
+    setDialog({ isOpen: true, title, message, type: 'confirm', confirmText, cancelText, onConfirm: onConfirmCallback });
+  };
+
+  const closeDialog = () => {
+    setDialog(current => ({ ...current, isOpen: false, onConfirm: null }));
+  };
+
+  const handleDialogConfirm = () => {
+    const onConfirm = dialog.onConfirm;
+    closeDialog();
+    if (onConfirm) onConfirm();
+  };
 
   useEffect(() => {
     const anyModalOpen = showAttachModal || showExamDetails || showQuizGeneratorModal;
@@ -281,7 +308,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
         String(exam.id) === String(updatedExam.id) ? { ...exam, ...data } : exam
       )));
     } catch (error) {
-      alert(error.message || 'Failed to update submission status.');
+      showAlert('Update failed', error.message || 'Failed to update submission status.', 'error');
     } finally {
       setIsTogglingSubmission(false);
     }
@@ -361,17 +388,25 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
 
   const handleDeleteExam = async (e, examId) => {
     e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this quiz? All student results for this quiz will also be deleted.')) return;
-
-    try {
-      const response = await fetch(`/api/exams/${examId}`, { method: 'DELETE' });
-      if (response.ok) {
-        fetchExams();
-        if (showExamDetails?.id === examId) setShowExamDetails(null);
+    showConfirm(
+      'Delete quiz?',
+      'Are you sure you want to delete this quiz? All student results for this quiz will also be deleted.',
+      async () => {
+        try {
+          const response = await fetch(`/api/exams/${examId}`, { method: 'DELETE' });
+          if (response.ok) {
+            fetchExams();
+            if (showExamDetails?.id === examId) setShowExamDetails(null);
+          } else {
+            const data = await response.json();
+            showAlert('Delete failed', data.error || 'Failed to delete quiz.', 'error');
+          }
+        } catch (error) {
+          console.error('Error deleting exam:', error);
+          showAlert('Delete failed', error.message || 'Failed to delete quiz.', 'error');
+        }
       }
-    } catch (error) {
-      console.error('Error deleting exam:', error);
-    }
+    );
   };
 
   const handleSearchStudents = useCallback(async (query) => {
@@ -407,7 +442,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
         fetchStudents();
       } else {
         const err = await res.json();
-        alert(err.error || 'Failed to send invite');
+        showAlert('Invite failed', err.error || 'Failed to send invite', 'error');
       }
     } catch (err) {
       console.error('Invite error:', err);
@@ -415,14 +450,23 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   };
 
   const handleKickStudent = async (student) => {
-    if (!window.confirm(`Remove ${student.name} from this class?`)) return;
-    try {
-      const res = await fetch(`/api/class/decline-invite?classId=${section.id}&userId=${student.user_id}`, { method: 'DELETE' });
-      if (res.ok) fetchStudents();
-      else { const err = await res.json(); alert(err.error || 'Failed to remove student'); }
-    } catch (err) {
-      console.error('Kick error:', err);
-    }
+    showConfirm(
+      'Remove student?',
+      `Remove ${student.name} from this class?`,
+      async () => {
+        try {
+          const res = await fetch(`/api/class/decline-invite?classId=${section.id}&userId=${student.user_id}`, { method: 'DELETE' });
+          if (res.ok) fetchStudents();
+          else {
+            const err = await res.json();
+            showAlert('Removal failed', err.error || 'Failed to remove student', 'error');
+          }
+        } catch (err) {
+          console.error('Kick error:', err);
+          showAlert('Removal failed', err.message || 'Failed to remove student', 'error');
+        }
+      }
+    );
   };
 
   const handleExamFileChange = (e) => {
@@ -467,7 +511,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   const handleSaveExamKey = async () => {
     if (!showExamDetails?.id || examKeyDraft.length === 0) return;
     if (examKeyDraft.some(question => !question.questionText.trim() || !question.correctAnswer.trim())) {
-      alert('Each answer key item needs question text and a correct answer.');
+      showAlert('Incomplete answer key', 'Each answer key item needs question text and a correct answer.', 'warning');
       return;
     }
 
@@ -486,20 +530,27 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
       setExamQuestions(await questionsResponse.json() || { manual: [], generated: [] });
       setIsEditingExamKey(false);
       setExamKeyDraft([]);
-      alert(data.message || 'Answer key updated successfully.');
+      showAlert('Answer key updated', data.message || 'Answer key updated successfully.', 'success');
     } catch (error) {
       console.error('Error updating answer key:', error);
-      alert(`Failed to update answer key: ${error.message || 'Unknown error'}`);
+      showAlert('Update failed', `Failed to update answer key: ${error.message || 'Unknown error'}`, 'error');
     } finally {
       setIsSavingExamKey(false);
     }
   };
 
   const handleSaveAndAssign = async () => {
-    if (!examTitle.trim()) return alert('Please enter a quiz title');
-    if (attachEditingQuestionIndex !== null) return alert('Finish editing the current answer key item before saving.');
+    if (!examTitle.trim()) {
+      showAlert('Quiz title required', 'Please enter a quiz title.', 'warning');
+      return;
+    }
+    if (attachEditingQuestionIndex !== null) {
+      showAlert('Finish editing', 'Finish editing the current answer key item before saving.', 'warning');
+      return;
+    }
     if (parsedAttachQuestions.some(question => !question.questionText.trim() || !question.correctAnswer.trim())) {
-      return alert('Each parsed answer needs question text and a correct answer.');
+      showAlert('Incomplete answer key', 'Each parsed answer needs question text and a correct answer.', 'warning');
+      return;
     }
 
     setIsSaving(true);
@@ -540,12 +591,12 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
         if (!answerKeyResponse.ok) throw new Error(answerKeyData.error || 'Failed to save the answer key.');
       }
 
-      alert('Quiz and key saved successfully!');
+      showAlert('Quiz saved', 'Quiz and key saved successfully.', 'success');
       fetchExams();
       closeModal();
     } catch (error) {
       console.error('Error saving exam/key:', error);
-      alert('Save failed: ' + (error?.message || 'Unknown error'));
+      showAlert('Save failed', 'Save failed: ' + (error?.message || 'Unknown error'), 'error');
     } finally {
       setIsSaving(false);
     }
@@ -796,7 +847,10 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   };
 
   const handleDownloadAnswerKey = () => {
-    if (generatedQuestions.length === 0) return alert('No questions to download');
+    if (generatedQuestions.length === 0) {
+      showAlert('No questions', 'There are no questions to download.', 'warning');
+      return;
+    }
 
     const doc = new jsPDF();
     const margin = 15;
@@ -1677,15 +1731,23 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                   <ol className="submission-preview-answer-list">
                     {selectedSubmissionPreview.feedback.split('\n').filter(Boolean).map((line, index) => {
                       const parts = line.split('|').map(part => part.trim());
-                      const result = parts.find(part => /(?:✅\s*Correct|❌\s*Wrong|\bWrong\b)/i.test(part)) || '';
-                      const isCorrect = /✅\s*Correct/i.test(result);
+                      const result = parts.find(part => /(?:Correct|Wrong|Incorrect)\s*$/i.test(part)) || '';
+                      const isCorrect = !/(?:Wrong|Incorrect)\s*$/i.test(result);
+                      const statusLabel = isCorrect ? 'Correct' : 'Incorrect';
                       return (
                         <li className={isCorrect ? 'is-correct' : 'is-wrong'} key={`${index}-${line}`}>
                           <span className="submission-preview-question">{parts[0]}</span>
                           {parts.slice(1).filter(part => part !== result).map((part, partIndex) => (
                             <span className="submission-preview-answer" key={`${partIndex}-${part}`}>{part}</span>
                           ))}
-                          {result && <span className="submission-preview-result">{result}</span>}
+                          {result && (
+                            <span className={`submission-preview-result submission-preview-status ${isCorrect ? 'is-correct' : 'is-wrong'}`}>
+                              {isCorrect
+                                ? <Check className="w-4 h-4 text-emerald-600 inline-block mr-1" aria-hidden="true" />
+                                : <X className="w-4 h-4 text-red-600 inline-block mr-1" aria-hidden="true" />}
+                              {statusLabel}
+                            </span>
+                          )}
                         </li>
                       );
                     })}
@@ -2216,6 +2278,30 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                     >
                       📥 Download ScanMine Answer Key
                     </button>
+                  </div>
+                </div>
+              )}
+              {dialog.isOpen && (
+                <div className="custom-dialog-overlay" onClick={closeDialog}>
+                  <div
+                    className="custom-dialog-card"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="custom-dialog-title"
+                    onClick={event => event.stopPropagation()}
+                  >
+                    <h2 id="custom-dialog-title" className="custom-dialog-title">{dialog.title}</h2>
+                    <p className="custom-dialog-message">{dialog.message}</p>
+                    <div className="custom-dialog-actions">
+                      {dialog.type === 'confirm' && (
+                        <button type="button" className="custom-dialog-cancel" onClick={closeDialog}>
+                          {dialog.cancelText}
+                        </button>
+                      )}
+                      <button type="button" className="custom-dialog-confirm" onClick={handleDialogConfirm}>
+                        {dialog.confirmText}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
