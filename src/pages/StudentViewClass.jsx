@@ -280,35 +280,36 @@ const StudentViewClass = () => {
                     ? new Date(exam.submission_deadline).getTime()
                     : null;
                   return (
-                    <article className="submission-exam-card" key={exam.id}>
-                      <div className="submission-exam-card-heading">
-                        <strong>{exam.title}</strong>
+                    <div className="student-quiz-card" key={exam.id}>
+                      <div className="student-quiz-info">
+                        <h5 className="quiz-title">{exam.title}</h5>
                         {isOpen ? (
                           deadlineTime ? (
-                            <span className="submission-window-badge submission-window-countdown">
+                            <span className="status-badge open">
                               ⏱️ Closes in {formatSubmissionCountdown(deadlineTime - submissionClockNow)}
                             </span>
                           ) : (
-                            <span className="submission-window-badge submission-window-open">Submissions Open</span>
+                            <span className="status-badge open">Submissions Open</span>
                           )
                         ) : (
-                          <span className="submission-window-badge submission-window-closed">Submission Closed</span>
+                          <span className="status-badge closed">Submission Closed</span>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        className="submission-exam-scan"
-                        disabled={!isOpen}
-                        onClick={() => {
-                          setSelectedExamId(String(exam.id));
-                          setScanError('');
-                          setShowScanModal(true);
-                        }}
-                      >
-                        <Camera size={17} />
-                        Scan / Upload Paper
-                      </button>
-                    </article>
+                      <div className="student-quiz-actions">
+                        <button
+                          type="button"
+                          disabled={!isOpen}
+                          onClick={() => {
+                            setSelectedExamId(String(exam.id));
+                            setScanError('');
+                            setShowScanModal(true);
+                          }}
+                        >
+                          <Camera size={17} />
+                          Scan / Upload Paper
+                        </button>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
