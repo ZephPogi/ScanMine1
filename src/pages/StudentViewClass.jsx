@@ -248,7 +248,7 @@ const StudentViewClass = () => {
   };
 
   if (!section || !section.id) return (
-        <div className="section-container">
+        <div className="section-container student-view-container">
             <header className="minimal-header">
                 <button className="back-btn" onClick={() => navigate('/student-classes')}>← Back to Classes</button>
             </header>
@@ -258,7 +258,7 @@ const StudentViewClass = () => {
 
   return (
     <>
-      <div className="section-container">
+      <div className="section-container student-view-container">
         <header className="minimal-header">
           <button className="back-btn" onClick={() => navigate('/student-classes')}>← Back to Classes</button>
           <div className="subject-title">
@@ -267,10 +267,10 @@ const StudentViewClass = () => {
           </div>
         </header>
 
-        <div className="section-grid" style={{ gridTemplateColumns: '1fr', maxWidth: '800px', margin: '0 auto' }}>
+        <div className="section-grid student-view-grid">
           <aside className="actions-sidebar">
-            <div className="action-card" style={{ padding: '40px 30px', textAlign: 'center', background: 'white', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-              <h4 style={{ fontSize: '1.4rem', marginBottom: '25px', color: '#1e293b' }}>Student Actions</h4>
+            <div className="action-card student-actions-panel">
+              <h4>Student Actions</h4>
               <div className="submission-exam-list">
                 {exams.length === 0 ? (
                   <p className="submission-exam-empty">No exams are assigned to this class yet.</p>
@@ -286,10 +286,14 @@ const StudentViewClass = () => {
                         {isOpen ? (
                           deadlineTime ? (
                             <span className="status-badge open">
+                              <span className="status-dot" aria-hidden="true" />
                               ⏱️ Closes in {formatSubmissionCountdown(deadlineTime - submissionClockNow)}
                             </span>
                           ) : (
-                            <span className="status-badge open">Submissions Open</span>
+                            <span className="status-badge open">
+                              <span className="status-dot" aria-hidden="true" />
+                              Submissions Open
+                            </span>
                           )
                         ) : (
                           <span className="status-badge closed">Submission Closed</span>
@@ -314,37 +318,39 @@ const StudentViewClass = () => {
                 })}
               </div>
 
-              <div className="smg-table-card" style={{ marginTop: '30px', textAlign: 'left' }}>
-                <h3 className="smg-table-title" style={{ fontSize: '1.2rem', marginBottom: '15px', color: '#1e293b', fontWeight: '700' }}>Detailed Assessment Results</h3>
+              <div className="smg-table-card student-assessment-card">
+                <h3 className="smg-table-title">Detailed Assessment Results</h3>
                 <div className="table-responsive-wrapper">
-                  <table className="smg-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <table className="smg-table student-assessment-table">
                     <thead>
-                      <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
-                        <th style={{ padding: '12px', textAlign: 'left', color: '#64748b', fontSize: '0.8rem', fontWeight: '600', textTransform: 'uppercase' }}>Assessment</th>
-                        <th style={{ padding: '12px', textAlign: 'left', color: '#64748b', fontSize: '0.8rem', fontWeight: '600', textTransform: 'uppercase' }}>Date Submitted</th>
-                        <th style={{ padding: '12px', textAlign: 'left', color: '#64748b', fontSize: '0.8rem', fontWeight: '600', textTransform: 'uppercase' }}>Score</th>
+                      <tr>
+                        <th>Assessment</th>
+                        <th>Date Submitted</th>
+                        <th>Score</th>
                       </tr>
                     </thead>
                     <tbody>
                       {loadingGrades ? (
                         <tr>
-                          <td colSpan="3" style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
+                          <td colSpan="3" className="student-assessment-empty">
                             Loading grades...
                           </td>
                         </tr>
                       ) : assessments.length === 0 ? (
                         <tr>
-                          <td colSpan="3" style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
+                          <td colSpan="3" className="student-assessment-empty">
                             No submissions found for this class.
                           </td>
                         </tr>
                       ) : (
                         assessments.map(a => (
-                          <tr key={a.id} style={{ borderBottom: '1px solid #f8fafc' }}>
-                            <td style={{ padding: '12px', fontWeight: '600', color: '#1e293b' }}>{a.exam_title}</td>
-                            <td style={{ padding: '12px', color: '#64748b', fontSize: '0.88rem' }}>{new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-                            <td style={{ padding: '12px', fontWeight: '700', color: '#334155' }}>
-                              {a.points_earned ?? a.score ?? 0} / {a.total_items ?? a.total_questions ?? '?'}
+                          <tr key={a.id}>
+                            <td className="student-assessment-name">{a.exam_title}</td>
+                            <td className="student-assessment-date">{new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                            <td>
+                              <span className="student-score-badge">
+                                {a.points_earned ?? a.score ?? 0} / {a.total_items ?? a.total_questions ?? '?'}
+                              </span>
                             </td>
                           </tr>
                         ))
