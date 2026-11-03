@@ -1169,6 +1169,74 @@ app.get('/api/exams/:examId/submissions', async (req, res) => {
   }
 });
 
+app.put('/api/exams/:examId/scores', authenticateProfileRequest, async (req, res) => {
+  try {
+    if (req.authenticatedUser.role !== 'teacher') {
+      return res.status(403).json({ error: 'Only teachers can update student scores' });
+    }
+
+    const { submissions } = req.body;
+    if (!Array.isArray(submissions) || submissions.length === 0) {
+      return res.status(400).json({ error: 'At least one submission score is required' });
+    }
+
+    const submissionIds = new Set();
+    for (const submission of submissions) {
+      if (!Number.isSafeInteger(submission?.submissionId) || submission.submissionId <= 0
+        || !Number.isSafeInteger(submission?.pointsEarned) || submission.pointsEarned < 0
+        || submissionIds.has(submission.submissionId)) {
+        return res.status(400).json({ error: 'Submission scores must contain unique IDs and non-negative whole-number scores' });
+      }
+      submissionIds.add(submission.submissionId);
+    }
+
+    const result = await db.query(
+      `WITH requested AS MATERIALIZED (
+         SELECT
+           (item->>'submissionId')::INTEGER AS id,
+           (item->>'pointsEarned')::INTEGER AS points_earned
+         FROM jsonb_array_elements($1::JSONB) AS entries(item)
+       ),
+       eligible AS MATERIALIZED (
+         SELECT sub.id, requested.points_earned, sub.total_items
+         FROM requested
+         JOIN student_submissions sub ON sub.id = requested.id AND sub.exam_id = $2
+         JOIN Exams exam ON exam.id = sub.exam_id
+         JOIN Classes class ON class.id = exam.class_id AND class.teacher_id = $3
+         WHERE sub.total_items IS NOT NULL
+           AND requested.points_earned BETWEEN 0 AND sub.total_items
+       ),
+       all_valid AS (
+         SELECT COUNT(*) = (SELECT COUNT(*) FROM requested) AS valid
+         FROM eligible
+       ),
+       updated AS (
+         UPDATE student_submissions sub
+         SET points_earned = eligible.points_earned,
+             score = CASE
+               WHEN eligible.total_items > 0
+                 THEN ROUND((eligible.points_earned::NUMERIC / eligible.total_items) * 100, 2)
+               ELSE 0
+             END
+         FROM eligible
+         WHERE sub.id = eligible.id
+           AND (SELECT valid FROM all_valid)
+         RETURNING sub.id, sub.points_earned, sub.total_items, sub.score
+       )
+       SELECT * FROM updated`,
+      [JSON.stringify(submissions), req.params.examId, req.authenticatedUser.id]
+    );
+
+    if (result.rows.length !== submissions.length) {
+      return res.status(400).json({ error: 'One or more scores are invalid or the submissions are unavailable' });
+    }
+    res.json({ scores: result.rows });
+  } catch (error) {
+    console.error('UPDATE STUDENT SCORES ERROR:', error);
+    res.status(500).json({ error: 'Failed to update student scores' });
+  }
+});
+
 // --- DELETE SUBMISSION ---
 app.delete('/api/submissions/:id', async (req, res) => {
   try {

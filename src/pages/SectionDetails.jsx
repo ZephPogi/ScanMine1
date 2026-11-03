@@ -157,6 +157,10 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   const [quizError, setQuizError] = useState('');
   const [customPrompt, setCustomPrompt] = useState('');
   const [examSubmissions, setExamSubmissions] = useState([]);
+  const [selectedScoreIds, setSelectedScoreIds] = useState([]);
+  const [scoreDrafts, setScoreDrafts] = useState({});
+  const [isEditingScores, setIsEditingScores] = useState(false);
+  const [isSavingScores, setIsSavingScores] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [selectedSubmissionPreview, setSelectedSubmissionPreview] = useState(null);
   const [studentSubmissions, setStudentSubmissions] = useState([]);
@@ -263,6 +267,9 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
     setIsEditingExamKey(false);
     setExamKeyDraft([]);
     setExamSubmissions([]);
+    setSelectedScoreIds([]);
+    setScoreDrafts({});
+    setIsEditingScores(false);
     try {
       // Fetch questions
       const qRes = await fetch(`/api/exams/${exam.id}/questions`);
@@ -1035,6 +1042,95 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
     XLSX.writeFile(workbook, `${section.name}_${showExamDetails.title}_Grades.xlsx`);
   };
 
+  const gradedStudentRows = students
+    .filter(student => student.status === 'enrolled')
+    .map(student => ({
+      student,
+      submission: examSubmissions.find(sub => sub.student_id === student.user_id)
+    }))
+    .filter(row => row.submission);
+  const gradedSubmissionIds = gradedStudentRows.map(({ submission }) => String(submission.id));
+  const selectedGradedIds = selectedScoreIds.filter(id => gradedSubmissionIds.includes(id));
+  const areAllScoresSelected = gradedSubmissionIds.length > 0
+    && selectedGradedIds.length === gradedSubmissionIds.length;
+
+  const handleSelectAllScores = () => {
+    setSelectedScoreIds(areAllScoresSelected ? [] : gradedSubmissionIds);
+  };
+
+  const handleToggleScoreSelection = (submissionId) => {
+    const id = String(submissionId);
+    setSelectedScoreIds(current => (
+      current.includes(id) ? current.filter(selectedId => selectedId !== id) : [...current, id]
+    ));
+  };
+
+  const handleAdjustSelectedScores = (adjustment) => {
+    const selectedRows = gradedStudentRows.filter(({ submission }) => (
+      selectedGradedIds.includes(String(submission.id))
+    ));
+    setScoreDrafts(current => ({
+      ...current,
+      ...Object.fromEntries(selectedRows.map(({ submission }) => {
+        const id = String(submission.id);
+        const maxScore = Number(submission.total_items) || 0;
+        const currentScore = Number(current[id] ?? submission.points_earned) || 0;
+        const nextScore = adjustment === 0 ? 0 : Math.min(maxScore, currentScore + adjustment);
+        return [id, nextScore];
+      }))
+    }));
+    setIsEditingScores(true);
+  };
+
+  const handleSaveScores = async () => {
+    if (!showExamDetails?.id || selectedGradedIds.length === 0 || isSavingScores) return;
+    const selectedRows = gradedStudentRows.filter(({ submission }) => (
+      selectedGradedIds.includes(String(submission.id))
+    ));
+    setIsSavingScores(true);
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session?.access_token) throw new Error('Your session has expired. Please sign in again.');
+
+      const response = await fetch(`/api/exams/${showExamDetails.id}/scores`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          submissions: selectedRows.map(({ submission }) => {
+            const id = String(submission.id);
+            return {
+              submissionId: Number(submission.id),
+              pointsEarned: Number(scoreDrafts[id] ?? submission.points_earned) || 0
+            };
+          })
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to save scores');
+
+      const savedScores = new Map(data.scores.map(score => [String(score.id), score]));
+      setExamSubmissions(current => current.map(submission => {
+        const savedScore = savedScores.get(String(submission.id));
+        return savedScore ? { ...submission, ...savedScore } : submission;
+      }));
+      setScoreDrafts(current => {
+        const next = { ...current };
+        selectedGradedIds.forEach(id => delete next[id]);
+        return next;
+      });
+      setIsEditingScores(false);
+      showAlert('Scores saved', 'The selected student scores were updated.', 'success');
+    } catch (error) {
+      showAlert('Unable to save scores', error.message || 'Failed to save scores.', 'error');
+    } finally {
+      setIsSavingScores(false);
+    }
+  };
+
   return (
     <div className="page-layout">
       <Sidebar />
@@ -1619,41 +1715,157 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                   <h5 style={{ color: '#059669', marginBottom: '10px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Graded ({students.filter(s => examSubmissions.some(sub => sub.student_id === s.user_id)).length})
                   </h5>
+                  <div className="exam-score-selection-bar">
+                    <label className="exam-score-select-all">
+                      <input
+                        type="checkbox"
+                        checked={areAllScoresSelected}
+                        onChange={handleSelectAllScores}
+                        disabled={gradedSubmissionIds.length === 0 || isSavingScores}
+                      />
+                      <span>{areAllScoresSelected ? 'Deselect All' : 'Select All'}</span>
+                    </label>
+                    <span className="exam-score-selection-count">
+                      {selectedGradedIds.length} Selected
+                    </span>
+                  </div>
+                  {selectedGradedIds.length > 0 && (
+                    <div className="exam-score-toolbar" aria-label="Score editing actions">
+                      <button
+                        type="button"
+                        className="exam-score-tool-button"
+                        onClick={() => setIsEditingScores(current => !current)}
+                        disabled={isSavingScores}
+                      >
+                        {isEditingScores ? 'Done Editing' : 'Edit Score'}
+                      </button>
+                      <button
+                        type="button"
+                        className="exam-score-tool-button"
+                        onClick={() => handleAdjustSelectedScores(0)}
+                        disabled={isSavingScores}
+                      >
+                        Set to 0
+                      </button>
+                      <button
+                        type="button"
+                        className="exam-score-tool-button"
+                        onClick={() => handleAdjustSelectedScores(1)}
+                        disabled={isSavingScores}
+                      >
+                        +1
+                      </button>
+                      <button
+                        type="button"
+                        className="exam-score-tool-button"
+                        onClick={() => handleAdjustSelectedScores(5)}
+                        disabled={isSavingScores}
+                      >
+                        +5
+                      </button>
+                      <button
+                        type="button"
+                        className="exam-score-tool-button is-primary"
+                        onClick={handleSaveScores}
+                        disabled={isSavingScores}
+                      >
+                        {isSavingScores ? 'Saving...' : 'Save Scores'}
+                      </button>
+                    </div>
+                  )}
                   <div className="exam-progress-list">
-                    {students
-                      .filter(s => s.status === 'enrolled')
-                      .map(s => {
-                        const sub = examSubmissions.find(sub => sub.student_id === s.user_id);
-                        if (!sub) return null;
-                        return (
-                          <div key={s.user_id} className="exam-progress-row">
-                            <div className="exam-progress-identity">
-                              <span className="exam-progress-name">{s.name}</span>
-                              {sub.is_verified !== false ? (
-                                <span className="exam-verified-badge">✔ Verified</span>
-                              ) : (
-                                <span className="exam-unverified-badge">Unverified</span>
-                              )}
-                            </div>
-                            <span className="exam-score-pill">
-                              {sub.points_earned ?? 0}/{sub.total_items ?? '?'}
-                            </span>
-                            <div className="exam-student-actions">
-                              <button className="exam-row-action" onClick={() => handleViewSubmission(s, sub)} title={`View ${s.name}'s scanned paper and graded answers`} aria-label={`View ${s.name}'s scanned paper and graded answers`}>
-                                <Eye size={15} />
-                              </button>
-                              <button
-                                className="exam-row-action"
-                                onClick={() => handleViewSubmission(s, sub)}
-                                title={`View ${s.name}'s scanned paper and graded answers`}
-                                aria-label={`View ${s.name}'s scanned paper and graded answers`}
-                              >
-                                <Camera size={15} />
-                              </button>
-                            </div>
+                    {gradedStudentRows.map(({ student, submission }) => {
+                      const id = String(submission.id);
+                      const isSelected = selectedGradedIds.includes(id);
+                      const displayedScore = scoreDrafts[id] ?? submission.points_earned ?? 0;
+                      return (
+                        <div key={student.user_id} className="exam-progress-row">
+                          <label className="exam-score-row-checkbox">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleScoreSelection(submission.id)}
+                              aria-label={`Select ${student.name}`}
+                              disabled={isSavingScores}
+                            />
+                          </label>
+                          <div className="exam-progress-identity">
+                            <span className="exam-progress-name">{student.name}</span>
+                            {submission.is_verified !== false ? (
+                              <span className="exam-verified-badge">✔ Verified</span>
+                            ) : (
+                              <span className="exam-unverified-badge">Unverified</span>
+                            )}
                           </div>
-                        );
-                      })}
+                          {isEditingScores && isSelected ? (
+                            <input
+                              className="exam-score-edit-input"
+                              type="number"
+                              min="0"
+                              max={submission.total_items ?? 0}
+                              step="1"
+                              value={displayedScore}
+                              onChange={event => {
+                                const maxScore = Number(submission.total_items) || 0;
+                                const value = Number(event.target.value) || 0;
+                                setScoreDrafts(current => ({
+                                  ...current,
+                                  [id]: Math.max(0, Math.min(maxScore, Math.trunc(value)))
+                                }));
+                              }}
+                              aria-label={`Score for ${student.name}`}
+                              disabled={isSavingScores}
+                            />
+                          ) : (
+                            <span className="exam-score-pill">
+                              {displayedScore}/{submission.total_items ?? '?'}
+                            </span>
+                          )}
+                          <div className="exam-student-actions">
+                            <button
+                              className="exam-row-action"
+                              onClick={() => handleViewSubmission(student, submission)}
+                              title={`View ${student.name}'s scanned paper and graded answers`}
+                              aria-label={`View ${student.name}'s scanned paper and graded answers`}
+                            >
+                              <Eye size={15} />
+                            </button>
+                            <button
+                              className="exam-row-action"
+                              onClick={() => {
+                                wakeHuggingFaceSpace();
+                                navigate('/auto-grading-results', {
+                                  state: {
+                                    section,
+                                    examId: showExamDetails.id,
+                                    studentId: student.user_id,
+                                    openScanModal: true,
+                                    role: user?.role,
+                                    studentName: student.name
+                                  }
+                                });
+                              }}
+                              title="Rescan Paper"
+                              aria-label="Rescan Paper"
+                            >
+                              <Camera size={15} />
+                            </button>
+                            <button
+                              className="exam-row-action"
+                              onClick={() => {
+                                setSelectedScoreIds([id]);
+                                setIsEditingScores(true);
+                              }}
+                              title={`Edit ${student.name}'s score`}
+                              aria-label={`Edit ${student.name}'s score`}
+                              disabled={isSavingScores}
+                            >
+                              <Pencil size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 

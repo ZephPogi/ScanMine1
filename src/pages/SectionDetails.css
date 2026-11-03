@@ -2103,6 +2103,105 @@
     border-bottom: 1px solid #e8eeea;
 }
 
+.exam-score-selection-bar,
+.exam-score-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.exam-score-selection-bar {
+    justify-content: space-between;
+    padding: 9px 2px;
+}
+
+.exam-score-select-all,
+.exam-score-row-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: #475569;
+    font-size: 0.75rem;
+    font-weight: 650;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.exam-score-select-all input,
+.exam-score-row-checkbox input {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: #059669;
+    cursor: pointer;
+}
+
+.exam-score-selection-count {
+    padding: 4px 9px;
+    border-radius: 999px;
+    background: #e5f4ec;
+    color: #176b55;
+    font-size: 0.7rem;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+.exam-score-toolbar {
+    padding: 0 0 10px;
+}
+
+.exam-score-tool-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 4px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #334155;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 650;
+    cursor: pointer;
+    transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.exam-score-tool-button:hover:not(:disabled) {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+.exam-score-tool-button.is-primary {
+    border-color: #059669;
+    background: #059669;
+    color: #ffffff;
+}
+
+.exam-score-tool-button.is-primary:hover:not(:disabled) {
+    border-color: #047857;
+    background: #047857;
+}
+
+.exam-score-tool-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.exam-score-edit-input {
+    width: 68px;
+    min-width: 0;
+    padding: 6px 7px;
+    border: 1px solid #a7f3d0;
+    border-radius: 8px;
+    color: #176b55;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-align: center;
+}
+
 .exam-progress-identity {
     display: flex;
     flex-direction: column;
@@ -2162,6 +2261,21 @@
 .exam-row-action {
     width: 32px;
     min-height: 32px;
+}
+
+@media (max-width: 520px) {
+    .exam-progress-row {
+        gap: 0.45rem;
+    }
+
+    .exam-student-actions {
+        gap: 3px;
+    }
+
+    .exam-row-action {
+        width: 29px;
+        min-height: 29px;
+    }
 }
 
 .details-section {
