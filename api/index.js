@@ -1011,11 +1011,7 @@ app.post('/api/grade-manual', async (req, res) => {
     }
 
     // 2. Parse manual answers (comma separated)
-    const studentAnswers = {};
-    const answerList = answers.split(',').map(a => a.trim());
-    answerList.forEach((val, idx) => {
-      studentAnswers[idx + 1] = val;
-    });
+    const studentAnswers = answers.split(',').map(ans => ans.trim().toUpperCase());
 
     let correctCount = 0;
     const feedbackLines = [];
@@ -1023,13 +1019,13 @@ app.post('/api/grade-manual', async (req, res) => {
     // 3. Grade
     for (let i = 0; i < answerKeys.length; i++) {
       const qNum = i + 1;
-      const correctAnswer = answerKeys[i].answer_text?.toString().trim();
-      const studentAnswer = (studentAnswers[qNum] || '').trim();
+      const correctAnswer = answerKeys[i].answer_text?.toString().trim().toUpperCase();
+      const studentAnswer = studentAnswers[i] || '';
       
-      const isCorrect = studentAnswer && correctAnswer && studentAnswer.toLowerCase() === correctAnswer.toLowerCase();
+      const isCorrect = studentAnswer && correctAnswer && studentAnswer === correctAnswer;
       if (isCorrect) correctCount++;
       
-      feedbackLines.push(`Q${qNum}: Student answered "${studentAnswer}" | Correct: "${correctAnswer}" | ${isCorrect ? '✅ Correct' : '❌ Wrong'}`);
+      feedbackLines.push(`Q${qNum}: Student answered "${studentAnswer}" | Correct: "${correctAnswer}" | ${isCorrect ? 'Correct' : 'Wrong'}`);
     }
 
     const totalScore = correctCount;
