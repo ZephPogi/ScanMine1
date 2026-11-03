@@ -262,6 +262,7 @@ const StudentViewClass = () => {
         <header className="minimal-header">
           <button className="back-btn" onClick={() => navigate('/student-classes')}>← Back to Classes</button>
           <div className="subject-title">
+            <span className="student-portal-badge">Student Portal</span>
             <h1>{section?.subject || 'No Subject'}</h1>
             <p>{section?.name || 'No Section'} • Professor: {section?.professor || 'Unknown'}</p>
           </div>
@@ -366,31 +367,31 @@ const StudentViewClass = () => {
 
       {showScanModal && (
         <div className="modal-overlay" onClick={closeScanModal}>
-          <div className="modal-content attach-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content attach-modal student-scan-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-bar">
               <span className="modal-prof-label">ScanMine Student Console</span>
               <button className="modal-close-btn" onClick={closeScanModal}><X size={20} /></button>
             </div>
 
-            <div className="modal-title-banner" style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 10px 15px -3px rgba(16, 185, 129, 0.3)' }}>
-              <Camera size={20} style={{ display: 'inline', marginRight: '10px', verticalAlign: 'middle' }} />
-              <span style={{ verticalAlign: 'middle' }}>Scan My Answer Sheet</span>
+            <div className="modal-title-banner">
+              <Camera size={20} />
+              <span>Scan My Quiz Paper</span>
             </div>
 
             {scanError && (
-              <div role="alert" style={{ margin: '12px 32px', padding: '12px 14px', border: '1px solid #fecaca', borderRadius: '6px', background: '#fef2f2', color: '#b91c1c', fontSize: '14px', fontWeight: '600' }}>
+              <div className="student-scan-error" role="alert">
                 {scanError}
               </div>
             )}
 
-            <div className="upload-section" style={{ padding: '20px 32px' }}>
-              <label className="upload-label">Step 1: Select Exam</label>
+            <div className="upload-section student-scan-step">
+              <label className="upload-label student-step-label">Step 1: Select Quiz</label>
               <select 
                 className="create-input" 
                 value={selectedExamId} 
                 onChange={(e) => setSelectedExamId(e.target.value)}
               >
-                <option value="">-- Choose Exam --</option>
+                <option value="">-- Choose Quiz --</option>
                 {exams.map(e => (
                   <option key={e.id} value={e.id}>
                     {e.title}{isExamSubmissionOpen(e, submissionClockNow) ? '' : ' (Submission Closed)'}
@@ -407,15 +408,15 @@ const StudentViewClass = () => {
               )}
             </div>
 
-            <div className="upload-section" style={{ padding: '10px 32px 30px' }}>
-              <label className="upload-label">Step 2: Capture or Upload</label>
+            <div className="upload-section student-scan-step student-scan-capture-step">
+              <label className="upload-label student-step-label">Step 2: Capture or Upload Paper</label>
               
               {!isCameraOpen && !capturedImage && (
-                <div style={{ display: 'flex', gap: '15px', marginTop: '10px' }}>
-                  <button className="browse-btn exam-browse" style={{ flex: 1, padding: '14px', fontSize: '1rem', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer' }} onClick={startCamera} disabled={!selectedExamIsOpen}>
-                    <Camera size={18} style={{ verticalAlign: 'middle', marginRight: '8px' }} /> Open Camera
+                <div className="student-scan-options">
+                  <button className="scan-option-button" onClick={startCamera} disabled={!selectedExamIsOpen}>
+                    <Camera size={18} /> Open Camera
                   </button>
-                  <div className="upload-row" style={{ flex: 1, margin: 0, border: '2px dashed #cbd5e1', borderRadius: '10px', padding: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: selectedExamIsOpen ? 'pointer' : 'not-allowed', background: '#f8fafc', opacity: selectedExamIsOpen ? 1 : 0.6 }} onClick={() => {
+                  <div className={`scan-option-button scan-upload-option${selectedExamIsOpen ? '' : ' is-disabled'}`} onClick={() => {
                     if (selectedExamIsOpen) scanFileRef.current.click();
                   }}>
                     <input
@@ -425,7 +426,7 @@ const StudentViewClass = () => {
                       accept=".jpg,.jpeg,.png,.pdf"
                       onChange={(e) => { if (e.target.files[0]) { setScanFile(e.target.files[0]); setCapturedImage(null); } }}
                     />
-                    <span className="upload-placeholder" style={{ textAlign: 'center', width: '100%', color: '#64748b', fontWeight: '500' }}>
+                    <span className="upload-placeholder">
                       {scanFile ? scanFile.name : 'Upload File'}
                     </span>
                   </div>
@@ -433,50 +434,33 @@ const StudentViewClass = () => {
               )}
 
               {isCameraOpen && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', marginTop: '10px' }}>
+                <div className="student-camera-preview">
                   <video ref={videoRef} autoPlay playsInline style={{ width: '100%', maxHeight: '300px', backgroundColor: '#000', borderRadius: '12px' }} />
                   <canvas ref={canvasRef} style={{ display: 'none' }} />
-                  <div style={{ display: 'flex', gap: '15px', width: '100%' }}>
-                    <button className="save-assign-btn" style={{ flex: 1, padding: '12px', background: '#10b981', color: 'white', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer' }} onClick={capturePhoto}>
-                      <Camera size={18} style={{ verticalAlign: 'middle', marginRight: '8px' }} /> Capture Photo
+                  <div className="student-camera-actions">
+                    <button className="save-assign-btn" onClick={capturePhoto}>
+                      <Camera size={18} /> Capture Photo
                     </button>
-                    <button className="browse-btn" style={{ flex: 1, background: '#ef4444', border: 'none', color: 'white', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer' }} onClick={stopCamera}>Cancel</button>
+                    <button className="browse-btn" onClick={stopCamera}>Cancel</button>
                   </div>
                 </div>
               )}
 
               {capturedImage && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', marginTop: '10px' }}>
-                  <img src={URL.createObjectURL(capturedImage)} alt="Captured" style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: '12px', border: '2px solid #e2e8f0' }} />
-                  <button className="browse-btn" onClick={() => setCapturedImage(null)} style={{ background: '#ef4444', width: '100%', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }}>
+                <div className="student-camera-preview">
+                  <img className="student-captured-image" src={URL.createObjectURL(capturedImage)} alt="Captured" />
+                  <button className="browse-btn student-retake-button" onClick={() => setCapturedImage(null)}>
                     Retake Photo
                   </button>
                 </div>
               )}
             </div>
 
-            <div className="modal-footer" style={{ padding: '20px 32px 32px' }}>
+            <div className="modal-footer student-scan-footer">
               <button
-                className="save-assign-btn"
+                className="save-assign-btn student-submit-button"
                 onClick={handleScanRecord}
                 disabled={isScanning || !selectedExamId || !selectedExamIsOpen || (!scanFile && !capturedImage)}
-                style={{ 
-                  opacity: (isScanning || !selectedExamId || !selectedExamIsOpen || (!scanFile && !capturedImage)) ? 0.6 : 1,
-                  width: '100%',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  gap: '10px',
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  color: 'white',
-                  border: 'none',
-                  padding: '16px',
-                  borderRadius: '50px',
-                  fontSize: '1.1rem',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  boxShadow: '0 10px 15px -3px rgba(16, 185, 129, 0.3)'
-                }}
               >
                 {isScanning ? <><Clock size={20} /><span>Grading Your Paper...</span></> : <><CheckCircle size={20} /><span>Submit for Auto-Grading</span></>}
               </button>
