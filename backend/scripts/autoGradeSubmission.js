@@ -314,7 +314,7 @@ async function extractTextFromImage(imagePath, imageBuffer = null) {
     return text;
   } catch (error) {
     if (error && error.code === 'HF_TIMEOUT') {
-      console.warn('[HF Service] Timed out after 10s. Bypassing directly to Gemini/Groq Vision fallback...');
+      console.warn('[HF Service] Timed out after 2s. Bypassing directly to Gemini/Groq Vision fallback...');
       return '';
     }
 
@@ -682,43 +682,74 @@ async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null,
       };
     }
 
-    // 2. OCR each scanned page in sequence, preserving item numbering across pages.
-    const pageBuffers = Array.isArray(imageBuffer)
-      ? imageBuffer
-      : (imageBuffer ? [imageBuffer] : []);
-    const pageTexts = [];
-    if (pageBuffers.length > 0) {
-      for (const pageBuffer of pageBuffers) {
-        pageTexts.push(await extractTextFromImage(null, pageBuffer));
-      }
+    const manualInput = requestBody.answers ?? requestBody.manualAnswers;
+    const isManualSubmission = manualInput !== undefined && manualInput !== null;
+    let ocrText = '';
+    let studentAnswers;
+    let extractedStudentName = '';
+
+    if (isManualSubmission) {
+      const normalizeAnswer = answer => String(answer ?? '')
+        .replace(/^(?:Answer|Ans)\s*:\s*/i, '')
+        .replace(/^Option\s+/i, '')
+        .replace(/^[^a-zA-Z0-9]+/, '')
+        .replace(/[.]+$/, '')
+        .trim()
+        .toUpperCase();
+      const manualAnswerList = Array.isArray(manualInput)
+        ? manualInput
+        : String(manualInput).split(',');
+      studentAnswers = Object.fromEntries(
+        manualAnswerList.map((answer, index) => [index + 1, normalizeAnswer(answer)])
+      );
+      const keys = answerKeys.map(key => ({
+        ...key,
+        answer_text: normalizeAnswer(key.answer_text)
+      }));
+      console.log("GRADED COMPARISON:", manualAnswerList.map((_, index) => ({
+        student: studentAnswers[index + 1],
+        correct: keys[index]?.answer_text,
+        isMatch: studentAnswers[index + 1] === keys[index]?.answer_text
+      })));
     } else {
-      pageTexts.push(await extractTextFromImage(imagePath, imageBuffer));
+      // 2. OCR each scanned page in sequence, preserving item numbering across pages.
+      const pageBuffers = Array.isArray(imageBuffer)
+        ? imageBuffer
+        : (imageBuffer ? [imageBuffer] : []);
+      const pageTexts = [];
+      if (pageBuffers.length > 0) {
+        for (const pageBuffer of pageBuffers) {
+          pageTexts.push(await extractTextFromImage(null, pageBuffer));
+        }
+      } else {
+        pageTexts.push(await extractTextFromImage(imagePath, imageBuffer));
+      }
+      ocrText = pageTexts.filter(Boolean).join('\n');
+
+      // 3. Parse student answers from OCR text.
+      //    Pass the answer-key count so the parser pre-fills missing slots with '?'
+      //    instead of leaving them undefined — ensures every question is graded.
+      // Build correctAnswers map so parseStudentAnswers can do format-aware
+      // garble detection (MC expects "A", TF expects "TRUE"/"FALSE, etc.)
+      const correctAnswers = {};
+      answerKeys.forEach((key, idx) => {
+        correctAnswers[idx + 1] = key.answer_text?.toString().trim();
+      });
+
+      const parsedAnswers = await parseStudentAnswers(
+        ocrText,
+        answerKeys.length,
+        correctAnswers,
+        pageBuffers[0] || imageBuffer,
+        requestBody.studentName
+      );
+      studentAnswers = Object.fromEntries(
+        Object.entries(parsedAnswers.answers).sort(([firstNumber], [secondNumber]) => (
+          Number(firstNumber) - Number(secondNumber)
+        ))
+      );
+      extractedStudentName = parsedAnswers.extractedStudentName;
     }
-    const ocrText = pageTexts.filter(Boolean).join('\n');
-
-    // 3. Parse student answers from OCR text.
-    //    Pass the answer-key count so the parser pre-fills missing slots with '?'
-    //    instead of leaving them undefined — ensures every question is graded.
-    // Build correctAnswers map so parseStudentAnswers can do format-aware
-    // garble detection (MC expects "A", TF expects "TRUE"/"FALSE", etc.)
-    const correctAnswers = {};
-    answerKeys.forEach((key, idx) => {
-      correctAnswers[idx + 1] = key.answer_text?.toString().trim();
-    });
-
-    const parsedAnswers = await parseStudentAnswers(
-      ocrText,
-      answerKeys.length,
-      correctAnswers,
-      pageBuffers[0] || imageBuffer,
-      requestBody.studentName
-    );
-    const studentAnswers = Object.fromEntries(
-      Object.entries(parsedAnswers.answers).sort(([firstNumber], [secondNumber]) => (
-        Number(firstNumber) - Number(secondNumber)
-      ))
-    );
-    const extractedStudentName = parsedAnswers.extractedStudentName;
 
     const userRole = (requestBody.role || requestBody.userRole || '').toLowerCase();
     const isTeacher = userRole === 'teacher' || userRole === 'instructor' || userRole === 'admin';
@@ -740,11 +771,22 @@ async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null,
     for (let i = 0; i < answerKeys.length; i++) {
       const qNum = i + 1;
       const rawCorrectAnswer = answerKeys[i].answer_text?.toString().trim();
-      const correctAnswer = sanitizeAnswerText(rawCorrectAnswer);
-      const studentAnswer = sanitizeAnswerText(studentAnswers[qNum] || '');
+      const normalizeAnswer = answer => sanitizeAnswerText(answer)
+        .replace(/^[^a-zA-Z0-9]+/, '')
+        .replace(/[.]+$/, '')
+        .trim()
+        .toUpperCase();
+      const correctAnswer = isManualSubmission
+        ? normalizeAnswer(rawCorrectAnswer).replace(/^OPTION\s+/, '')
+        : sanitizeAnswerText(rawCorrectAnswer);
+      const studentAnswer = isManualSubmission
+        ? normalizeAnswer(studentAnswers[qNum] || '').replace(/^OPTION\s+/, '')
+        : sanitizeAnswerText(studentAnswers[qNum] || '');
 
       // Use enhanced fuzzy matching with dynamic thresholds
-      const isCorrect = studentAnswer && ScannerLogic.isMatch(studentAnswer, correctAnswer);
+      const isCorrect = isManualSubmission
+        ? studentAnswer && correctAnswer && studentAnswer === correctAnswer
+        : studentAnswer && ScannerLogic.isMatch(studentAnswer, correctAnswer);
 
       if (isCorrect) correctCount++;
 
@@ -755,7 +797,7 @@ async function gradeSubmission(examId, studentId, imagePath, imageBuffer = null,
       );
 
       feedbackLines.push(
-        `Q${qNum}: Student answered "${studentAnswer || '?'}" | Correct: "${correctAnswer}" | Similarity: ${(similarity * 100).toFixed(1)}% | ${isCorrect ? '✅ Correct' : '❌ Wrong'}`
+        `Q${qNum}: Student answered "${studentAnswer || '?'}" | Correct: "${correctAnswer}" | Similarity: ${(similarity * 100).toFixed(1)}% | ${isCorrect ? 'Correct' : 'Wrong'}`
       );
     }
 

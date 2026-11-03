@@ -992,8 +992,9 @@ app.post('/api/upload-paper', authenticateProfileRequest, (req, res, next) => {
 // --- TEACHER: GRADE MANUALLY ---
 app.post('/api/grade-manual', async (req, res) => {
   try {
-    const { studentId, examId, answers } = req.body;
-    if (!studentId || !examId || !answers) {
+    const { studentId, examId, answers, manualAnswers } = req.body;
+    const manualInput = answers ?? manualAnswers;
+    if (!studentId || !examId || manualInput === undefined || manualInput === null || manualInput === '') {
       return res.status(400).json({ error: 'Missing studentId, examId, or answers' });
     }
 
@@ -1011,7 +1012,24 @@ app.post('/api/grade-manual', async (req, res) => {
     }
 
     // 2. Parse manual answers (comma separated)
-    const studentAnswers = answers.split(',').map(ans => ans.trim().toUpperCase());
+    const normalizeAnswer = answer => String(answer ?? '')
+      .replace(/^(?:Answer|Ans)\s*:\s*/i, '')
+      .replace(/^Option\s+/i, '')
+      .replace(/^[^a-zA-Z0-9]+/, '')
+      .replace(/[.]+$/, '')
+      .trim()
+      .toUpperCase();
+    const studentAnswers = (Array.isArray(manualInput) ? manualInput : String(manualInput).split(','))
+      .map(normalizeAnswer);
+    const keys = answerKeys.map(key => ({
+      ...key,
+      answer_text: normalizeAnswer(key.answer_text)
+    }));
+    console.log("GRADED COMPARISON:", studentAnswers.map((student, i) => ({
+      student,
+      correct: keys[i]?.answer_text,
+      isMatch: student === keys[i]?.answer_text
+    })));
 
     let correctCount = 0;
     const feedbackLines = [];
@@ -1019,7 +1037,7 @@ app.post('/api/grade-manual', async (req, res) => {
     // 3. Grade
     for (let i = 0; i < answerKeys.length; i++) {
       const qNum = i + 1;
-      const correctAnswer = answerKeys[i].answer_text?.toString().trim().toUpperCase();
+      const correctAnswer = keys[i].answer_text;
       const studentAnswer = studentAnswers[i] || '';
       
       const isCorrect = studentAnswer && correctAnswer && studentAnswer === correctAnswer;
