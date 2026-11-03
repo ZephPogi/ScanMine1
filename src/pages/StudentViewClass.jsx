@@ -271,53 +271,55 @@ const StudentViewClass = () => {
         <div className="section-grid student-view-grid">
           <aside className="actions-sidebar">
             <div className="action-card student-actions-panel">
-              <h4>Student Actions</h4>
-              <div className="submission-exam-list">
-                {exams.length === 0 ? (
-                  <p className="submission-exam-empty">No exams are assigned to this class yet.</p>
-                ) : exams.map(exam => {
-                  const isOpen = isExamSubmissionOpen(exam, submissionClockNow);
-                  const deadlineTime = exam.submission_deadline
-                    ? new Date(exam.submission_deadline).getTime()
-                    : null;
-                  return (
-                    <div className="student-quiz-card" key={exam.id}>
-                      <div className="student-quiz-info">
-                        <h5 className="quiz-title">{exam.title}</h5>
-                        {isOpen ? (
-                          deadlineTime ? (
-                            <span className="status-badge open">
-                              <span className="status-dot" aria-hidden="true" />
-                              ⏱️ Closes in {formatSubmissionCountdown(deadlineTime - submissionClockNow)}
-                            </span>
+              <div className="student-actions-card">
+                <h4>Student Actions</h4>
+                <div className="submission-exam-list">
+                  {exams.length === 0 ? (
+                    <p className="submission-exam-empty">No exams are assigned to this class yet.</p>
+                  ) : exams.map(exam => {
+                    const isOpen = isExamSubmissionOpen(exam, submissionClockNow);
+                    const deadlineTime = exam.submission_deadline
+                      ? new Date(exam.submission_deadline).getTime()
+                      : null;
+                    return (
+                      <div className="student-quiz-card" key={exam.id}>
+                        <div className="student-quiz-info">
+                          <h5 className="quiz-title">{exam.title}</h5>
+                          {isOpen ? (
+                            deadlineTime ? (
+                              <span className="status-badge open">
+                                <span className="status-dot" aria-hidden="true" />
+                                ⏱️ Closes in {formatSubmissionCountdown(deadlineTime - submissionClockNow)}
+                              </span>
+                            ) : (
+                              <span className="status-badge open">
+                                <span className="status-dot" aria-hidden="true" />
+                                Submissions Open
+                              </span>
+                            )
                           ) : (
-                            <span className="status-badge open">
-                              <span className="status-dot" aria-hidden="true" />
-                              Submissions Open
-                            </span>
-                          )
-                        ) : (
-                          <span className="status-badge closed">Submission Closed</span>
-                        )}
+                            <span className="status-badge closed">Submission Closed</span>
+                          )}
+                        </div>
+                        <div className="student-quiz-actions">
+                          <button
+                            type="button"
+                            className="student-scan-btn"
+                            disabled={!isOpen}
+                            onClick={() => {
+                              setSelectedExamId(String(exam.id));
+                              setScanError('');
+                              setShowScanModal(true);
+                            }}
+                          >
+                            <Camera size={17} />
+                            Scan / Upload Paper
+                          </button>
+                        </div>
                       </div>
-                      <div className="student-quiz-actions">
-                        <button
-                          type="button"
-                          className="student-scan-btn"
-                          disabled={!isOpen}
-                          onClick={() => {
-                            setSelectedExamId(String(exam.id));
-                            setScanError('');
-                            setShowScanModal(true);
-                          }}
-                        >
-                          <Camera size={17} />
-                          Scan / Upload Paper
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="smg-table-card student-assessment-card">
