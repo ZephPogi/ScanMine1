@@ -303,6 +303,7 @@ const StudentViewClass = () => {
                       <div className="student-quiz-actions">
                         <button
                           type="button"
+                          className="student-scan-btn"
                           disabled={!isOpen}
                           onClick={() => {
                             setSelectedExamId(String(exam.id));

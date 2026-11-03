@@ -1695,3 +1695,44 @@ button.scan-option-button:disabled {
         padding-left: 1rem;
     }
 }
+
+.submission-exam-list {
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+}
+
+.student-quiz-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+}
+
+.student-quiz-info .quiz-title {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.student-quiz-info .status-badge {
+    margin-top: 0;
+}
+
+@media (max-width: 640px) {
+    .submission-exam-list {
+        grid-template-columns: 1fr;
+    }
+
+    .student-quiz-card {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .student-quiz-actions,
+    .student-quiz-actions .student-scan-btn {
+        width: 100%;
+    }
+
+    .student-quiz-actions .student-scan-btn {
+        justify-content: center;
+    }
+}
