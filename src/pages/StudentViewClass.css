@@ -1309,11 +1309,26 @@
 }
 
 .section-container.student-view-container {
-    max-width: 1280px;
+    width: 100%;
+    max-width: 100%;
     padding: 2rem clamp(1rem, 4vw, 3rem);
     background-color: #f4f7fc;
     background-image: radial-gradient(#cbd5e1 0.75px, transparent 0.75px);
     background-size: 16px 16px;
+    box-sizing: border-box;
+    overflow-x: hidden;
+}
+
+.student-view-container .student-view-grid,
+.student-view-container .actions-sidebar,
+.student-view-container .student-actions-panel,
+.student-view-container .submission-exam-list,
+.student-view-container .student-quiz-card,
+.student-view-container .student-assessment-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .student-view-container .minimal-header {
@@ -1697,42 +1712,103 @@ button.scan-option-button:disabled {
 }
 
 .submission-exam-list {
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 }
 
 .student-quiz-info {
     display: flex;
+    flex: 1;
     flex-direction: column;
     align-items: flex-start;
     gap: 0.25rem;
+    min-width: 0;
 }
 
 .student-quiz-info .quiz-title {
     max-width: 100%;
-    white-space: normal;
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .student-quiz-info .status-badge {
     margin-top: 0;
 }
 
+@media (min-width: 641px) {
+    .student-quiz-card {
+        flex-direction: row;
+        justify-content: space-between;
+    }
+}
+
 @media (max-width: 640px) {
+    .section-container.student-view-container {
+        width: 100%;
+        max-width: 100%;
+        margin: 0 auto;
+        padding: 1rem 0.75rem;
+        overflow-x: hidden;
+    }
+
+    .student-view-container .student-actions-panel,
+    .student-view-container .student-quiz-card,
+    .student-view-container .student-assessment-card {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    .student-view-container .student-actions-panel {
+        padding: 1rem;
+    }
+
     .submission-exam-list {
+        width: 100%;
         grid-template-columns: 1fr;
+        gap: 0.875rem;
     }
 
     .student-quiz-card {
+        display: flex;
         align-items: stretch;
         flex-direction: column;
+        gap: 0.75rem;
+        padding: 1rem;
+        border-radius: 0.75rem;
+    }
+
+    .student-quiz-info {
+        width: 100%;
+        align-items: flex-start;
+        gap: 0.35rem;
+    }
+
+    .student-quiz-info .status-badge {
+        max-width: 100%;
+        white-space: normal;
     }
 
     .student-quiz-actions,
     .student-quiz-actions .student-scan-btn {
         width: 100%;
+        box-sizing: border-box;
     }
 
     .student-quiz-actions .student-scan-btn {
+        display: flex;
+        align-items: center;
         justify-content: center;
+        padding: 0.7rem;
+        border-radius: 0.625rem;
+        font-size: 0.85rem;
+        white-space: normal;
+    }
+
+    .student-assessment-card .table-responsive-wrapper {
+        max-width: 100%;
+        overflow-x: auto;
     }
 }
