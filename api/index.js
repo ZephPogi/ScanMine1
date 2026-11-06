@@ -912,21 +912,9 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
     let documentText = '';
     if (isPdf) {
       try {
-        const pdfParse = require('pdf-parse');
-        if (typeof pdfParse === 'function' && typeof pdfParse.PDFParse !== 'function') {
-          const parsedPdf = await pdfParse(file.buffer);
-          documentText = parsedPdf?.text?.trim() || '';
-        } else {
-          const PDFParse = pdfParse.PDFParse || pdfParse.default?.PDFParse;
-          if (typeof PDFParse !== 'function') throw new Error('pdf-parse does not expose a supported parser.');
-          const parser = new PDFParse({ data: file.buffer });
-          try {
-            const parsedPdf = await parser.getText();
-            documentText = parsedPdf?.text?.trim() || '';
-          } finally {
-            await parser.destroy();
-          }
-        }
+        const pdfParse = require('pdf-parse/lib/pdf-parse.js');
+        const parsedPdf = await pdfParse(file.buffer);
+        documentText = typeof parsedPdf?.text === 'string' ? parsedPdf.text.trim() : '';
       } catch (error) {
         console.error('PDF text extraction Error:', error.message);
       }
@@ -977,7 +965,7 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
+          model: 'llama3-8b-8192',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userContent }
@@ -1003,7 +991,7 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
     const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (geminiApiKey) {
       try {
-        const model = 'gemini-1.5-flash';
+        const model = 'gemini-2.0-flash';
         const geminiResponse = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiApiKey)}`,
           {

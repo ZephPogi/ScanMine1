@@ -23,7 +23,7 @@
     "multer": "^2.1.1",
     "nodemailer": "^8.0.7",
     "opencv-wasm": "^4.3.0-10",
-    "pdf-parse": "^2.4.5",
+    "pdf-parse": "1.1.1",
     "pg": "^8.20.0",
     "tesseract.js": "^7.0.0"
   }
