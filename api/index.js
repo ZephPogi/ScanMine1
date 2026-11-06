@@ -18,6 +18,7 @@ const { createCanvas, loadImage } = require('@napi-rs/canvas');
 
 const { extractText, generateQuizFromText } = require('../backend/scripts/generateQuestions');
 const { gradeSubmission } = require('../backend/scripts/autoGradeSubmission');
+const OCRRouter = require('../backend/scripts/ocrRouter');
 const OCRSpaceService = require('../backend/scripts/ocrSpaceService');
 const { parseFullQuestions } = require('../backend/scripts/ocrAnswerParser');
 const { supabase, uploadFile, deleteFile } = require('../backend/supabaseClient');
@@ -907,20 +908,66 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
     if (!isPdf && !isImage) {
       return res.status(400).json({ error: 'Upload a PDF or image file' });
     }
-    const systemPrompt = [
-      'Extract the quiz questions and their explicitly provided correct answers from the supplied document.',
-      'Do not invent questions, answers, or infer an answer when the document does not provide one.',
-      'Return a JSON object with a "questions" array. Each item must have integer "id", integer "questionNumber", string "questionText", and string "correctAnswer" fields.',
-      'Preserve the wording and numbering from the document when possible. Return {"questions": []} if no question-answer pairs can be read.'
-    ].join(' ');
+    const systemPrompt = 'Extract multiple choice, true/false, or identification questions and their answers from this quiz text into JSON format: [{"questionNumber": 1, "questionText": "...", "correctAnswer": "..."}]';
+    let documentText = '';
+    if (isPdf) {
+      try {
+        const pdfModule = require('pdf-parse');
+        if (typeof pdfModule === 'function' && typeof pdfModule.PDFParse !== 'function') {
+          const parsedPdf = await pdfModule(file.buffer);
+          documentText = parsedPdf?.text?.trim() || '';
+        } else {
+          const PDFParse = pdfModule.PDFParse || pdfModule.default?.PDFParse;
+          if (typeof PDFParse !== 'function') throw new Error('pdf-parse does not expose a supported parser.');
+          const parser = new PDFParse({ data: file.buffer });
+          try {
+            const parsedPdf = await parser.getText();
+            documentText = parsedPdf?.text?.trim() || '';
+          } finally {
+            await parser.destroy();
+          }
+        }
+      } catch (error) {
+        console.error('PDF text extraction Error:', error.message);
+      }
+    }
+
+    if (!documentText) {
+      try {
+        documentText = (await new OCRRouter().processAnswerKey(file.buffer, file.mimetype, file.buffer)).trim();
+      } catch (error) {
+        console.error('Quiz OCR Error:', error.message);
+      }
+    }
+    const promptText = `${systemPrompt}\nDo not invent questions or answers. Include only items with a readable question and correct answer.\n\nQuiz text:\n${documentText.slice(0, 24000)}`;
+    const normalizeParsedItems = (parsed) => {
+      const parsedItems = Array.isArray(parsed) ? parsed : (parsed?.items || parsed?.questions);
+      if (!Array.isArray(parsedItems)) throw new Error('AI response did not contain an items array.');
+
+      return parsedItems
+        .filter(item => typeof item?.questionText === 'string'
+          && item.questionText.trim()
+          && typeof item?.correctAnswer === 'string'
+          && item.correctAnswer.trim())
+        .map((item, index) => ({
+          id: Number.isInteger(item.id) ? item.id : index + 1,
+          questionNumber: Number.isInteger(item.questionNumber) ? item.questionNumber : index + 1,
+          questionText: item.questionText.trim(),
+          correctAnswer: item.correctAnswer.trim()
+        }));
+    };
+    const parseJsonContent = (content) => {
+      if (typeof content !== 'string' || !content.trim()) {
+        throw new Error('AI returned an empty response.');
+      }
+      const jsonText = content.trim().replace(/^```(?:json)?\s*|\s*```$/gi, '');
+      return normalizeParsedItems(JSON.parse(jsonText));
+    };
     try {
       if (!process.env.GROQ_API_KEY) throw new Error('GROQ_API_KEY is not configured.');
-
-      const documentText = (await extractText(file.buffer, file.mimetype)).trim();
-      if (!documentText) throw new Error('No readable text was extracted from the quiz file.');
       const userContent = [{
         type: 'text',
-        text: `Extract the quiz question and answer pairs from this document text:\n\n${documentText.slice(0, 24000)}`
+        text: promptText
       }];
 
       const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -930,59 +977,121 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: process.env.GROQ_QUIZ_PARSE_MODEL || 'llama-3.3-70b-versatile',
+          model: 'llama-3.3-70b-versatile',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userContent }
           ],
           temperature: 0.1,
-          max_tokens: 8000,
-          response_format: { type: 'json_object' }
+          max_tokens: 8000
         })
       });
 
       if (!groqResponse.ok) {
         const errorPayload = await groqResponse.text();
-        console.error(`Groq quiz parsing failed (${groqResponse.status}):`, errorPayload);
-        return res.status(200).json({
-          success: false,
-          items: [],
-          message: 'Groq parsing unavailable, please add items manually'
-        });
+        throw new Error(`Groq HTTP ${groqResponse.status}: ${errorPayload}`);
       }
 
       const groqResult = await groqResponse.json();
-      const content = groqResult.choices?.[0]?.message?.content;
-      if (typeof content !== 'string') {
-        throw new Error(`Groq returned no JSON content. Payload: ${JSON.stringify(groqResult)}`);
-      }
+      const questions = parseJsonContent(groqResult.choices?.[0]?.message?.content);
 
-      const parsedResult = JSON.parse(content);
-      if (!parsedResult || !Array.isArray(parsedResult.questions)) {
-        throw new Error(`Groq response did not contain a questions array. Payload: ${content}`);
-      }
-
-      const questions = parsedResult.questions
-        .filter(question => typeof question?.questionText === 'string'
-          && question.questionText.trim()
-          && typeof question?.correctAnswer === 'string'
-          && question.correctAnswer.trim())
-        .map((question, index) => ({
-          id: Number.isInteger(question.id) ? question.id : index + 1,
-          questionNumber: Number.isInteger(question.questionNumber) ? question.questionNumber : index + 1,
-          questionText: question.questionText.trim(),
-          correctAnswer: question.correctAnswer.trim()
-        }));
-
-      res.json({ success: true, items: questions, questions });
+      return res.json({ success: true, items: questions, questions, provider: 'groq' });
     } catch (groqError) {
-      console.error('Groq quiz parsing error:', groqError);
-      res.status(200).json({
-        success: false,
-        items: [],
-        message: 'Groq parsing unavailable, please add items manually'
-      });
+      console.error('Groq Error:', groqError.message);
     }
+
+    const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    if (geminiApiKey) {
+      try {
+        const model = 'gemini-2.5-flash';
+        const geminiResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiApiKey)}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              contents: [{ role: 'user', parts: [{ text: promptText }] }],
+              generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+            })
+          }
+        );
+        if (!geminiResponse.ok) {
+          const errorPayload = await geminiResponse.text();
+          throw new Error(`Gemini HTTP ${geminiResponse.status}: ${errorPayload}`);
+        }
+
+        const result = await geminiResponse.json();
+        const content = result.candidates?.[0]?.content?.parts
+          ?.map(part => part.text || '')
+          .join('');
+        const items = parseJsonContent(content);
+        return res.json({ success: true, items, questions: items, provider: 'gemini' });
+      } catch (geminiError) {
+        console.error('Gemini Error:', geminiError.message);
+      }
+    } else {
+      console.error('Gemini Error:', 'GEMINI_API_KEY and GOOGLE_API_KEY are not configured.');
+    }
+
+    const questions = new Map();
+    let currentQuestion = null;
+    let inAnswerKey = false;
+    for (const rawLine of documentText.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      if (/^--\s*\d+\s+of\s+\d+\s+--$/i.test(line)) continue;
+
+      if (/^(?:answer\s*key|answer\s*sheet|key)\s*:?\s*$/i.test(line)) {
+        inAnswerKey = true;
+        currentQuestion = null;
+        continue;
+      }
+
+      const numberedAnswer = line.match(/^(?:Q\s*)?(\d+)\s*[.):]\s*([A-D])(?:\s*[.)])?$/i);
+      if (numberedAnswer && (inAnswerKey || questions.has(Number(numberedAnswer[1])))) {
+        const item = questions.get(Number(numberedAnswer[1]));
+        if (item) item.correctAnswer = numberedAnswer[2].toUpperCase();
+        continue;
+      }
+
+      const explicitAnswer = line.match(/^(?:Answer|Key|Ans|Correct\s+Answer)\s*[:.)-]\s*(.+)$/i);
+      if (explicitAnswer && currentQuestion) {
+        currentQuestion.correctAnswer = explicitAnswer[1].trim();
+        continue;
+      }
+
+      const letterAnswer = line.match(/^([A-D])(?:[.)])?$/i);
+      if (letterAnswer && currentQuestion) {
+        currentQuestion.correctAnswer = letterAnswer[1].toUpperCase();
+        continue;
+      }
+
+      const questionMatch = line.match(/^(?:Question\s+)?(?:Q\s*)?(\d+)\s*[.):]\s*(.+)$/i);
+      if (questionMatch) {
+        const questionNumber = Number(questionMatch[1]);
+        const questionText = questionMatch[2].trim();
+        if (!questionText || /^(?:Answer|Key|Ans)\s*[:.)-]/i.test(questionText)) continue;
+
+        currentQuestion = {
+          id: questionNumber,
+          questionNumber,
+          questionText,
+          correctAnswer: ''
+        };
+        questions.set(questionNumber, currentQuestion);
+        continue;
+      }
+
+      if (currentQuestion && !/^[A-D]\s*[.)]\s*/i.test(line)) {
+        currentQuestion.questionText = `${currentQuestion.questionText} ${line}`.trim();
+      }
+    }
+
+    const items = [...questions.values()]
+      .filter(item => item.correctAnswer)
+      .map(item => ({ ...item, questionText: item.questionText.trim(), correctAnswer: item.correctAnswer.trim() }));
+    return res.json({ success: true, items, questions: items, provider: 'local-regex' });
   } catch (error) {
     console.error('QUIZ FILE PARSING ERROR:', error);
     res.status(500).json({ error: error.message || 'Failed to parse quiz file' });

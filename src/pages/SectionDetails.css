@@ -3643,3 +3643,102 @@
         flex-wrap: wrap;
     }
 }
+
+.modal-overlay .modal-content.details-modal.exam-details-modal {
+    display: flex !important;
+    flex-direction: column !important;
+    max-height: 85vh !important;
+    max-height: calc(100vh - 4rem) !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+.modal-overlay .details-modal .exam-details-header {
+    flex: 0 0 auto;
+}
+
+.modal-overlay .details-modal .exam-details-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding-bottom: 2.5rem !important;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.modal-overlay .details-modal .exam-details-grid > * {
+    margin-bottom: 1.5rem;
+}
+
+.modal-overlay .details-modal .exam-details-left {
+    height: auto;
+    min-height: 0;
+    grid-template-rows: auto;
+    align-content: start;
+}
+
+.modal-overlay .details-modal .exam-details-left > .exam-detail-card {
+    display: block;
+    min-height: 0;
+}
+
+.modal-overlay .details-modal .exam-detail-card .questions-list {
+    flex: initial;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+}
+
+.modal-overlay .details-modal .exam-progress-card {
+    min-height: 0;
+}
+
+.modal-overlay .details-modal .exam-progress-section {
+    margin-bottom: 1.5rem;
+}
+
+.modal-overlay .details-modal .exam-progress-list {
+    max-height: none;
+    overflow: visible;
+}
+
+@media (max-width: 768px) {
+    .modal-overlay .modal-content.details-modal.exam-details-modal {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    .modal-overlay .details-modal .exam-details-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .modal-overlay .details-modal .exam-details-actions .exam-action-button {
+        width: 100%;
+        min-width: 0;
+        white-space: normal;
+    }
+
+    .modal-overlay .details-modal .exam-details-actions .exam-icon-action {
+        width: 100%;
+        min-height: 44px;
+    }
+
+    .modal-overlay .details-modal .exam-details-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1rem;
+        padding: 1rem;
+        padding-bottom: 2.5rem !important;
+    }
+
+    .modal-overlay .details-modal .exam-details-left,
+    .modal-overlay .details-modal .exam-progress-card {
+        grid-column: 1;
+    }
+
+    .modal-overlay .details-modal .exam-detail-card {
+        padding: 14px;
+    }
+}
