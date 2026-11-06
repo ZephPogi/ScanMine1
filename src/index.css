@@ -63,3 +63,100 @@ code {
     font-size: 1.25rem !important;
   }
 }
+
+/* Keep mobile navigation below modal overlays and preserve page scroll clearance. */
+.mobile-bottom-nav,
+.bottom-nav,
+.student-bottom-nav,
+.sidebar-mobile {
+  z-index: 1000 !important;
+}
+
+.modal-overlay,
+.scan-modal-overlay,
+.modal-backdrop,
+.ai-quiz-modal-overlay {
+  z-index: 2000 !important;
+}
+
+.modal-content,
+.details-modal,
+.generate-quiz-modal,
+.attach-quiz-modal,
+.scan-modal-content,
+.ai-quiz-modal,
+.modal-content.quiz-modal,
+.modal-content.quiz-gen-modal,
+.modal-overlay .modal-content,
+.scan-modal-overlay .scan-modal-content,
+.ai-quiz-modal-overlay .ai-quiz-modal {
+  z-index: 2001 !important;
+  max-height: calc(100vh - 3.5rem) !important;
+  overflow-y: auto !important;
+}
+
+@media (max-width: 1023px) {
+  .main-content,
+  .section-container,
+  .teacher-class-container,
+  .student-view-container,
+  .dashboard-content,
+  .page-layout {
+    padding-bottom: 7rem !important;
+    overflow-x: hidden !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .modal-overlay,
+  .scan-modal-overlay,
+  .modal-backdrop,
+  .ai-quiz-modal-overlay {
+    align-items: flex-start !important;
+    padding: 0.5rem !important;
+    overflow-y: auto !important;
+  }
+
+  .modal-content,
+  .details-modal,
+  .generate-quiz-modal,
+  .attach-quiz-modal,
+  .scan-modal-content,
+  .ai-quiz-modal,
+  .modal-content.quiz-modal,
+  .modal-content.quiz-gen-modal {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    padding: 0.75rem !important;
+  }
+
+  .modal-content.attach-modal {
+    padding: 0 !important;
+  }
+
+  .modal-header-bar,
+  .attach-modal-header,
+  .attach-modal-body,
+  .attach-modal-footer,
+  .ai-quiz-modal-header,
+  .ai-quiz-modal-body,
+  .ai-quiz-modal-footer,
+  .scan-modal-header,
+  .scan-modal-footer,
+  .student-scan-modal .student-scan-footer {
+    padding: 0.75rem !important;
+  }
+
+  .modal-footer,
+  .attach-modal-footer,
+  .ai-quiz-modal-footer,
+  .scan-modal-footer,
+  .student-scan-modal .student-scan-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    flex-shrink: 0;
+    background: #ffffff;
+  }
+}
