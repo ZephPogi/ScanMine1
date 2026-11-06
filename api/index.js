@@ -897,6 +897,93 @@ app.post('/api/upload-answer-key-file', upload.single('file'), async (req, res) 
   }
 });
 
+app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: 'No quiz file uploaded' });
+
+    const isPdf = file.mimetype === 'application/pdf';
+    const isImage = file.mimetype.startsWith('image/');
+    if (!isPdf && !isImage) {
+      return res.status(400).json({ error: 'Upload a PDF or image file' });
+    }
+    if (!process.env.GROQ_API_KEY) {
+      return res.status(503).json({ error: 'Groq AI is not configured. You can enter the answer key manually.' });
+    }
+
+    const systemPrompt = [
+      'Extract the quiz questions and their explicitly provided correct answers from the supplied document.',
+      'Do not invent questions, answers, or infer an answer when the document does not provide one.',
+      'Return a JSON object with a "questions" array. Each item must have integer "id", integer "questionNumber", string "questionText", and string "correctAnswer" fields.',
+      'Preserve the wording and numbering from the document when possible. Return {"questions": []} if no question-answer pairs can be read.'
+    ].join(' ');
+    const userContent = isPdf
+      ? [{
+        type: 'text',
+        text: `Extract the quiz question and answer pairs from this document text:\n\n${(await extractText(file.buffer, file.mimetype)).slice(0, 24000)}`
+      }]
+      : [
+        { type: 'text', text: 'Read this quiz image and extract its question and correct-answer pairs.' },
+        {
+          type: 'image_url',
+          image_url: { url: `data:${file.mimetype};base64,${file.buffer.toString('base64')}` }
+        }
+      ];
+
+    const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: process.env.GROQ_QUIZ_PARSE_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent }
+        ],
+        temperature: 0.1,
+        max_tokens: 8000,
+        response_format: { type: 'json_object' }
+      })
+    });
+
+    if (!groqResponse.ok) {
+      const errorText = await groqResponse.text();
+      console.error(`Groq quiz parsing failed (${groqResponse.status}):`, errorText);
+      return res.status(502).json({ error: `Groq AI could not parse this file (HTTP ${groqResponse.status}).` });
+    }
+
+    const groqResult = await groqResponse.json();
+    const content = groqResult.choices?.[0]?.message?.content;
+    if (typeof content !== 'string') {
+      throw new Error('Groq returned no JSON content for quiz parsing.');
+    }
+
+    const parsedResult = JSON.parse(content);
+    if (!parsedResult || !Array.isArray(parsedResult.questions)) {
+      throw new Error('Groq response did not contain a questions array.');
+    }
+
+    const questions = parsedResult.questions
+      .filter(question => typeof question?.questionText === 'string'
+        && question.questionText.trim()
+        && typeof question?.correctAnswer === 'string'
+        && question.correctAnswer.trim())
+      .map((question, index) => ({
+        id: Number.isInteger(question.id) ? question.id : index + 1,
+        questionNumber: Number.isInteger(question.questionNumber) ? question.questionNumber : index + 1,
+        questionText: question.questionText.trim(),
+        correctAnswer: question.correctAnswer.trim()
+      }));
+
+    res.json({ questions });
+  } catch (error) {
+    console.error('QUIZ FILE PARSING ERROR:', error);
+    res.status(500).json({ error: error.message || 'Failed to parse quiz file' });
+  }
+});
+
 // --- STUDENT: UPLOAD PAPER ---
 app.post('/api/upload-paper', authenticateProfileRequest, (req, res, next) => {
   upload.fields([

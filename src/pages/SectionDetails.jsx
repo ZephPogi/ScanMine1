@@ -133,9 +133,9 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   const [examQuestions, setExamQuestions] = useState({ manual: [], generated: [] });
   const [examFile, setExamFile] = useState(null);
   const [manualAnswers, setManualAnswers] = useState('');
-  const [parsedAttachQuestions, setParsedAttachQuestions] = useState([]);
-  const [attachEditingQuestionIndex, setAttachEditingQuestionIndex] = useState(null);
-  const [attachQuestionDraft, setAttachQuestionDraft] = useState(null);
+  const [parsedQuestions, setParsedQuestions] = useState([]);
+  const [isParsingQuiz, setIsParsingQuiz] = useState(false);
+  const [quizParseError, setQuizParseError] = useState('');
   const [isEditingExamKey, setIsEditingExamKey] = useState(false);
   const [examKeyDraft, setExamKeyDraft] = useState([]);
   const [isSavingExamKey, setIsSavingExamKey] = useState(false);
@@ -193,6 +193,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   const searchTimeoutRef = useRef(null);
 
   const examInputRef = useRef(null);
+  const parseRequestIdRef = useRef(0);
   const quizFileRef = useRef(null);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -476,30 +477,49 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
     );
   };
 
-  const handleExamFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) setExamFile(e.target.files[0]);
-  };
+  const handleExamFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-  const startEditingAttachQuestion = (index, question) => {
-    setAttachEditingQuestionIndex(index);
-    setAttachQuestionDraft({
-      ...question,
-      options: question.type === 'multiple_choice'
-        ? Array.from({ length: 4 }, (_, optionIndex) => question.options?.[optionIndex] || '')
-        : []
-    });
-  };
+    setExamFile(file);
+    setManualAnswers('');
+    setParsedQuestions([]);
+    setQuizParseError('');
+    setIsParsingQuiz(true);
+    const requestId = ++parseRequestIdRef.current;
+    const formData = new FormData();
+    formData.append('file', file);
 
-  const finishEditingAttachQuestion = (saveChanges) => {
-    if (saveChanges && attachQuestionDraft && attachEditingQuestionIndex !== null) {
-      setParsedAttachQuestions(previous => previous.map((question, index) => (
-        index === attachEditingQuestionIndex
-          ? { ...question, ...attachQuestionDraft }
-          : question
-      )));
+    try {
+      const response = await fetch('/api/quizzes/parse-pdf', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to parse quiz file.');
+      if (requestId !== parseRequestIdRef.current) return;
+
+      const questions = Array.isArray(data.questions) ? data.questions : [];
+      setParsedQuestions(questions.map((question, index) => ({
+        ...question,
+        id: question.id ?? index + 1,
+        questionNumber: question.questionNumber ?? index + 1,
+        questionText: question.questionText || '',
+        correctAnswer: question.correctAnswer || '',
+        type: 'identification',
+        options: []
+      })));
+      if (questions.length === 0) {
+        setQuizParseError('No question and answer pairs were found. You can enter the answer key manually below.');
+      }
+    } catch (error) {
+      if (requestId === parseRequestIdRef.current) {
+        setQuizParseError(error.message || 'Failed to parse quiz file. You can enter the answer key manually below.');
+      }
+    } finally {
+      if (requestId === parseRequestIdRef.current) setIsParsingQuiz(false);
+      event.target.value = '';
     }
-    setAttachEditingQuestionIndex(null);
-    setAttachQuestionDraft(null);
   };
 
   const startEditingExamKey = () => {
@@ -551,11 +571,11 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
       showAlert('Quiz title required', 'Please enter a quiz title.', 'warning');
       return;
     }
-    if (attachEditingQuestionIndex !== null) {
-      showAlert('Finish editing', 'Finish editing the current answer key item before saving.', 'warning');
+    if (isParsingQuiz) {
+      showAlert('Please wait', 'Wait for quiz file parsing to finish before saving.', 'warning');
       return;
     }
-    if (parsedAttachQuestions.some(question => !question.questionText.trim() || !question.correctAnswer.trim())) {
+    if (parsedQuestions.some(question => !question.questionText.trim() || !question.correctAnswer.trim())) {
       showAlert('Incomplete answer key', 'Each parsed answer needs question text and a correct answer.', 'warning');
       return;
     }
@@ -580,14 +600,16 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
         throw new Error(examData?.error || 'Failed to save quiz');
       }
 
-      if (parsedAttachQuestions.length > 0) {
+      if (parsedQuestions.length > 0) {
         if (!examData?.examId) throw new Error('The quiz was created without an ID, so its answer key could not be linked.');
+        const answerKey = parsedQuestions.map(question => question.correctAnswer.trim()).join(', ');
         const answerKeyResponse = await fetch('/api/upload-answer-key', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             examId: examData.examId,
-            answers: parsedAttachQuestions.map(question => ({
+            answerKey,
+            answers: parsedQuestions.map(question => ({
               ...question,
               correctAnswer: question.correctAnswer.trim(),
               questionText: question.questionText.trim()
@@ -611,12 +633,13 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
 
   const closeModal = () => {
     if (isSaving) return;
+    parseRequestIdRef.current += 1;
     setShowAttachModal(false);
     setExamFile(null);
     setManualAnswers('');
-    setParsedAttachQuestions([]);
-    setAttachEditingQuestionIndex(null);
-    setAttachQuestionDraft(null);
+    setParsedQuestions([]);
+    setIsParsingQuiz(false);
+    setQuizParseError('');
   };
 
   const handleQuizFileChange = (e) => {
@@ -1350,11 +1373,11 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                   }}
                 >
                   <span className="attach-file-name">{examFile?.name || 'Drop your quiz file here'}</span>
-                  <span className="attach-file-hint">PDF, Word document, or image</span>
+                  <span className="attach-file-hint">PDF or image</span>
                   <input
                     type="file"
                     ref={examInputRef}
-                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    accept=".pdf,.jpg,.jpeg,.png"
                     style={{ display: 'none' }}
                     onClick={event => event.stopPropagation()}
                     onChange={handleExamFileChange}
@@ -1368,6 +1391,69 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                     }}
                   >
                     Browse
+                  </button>
+                </div>
+                {isParsingQuiz && (
+                  <p className="attach-parse-status" role="status">Parsing document with Groq AI...</p>
+                )}
+                {quizParseError && (
+                  <p className="attach-parse-error" role="alert">{quizParseError}</p>
+                )}
+                <div className="attach-extracted-questions">
+                  <h4>Questions &amp; Answers ({parsedQuestions.length})</h4>
+                  {parsedQuestions.map((question, index) => (
+                    <article className="attach-question-row" key={`${question.id}-${index}`}>
+                      <div className="attach-question-row-header">
+                        <span>Question {index + 1}</span>
+                        <button
+                          type="button"
+                          className="attach-question-delete"
+                          aria-label={`Delete question ${index + 1}`}
+                          title="Delete question"
+                          onClick={() => setParsedQuestions(previous => previous.filter((_, itemIndex) => itemIndex !== index))}
+                          disabled={isSaving || isParsingQuiz}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <label className="attach-question-field">
+                        Question text
+                        <textarea
+                          value={question.questionText}
+                          rows={3}
+                          onChange={event => setParsedQuestions(previous => previous.map((item, itemIndex) => (
+                            itemIndex === index ? { ...item, questionText: event.target.value } : item
+                          )))}
+                          disabled={isSaving || isParsingQuiz}
+                        />
+                      </label>
+                      <label className="attach-question-field">
+                        Correct answer
+                        <input
+                          type="text"
+                          value={question.correctAnswer}
+                          onChange={event => setParsedQuestions(previous => previous.map((item, itemIndex) => (
+                            itemIndex === index ? { ...item, correctAnswer: event.target.value } : item
+                          )))}
+                          disabled={isSaving || isParsingQuiz}
+                        />
+                      </label>
+                    </article>
+                  ))}
+                  <button
+                    type="button"
+                    className="attach-add-question"
+                    onClick={() => setParsedQuestions(previous => [...previous, {
+                      id: Date.now(),
+                      questionNumber: previous.length + 1,
+                      questionText: '',
+                      correctAnswer: '',
+                      type: 'identification',
+                      options: []
+                    }])}
+                    disabled={isSaving || isParsingQuiz}
+                  >
+                    + Add Item
                   </button>
                 </div>
               </section>
@@ -1385,136 +1471,21 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                   aria-label="Raw answer key"
                   placeholder="e.g. 1. A, 2. B, 3. C or A, B, C, True, Newton"
                   value={manualAnswers}
+                  disabled={isParsingQuiz}
                   onChange={(event) => {
                     setManualAnswers(event.target.value);
-                    setParsedAttachQuestions(parseAttachAnswers(event.target.value));
-                    setAttachEditingQuestionIndex(null);
-                    setAttachQuestionDraft(null);
+                    setParsedQuestions(parseAttachAnswers(event.target.value));
+                    setQuizParseError('');
                   }}
                 />
               </section>
-
-              {parsedAttachQuestions.length > 0 && (
-                <section className="ai-quiz-preview attach-answer-preview">
-                  <h4 className="quiz-preview-title">Parsed Answer Key &amp; Questions Preview ({parsedAttachQuestions.length})</h4>
-                  <div className="quiz-preview-list">
-                    {parsedAttachQuestions.map((question, index) => (
-                      <article
-                        key={`attach-question-${index}`}
-                        className={`quiz-preview-item${attachEditingQuestionIndex === index ? ' is-editing' : ''}`}
-                      >
-                        <div className="quiz-preview-card-header">
-                          <span className="quiz-preview-type">
-                            {question.type === 'multiple_choice'
-                              ? 'MULTIPLE CHOICE'
-                              : question.type === 'true_false'
-                                ? 'TRUE / FALSE'
-                                : 'IDENTIFICATION'}
-                          </span>
-                          {attachEditingQuestionIndex === index ? (
-                            <div className="quiz-preview-edit-actions">
-                              <button type="button" className="quiz-preview-edit-btn quiz-preview-done-btn" onClick={() => finishEditingAttachQuestion(true)}>
-                                <Check size={15} /> Done
-                              </button>
-                              <button type="button" className="quiz-preview-edit-btn quiz-preview-cancel-btn" onClick={() => finishEditingAttachQuestion(false)}>
-                                <X size={15} /> Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              className="quiz-preview-edit-btn"
-                              onClick={() => startEditingAttachQuestion(index, question)}
-                              disabled={isSaving}
-                            >
-                              <Pencil size={15} /> Edit
-                            </button>
-                          )}
-                        </div>
-                        {attachEditingQuestionIndex === index && attachQuestionDraft ? (
-                          <div className="quiz-preview-editor">
-                            <label className="quiz-preview-edit-label">
-                              Question Text
-                              <textarea
-                                className="quiz-preview-edit-input quiz-preview-question-input"
-                                value={attachQuestionDraft.questionText}
-                                onChange={event => setAttachQuestionDraft(previous => ({ ...previous, questionText: event.target.value }))}
-                                rows={3}
-                              />
-                            </label>
-                            {question.type === 'multiple_choice' && ['A', 'B', 'C', 'D'].map((letter, optionIndex) => (
-                              <label className="quiz-preview-edit-label" key={letter}>
-                                Option {letter}
-                                <input
-                                  className="quiz-preview-edit-input"
-                                  value={attachQuestionDraft.options[optionIndex]}
-                                  onChange={event => setAttachQuestionDraft(previous => ({
-                                    ...previous,
-                                    options: previous.options.map((option, currentIndex) => (
-                                      currentIndex === optionIndex ? event.target.value : option
-                                    ))
-                                  }))}
-                                />
-                              </label>
-                            ))}
-                            <label className="quiz-preview-edit-label">
-                              Correct Answer
-                              {question.type === 'multiple_choice' ? (
-                                <select
-                                  className="quiz-preview-edit-input"
-                                  value={attachQuestionDraft.correctAnswer}
-                                  onChange={event => setAttachQuestionDraft(previous => ({ ...previous, correctAnswer: event.target.value }))}
-                                >
-                                  {['A', 'B', 'C', 'D'].map(letter => <option key={letter} value={letter}>{letter}</option>)}
-                                </select>
-                              ) : question.type === 'true_false' ? (
-                                <select
-                                  className="quiz-preview-edit-input"
-                                  value={attachQuestionDraft.correctAnswer}
-                                  onChange={event => setAttachQuestionDraft(previous => ({ ...previous, correctAnswer: event.target.value }))}
-                                >
-                                  <option value="True">True</option>
-                                  <option value="False">False</option>
-                                </select>
-                              ) : (
-                                <input
-                                  className="quiz-preview-edit-input"
-                                  value={attachQuestionDraft.correctAnswer}
-                                  onChange={event => setAttachQuestionDraft(previous => ({ ...previous, correctAnswer: event.target.value }))}
-                                />
-                              )}
-                            </label>
-                          </div>
-                        ) : (
-                          <>
-                            <p className="quiz-preview-q">{index + 1}. {question.questionText}</p>
-                            <p className="quiz-preview-ans">✓ Correct answer: {question.correctAnswer}</p>
-                            {question.type === 'multiple_choice' && (
-                              <div className="quiz-preview-opts">
-                                {['A', 'B', 'C', 'D'].map((letter, optionIndex) => (
-                                  <span
-                                    key={letter}
-                                    className={`quiz-opt-chip${question.correctAnswer.toUpperCase() === letter ? ' quiz-opt-correct' : ''}`}
-                                  >
-                                    {letter}{question.options?.[optionIndex] ? `. ${question.options[optionIndex]}` : ''}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              )}
             </div>
 
             <div className="modal-footer attach-modal-footer">
               <button
                 className="save-assign-btn"
                 onClick={handleSaveAndAssign}
-                disabled={isSaving || attachEditingQuestionIndex !== null}
+                disabled={isSaving || isParsingQuiz}
               >
                 {isSaving ? 'Saving...' : 'Save & Link Key'}
               </button>

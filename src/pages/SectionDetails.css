@@ -2629,6 +2629,113 @@
     font-size: 0.78rem;
 }
 
+.attach-parse-status,
+.attach-parse-error {
+    margin: 12px 0 0;
+    font-size: 0.86rem;
+}
+
+.attach-parse-status {
+    color: #475569;
+    font-weight: 600;
+}
+
+.attach-parse-error {
+    color: #b91c1c;
+}
+
+.attach-extracted-questions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.attach-extracted-questions h4 {
+    margin: 0;
+    color: #334155;
+    font-size: 0.95rem;
+}
+
+.attach-question-row {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #ffffff;
+}
+
+.attach-question-row-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #334155;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.attach-question-delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.attach-question-delete:hover:not(:disabled) {
+    background: #fef2f2;
+}
+
+.attach-question-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #475569;
+    font-size: 0.8rem;
+    font-weight: 650;
+}
+
+.attach-question-field input,
+.attach-question-field textarea {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 10px 12px;
+    color: #1e293b;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    font: inherit;
+    font-weight: 400;
+}
+
+.attach-question-field textarea {
+    min-height: 76px;
+    resize: vertical;
+}
+
+.attach-add-question {
+    min-height: 44px;
+    align-self: flex-start;
+    padding: 0 14px;
+    color: #047857;
+    border: 1px solid #a7f3d0;
+    border-radius: 8px;
+    background: #ecfdf5;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.attach-add-question:hover:not(:disabled) {
+    background: #d1fae5;
+}
+
 .attach-answer-input {
     min-height: 105px;
     resize: vertical;
@@ -2863,7 +2970,8 @@
     display: grid;
     flex: 1 1 auto;
     min-height: 0;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    max-height: 85vh;
+    grid-template-columns: minmax(0, 1fr);
     align-content: start;
     align-items: start;
     gap: 1.5rem;
