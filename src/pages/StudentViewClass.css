@@ -1951,3 +1951,128 @@ button.scan-option-button:disabled {
         max-height: 400px;
     }
 }
+
+@media (min-width: 1024px) {
+    .section-container.student-view-container {
+        box-sizing: border-box;
+        width: calc(100% - 260px);
+        max-width: 1400px;
+        min-width: 0;
+        margin-left: 260px;
+        margin-right: 0;
+        overflow-x: hidden;
+    }
+
+    .student-view-container .submission-exam-list {
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.25rem;
+    }
+}
+
+@media (min-width: 1660px) {
+    .section-container.student-view-container {
+        margin-left: calc(260px + (100vw - 1660px) / 2);
+        margin-right: auto;
+    }
+}
+
+@media (max-width: 1023px) {
+    .section-container.student-view-container {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        height: auto;
+        margin-left: 0;
+        padding: 1rem 1rem 6rem;
+        overflow-x: hidden;
+    }
+
+    .student-view-container .student-view-grid {
+        grid-template-columns: minmax(0, 1fr);
+        min-width: 0;
+    }
+
+    .student-view-container .submission-exam-list {
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1rem;
+    }
+}
+
+.student-assessment-card .table-responsive-wrapper {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.student-assessment-table {
+    min-width: 520px;
+}
+
+.student-assessment-name,
+.student-assessment-date,
+.quiz-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
+}
+
+.student-assessment-name {
+    max-width: 18rem;
+}
+
+.student-scan-modal .modal-header-bar {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    background: #ffffff;
+}
+
+.student-scan-modal .modal-close-btn,
+.student-scan-modal button,
+.student-retake-button {
+    min-height: 44px;
+}
+
+.student-scan-modal .modal-close-btn {
+    min-width: 44px;
+}
+
+@media (max-width: 640px) {
+    .section-container.student-view-container {
+        padding: 1rem 0.75rem 6rem;
+    }
+
+    .student-view-container .submission-exam-list {
+        grid-template-columns: 1fr;
+        gap: 0.875rem;
+    }
+
+    .student-quiz-card {
+        align-items: stretch;
+        flex-direction: column;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .student-quiz-actions,
+    .student-quiz-actions .student-scan-btn,
+    .student-scan-btn {
+        width: 100%;
+        min-height: 44px;
+        box-sizing: border-box;
+    }
+
+    .student-scan-modal {
+        width: 90vw;
+        max-width: 850px;
+        padding: 1rem;
+    }
+
+    .student-scan-options,
+    .student-camera-actions {
+        flex-wrap: wrap;
+    }
+}

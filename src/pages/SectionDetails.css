@@ -3264,3 +3264,256 @@
         max-height: 42vh;
     }
 }
+
+@media (min-width: 1024px) {
+    .section-container:not(.student-view-container) {
+        box-sizing: border-box;
+        width: calc(100% - 260px);
+        max-width: 1400px;
+        min-width: 0;
+        margin-left: 260px;
+        margin-right: 0;
+        overflow-x: hidden;
+    }
+}
+
+@media (min-width: 1660px) {
+    .section-container:not(.student-view-container) {
+        margin-left: calc(260px + (100vw - 1660px) / 2);
+        margin-right: auto;
+    }
+}
+
+@media (max-width: 1023px) {
+    .section-container:not(.student-view-container) {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        height: auto;
+        margin-left: 0;
+        padding: 1rem 1rem 6rem;
+        overflow: visible;
+    }
+
+    .section-container:not(.student-view-container) .section-grid {
+        grid-template-columns: minmax(0, 1fr);
+        min-height: auto;
+        overflow: visible;
+        padding-right: 0;
+    }
+
+    .section-container:not(.student-view-container) .roster-section,
+    .section-container:not(.student-view-container) .actions-sidebar {
+        min-width: 0;
+        width: 100%;
+        box-sizing: border-box;
+    }
+}
+
+.table-responsive-wrapper {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.exam-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.25rem;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+}
+
+.exam-card {
+    min-width: 0;
+    flex-wrap: wrap;
+    margin-bottom: 0;
+}
+
+.exam-info {
+    min-width: 0;
+    flex: 1;
+}
+
+.roster-table,
+.student-assessment-table {
+    min-width: 560px;
+}
+
+.student-name,
+.search-result-name,
+.search-result-email,
+.roster-table td:nth-child(2),
+.exam-progress-name,
+.exam-details-heading h2,
+.exam-card-heading h3 {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
+}
+
+.search-result-info {
+    min-width: 0;
+    flex: 1;
+}
+
+.exam-score-selection-bar,
+.exam-score-toolbar {
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.exam-score-select-all,
+.exam-score-row-checkbox {
+    min-height: 44px;
+    padding: 0.25rem 0.5rem;
+}
+
+.exam-score-select-all input,
+.exam-score-row-checkbox input {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+}
+
+.exam-score-tool-button,
+.exam-row-action,
+.exam-action-button,
+.scan-upload-outline-button,
+.search-clear-btn,
+.invite-btn,
+.add-btn,
+.back-btn,
+.custom-dialog-confirm,
+.custom-dialog-cancel {
+    min-height: 44px;
+}
+
+.exam-row-action {
+    width: 44px;
+}
+
+.exam-score-edit-input,
+.invite-search-input,
+.attach-modal input,
+.attach-modal select,
+.attach-modal textarea {
+    min-height: 44px;
+}
+
+.invite-search-input {
+    box-sizing: border-box;
+}
+
+.modal-overlay,
+.submission-preview-overlay {
+    box-sizing: border-box;
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.modal-overlay .modal-content {
+    box-sizing: border-box;
+    width: min(90vw, 850px) !important;
+    max-width: 850px !important;
+    max-height: 85vh !important;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-radius: 1rem;
+}
+
+.modal-overlay .modal-content:not(.attach-modal) {
+    padding: 1.5rem !important;
+}
+
+.modal-overlay .modal-content.attach-modal {
+    padding: 0 !important;
+}
+
+.attach-modal-header,
+.exam-details-header,
+.modal-header-bar {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: #ffffff;
+}
+
+.modal-close-btn {
+    min-width: 44px;
+    min-height: 44px;
+    flex: 0 0 auto;
+}
+
+.submission-preview-modal {
+    box-sizing: border-box;
+    width: min(90vw, 850px);
+    max-width: 850px;
+    max-height: 85vh;
+    overflow-y: auto;
+    border-radius: 1rem;
+}
+
+@media (max-width: 640px) {
+    .section-container:not(.student-view-container) {
+        padding: 1rem 0.75rem 6rem;
+    }
+
+    .section-container:not(.student-view-container) .minimal-header {
+        margin-bottom: 1rem;
+    }
+
+    .section-container:not(.student-view-container) .roster-section,
+    .section-container:not(.student-view-container) .action-card {
+        padding: 1rem;
+    }
+
+    .card-header,
+    .attach-modal-header,
+    .exam-details-heading,
+    .exam-details-actions,
+    .exam-key-heading {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .attach-modal-header {
+        gap: 0.75rem;
+    }
+
+    .exam-score-selection-bar,
+    .exam-score-toolbar {
+        width: 100%;
+    }
+
+    .exam-score-tool-button {
+        flex: 1 1 auto;
+    }
+
+    .exam-list {
+        grid-template-columns: 1fr;
+        gap: 0.875rem;
+    }
+
+    .exam-card {
+        align-items: flex-start;
+    }
+
+    .modal-overlay .modal-content:not(.attach-modal) {
+        padding: 1rem !important;
+    }
+
+    .attach-modal-header,
+    .attach-modal-body,
+    .attach-modal-footer {
+        padding: 1rem;
+    }
+
+    .submission-preview-header-actions {
+        flex-wrap: wrap;
+    }
+}

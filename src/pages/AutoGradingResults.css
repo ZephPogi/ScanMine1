@@ -781,6 +781,150 @@
     }
   }
 
+}
+
+@media (min-width: 1024px) {
+  .grading-container {
+    box-sizing: border-box;
+    width: calc(100% - 260px);
+    max-width: 1400px;
+    min-width: 0;
+    margin-left: 260px;
+    margin-right: 0;
+    overflow-x: hidden;
+  }
+}
+
+@media (min-width: 1660px) {
+  .grading-container {
+    margin-left: calc(260px + (100vw - 1660px) / 2);
+    margin-right: auto;
+  }
+}
+
+@media (max-width: 1023px) {
+  .grading-container {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    margin-left: 0;
+    padding: 1rem 1rem 6rem;
+    overflow-x: hidden;
+  }
+
+  .stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .results-section {
+    min-width: 0;
+  }
+}
+
+.results-section .table-responsive-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.results-table {
+  min-width: 600px;
+}
+
+.student-name-cell,
+.results-table td:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+}
+
+.scan-modal-overlay {
+  box-sizing: border-box;
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+.scan-modal-content {
+  box-sizing: border-box;
+  width: 90vw;
+  max-width: 850px;
+  max-height: 85vh !important;
+  padding: 1.5rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-radius: 1rem;
+}
+
+.scan-title-banner {
+  position: sticky;
+  top: -1.5rem;
+  padding-right: 3.75rem;
+}
+
+.scan-close-btn,
+.grading-edit-btn,
+.view-feedback-btn,
+.delete-sub-btn,
+.scan-browse-btn,
+.scan-record-btn,
+.mode-btn {
+  min-height: 44px;
+}
+
+.scan-close-btn {
+  min-width: 44px;
+}
+
+.scan-search-input {
+  min-height: 44px;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .grading-header,
+  .grading-footer,
+  .filter-section,
+  .action-buttons {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .stats-row {
+    grid-template-columns: 1fr;
+  }
+
+  .scan-modal-overlay {
+    align-items: flex-start;
+    padding: 0.5rem;
+  }
+
+  .scan-modal-content {
+    width: 90vw;
+    max-width: 850px;
+    padding: 1rem;
+  }
+
+  .scan-title-banner {
+    top: -1rem;
+    padding-right: 3.5rem;
+  }
+
+  .scan-search-row,
+  .mode-toggle {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scan-browse-btn,
+  .scan-record-btn,
+  .scan-btn,
+  .export-btn,
+  .filter-tab {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
   .grading-footer {
     flex-direction: column;
     align-items: flex-start;

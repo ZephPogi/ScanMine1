@@ -75,3 +75,69 @@
 @media (max-width: 768px) { .student-main { margin-left: 0;
     width: 100%;
     box-sizing: border-box; padding: 20px; padding-bottom: 90px; } .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; } }
+
+@media (min-width: 1024px) {
+  .student-main {
+    box-sizing: border-box;
+    width: calc(100% - 260px);
+    max-width: 1400px;
+    min-width: 0;
+    margin-left: 260px;
+    margin-right: 0;
+    overflow-x: hidden;
+  }
+}
+
+@media (min-width: 1660px) {
+  .student-main {
+    margin-left: calc(260px + (100vw - 1660px) / 2);
+    margin-right: auto;
+  }
+}
+
+@media (max-width: 1023px) {
+  .student-main {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    margin-left: 0;
+    padding: 1rem 1rem 6rem;
+    overflow-x: hidden;
+  }
+
+  .sue-header,
+  .sue-exam-card,
+  .sue-exam-title-row,
+  .sue-exam-actions {
+    flex-wrap: wrap;
+  }
+
+  .sue-exam-card,
+  .sue-exam-left {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .sue-exam-card {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .sue-exam-actions {
+    flex-direction: column;
+  }
+
+  .sue-btn,
+  .sue-filter-tab {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .sue-exam-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
+  }
+}
