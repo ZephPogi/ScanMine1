@@ -495,11 +495,22 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
         method: 'POST',
         body: formData
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to parse quiz file.');
+      let data = {};
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        if (response.ok) throw new Error('The parser returned an unreadable response.');
+      }
       if (requestId !== parseRequestIdRef.current) return;
 
-      const questions = Array.isArray(data.questions) ? data.questions : [];
+      if (!response.ok) {
+        const detail = data.error || data.message || 'Failed to parse quiz file.';
+        throw new Error(`Quiz parsing failed (HTTP ${response.status}): ${detail}`);
+      }
+
+      const questions = Array.isArray(data.items)
+        ? data.items
+        : (Array.isArray(data.questions) ? data.questions : []);
       setParsedQuestions(questions.map((question, index) => ({
         ...question,
         id: question.id ?? index + 1,
@@ -509,8 +520,8 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
         type: 'identification',
         options: []
       })));
-      if (questions.length === 0) {
-        setQuizParseError('No question and answer pairs were found. You can enter the answer key manually below.');
+      if (data.success === false || questions.length === 0) {
+        setQuizParseError(data.message || 'No question and answer pairs were found. You can enter the answer key manually below.');
       }
     } catch (error) {
       if (requestId === parseRequestIdRef.current) {
