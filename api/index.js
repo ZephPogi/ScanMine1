@@ -908,16 +908,158 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
     if (!isPdf && !isImage) {
       return res.status(400).json({ error: 'Upload a PDF or image file' });
     }
-    const systemPrompt = 'Extract multiple choice, true/false, or identification questions and their answers from this quiz text into JSON format: [{"questionNumber": 1, "questionText": "...", "correctAnswer": "..."}]';
+    const parseLocalQuestions = (text) => {
+      const sourceLines = String(text || '').split(/\r?\n/);
+      const questions = new Map();
+      const answersByNumber = new Map();
+      let currentQuestion = null;
+      let inAnswerKey = false;
+      let officialKeyStart = -1;
+      let lastQuestionLine = -1;
+      let manualKey = '';
+
+      for (let lineIndex = 0; lineIndex < sourceLines.length; lineIndex += 1) {
+        const line = sourceLines[lineIndex].trim();
+        if (!line || /^--\s*\d+\s+of\s+\d+\s+--$/i.test(line)) continue;
+
+        const manualKeyMatch = line.match(/Manual String Key:\s*([A-Za-z0-9,\s]+)/i);
+        if (manualKeyMatch) {
+          manualKey = manualKeyMatch[1];
+          if (!manualKey.trim() && sourceLines[lineIndex + 1]) {
+            manualKey = sourceLines[lineIndex + 1].trim();
+          }
+          currentQuestion = null;
+          continue;
+        }
+
+        const inlineAnswerKey = line.match(/^(?:answer\s*key|answer\s*sheet)\s*:\s*(.+)$/i);
+        if (inlineAnswerKey) {
+          inAnswerKey = true;
+          currentQuestion = null;
+          const numberedKeys = [...inlineAnswerKey[1].matchAll(/(?:Q\s*)?(\d+)\s*[.):]\s*([A-Za-z0-9]+)/gi)];
+          if (numberedKeys.length) {
+            numberedKeys.forEach(([, number, answer]) => answersByNumber.set(Number(number), answer));
+          } else {
+            manualKey = inlineAnswerKey[1];
+          }
+          continue;
+        }
+
+        if (/OFFICIAL ANSWER KEY REFERENCE/i.test(line)) {
+          officialKeyStart = lineIndex;
+          inAnswerKey = true;
+          currentQuestion = null;
+          continue;
+        }
+
+        if (/^(?:answer\s*key|answer\s*sheet|key)\s*:?\s*$/i.test(line)) {
+          inAnswerKey = true;
+          currentQuestion = null;
+          continue;
+        }
+
+        const indexedAnswer = line.match(/^(?:Q\s*)?(\d+)\s*[.):]\s*(?:Answer|Key|Ans|Correct\s+Answer)\s*[:.)-]\s*(.+)$/i);
+        if (indexedAnswer) {
+          answersByNumber.set(Number(indexedAnswer[1]), indexedAnswer[2].trim());
+          continue;
+        }
+
+        const numberedAnswer = line.match(/^(?:Q\s*)?(\d+)\s*[.):]\s*([A-D]|True|False)(?:\s*[.)])?$/i);
+        if (numberedAnswer && (inAnswerKey || questions.has(Number(numberedAnswer[1])))) {
+          const answer = numberedAnswer[2];
+          answersByNumber.set(
+            Number(numberedAnswer[1]),
+            /^(?:true|false)$/i.test(answer)
+              ? answer[0].toUpperCase() + answer.slice(1).toLowerCase()
+              : answer.toUpperCase()
+          );
+          continue;
+        }
+
+        const explicitAnswer = line.match(/^(?:Answer|Key|Ans|Correct\s+Answer)\s*[:.)-]\s*(.+)$/i);
+        if (explicitAnswer && currentQuestion) {
+          currentQuestion.correctAnswer = explicitAnswer[1].trim();
+          continue;
+        }
+
+        const questionMatch = line.match(/^(?:Question\s+)?(?:Q\s*)?(\d+)\s*[.):]\s*(.+)$/i);
+        if (questionMatch && !inAnswerKey) {
+          const questionNumber = Number(questionMatch[1]);
+          const inlineAnswer = questionMatch[2].match(/^(.*?)\s+(?:Ans|Answer)\s*[:.)-]\s*(.+)$/i);
+          currentQuestion = {
+            id: questionNumber,
+            questionNumber,
+            questionText: (inlineAnswer ? inlineAnswer[1] : questionMatch[2]).trim(),
+            correctAnswer: inlineAnswer ? inlineAnswer[2].trim() : ''
+          };
+          questions.set(questionNumber, currentQuestion);
+          lastQuestionLine = lineIndex;
+          continue;
+        }
+
+        if (currentQuestion && !/^[A-D]\s*[.)]\s*/i.test(line)) {
+          currentQuestion.questionText = `${currentQuestion.questionText} ${line}`.trim();
+        }
+      }
+
+      const questionNumbers = [...questions.keys()].sort((a, b) => a - b);
+      const answerSequences = [];
+      if (manualKey) answerSequences.push(manualKey);
+      if (officialKeyStart >= 0) {
+        const officialText = sourceLines.slice(officialKeyStart).join('\n');
+        const officialSequence = officialText.match(/\b(?:[A-D]|TRUE|FALSE)(?:\s*,\s*(?:[A-D]|TRUE|FALSE)){1,}\b/i);
+        if (officialSequence) answerSequences.push(officialSequence[0]);
+      }
+      if (!answerSequences.length) {
+        const genericKey = sourceLines
+          .slice(lastQuestionLine + 1)
+          .reverse()
+          .map(line => line.match(/\b(?:[A-D]|TRUE|FALSE)(?:\s*,\s*(?:[A-D]|TRUE|FALSE)){1,}\b/i)?.[0])
+          .find(Boolean);
+        if (genericKey) answerSequences.push(genericKey);
+      }
+
+      if (answerSequences.length) {
+        const answerTokens = answerSequences[0].match(/[A-Za-z0-9]+/g) || [];
+        questionNumbers.forEach((questionNumber, index) => {
+          if (!answersByNumber.has(questionNumber) && answerTokens[index]) {
+            answersByNumber.set(questionNumber, answerTokens[index]);
+          }
+        });
+      }
+
+      return questionNumbers
+        .map(questionNumber => {
+          const question = questions.get(questionNumber);
+          question.correctAnswer = question.correctAnswer || answersByNumber.get(questionNumber) || '';
+          return question;
+        })
+        .filter(question => question.questionText && question.correctAnswer)
+        .map(question => ({
+          ...question,
+          questionText: question.questionText.trim(),
+          correctAnswer: question.correctAnswer.trim()
+        }));
+    };
     let documentText = '';
     if (isPdf) {
       try {
         const pdfParse = require('pdf-parse/lib/pdf-parse.js');
         const parsedPdf = await pdfParse(file.buffer);
-        documentText = typeof parsedPdf?.text === 'string' ? parsedPdf.text : '';
+        documentText = typeof parsedPdf?.text === 'string' ? parsedPdf.text.trim() : '';
       } catch (error) {
         console.error('PDF text extraction Error:', error.message);
       }
+    }
+
+    let extractedQuestions = parseLocalQuestions(documentText);
+    if (extractedQuestions.length) {
+      return res.json({
+        success: true,
+        items: extractedQuestions,
+        questions: extractedQuestions,
+        provider: 'local-fastpath'
+      });
     }
 
     if (!documentText) {
@@ -926,6 +1068,15 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
       } catch (error) {
         console.error('Quiz OCR Error:', error.message);
       }
+    }
+    extractedQuestions = parseLocalQuestions(documentText);
+    if (extractedQuestions.length) {
+      return res.json({
+        success: true,
+        items: extractedQuestions,
+        questions: extractedQuestions,
+        provider: 'local-fastpath'
+      });
     }
     const normalizeParsedItems = (parsed) => {
       const parsedItems = Array.isArray(parsed) ? parsed : (parsed?.items || parsed?.questions);
@@ -951,37 +1102,51 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
       return normalizeParsedItems(JSON.parse(jsonText));
     };
     const aiSystemPrompt = 'You are a quiz parsing system. Output ONLY a valid JSON array of objects with keys: questionNumber (number), questionText (string), correctAnswer (string). No markdown formatting or extra commentary.';
+    const groqModels = [
+      process.env.GROQ_QUIZ_PARSE_MODEL,
+      'llama-3.3-70b-versatile',
+      'llama3-70b-8192',
+      'llama-3.1-8b-instant'
+    ].filter(Boolean);
     try {
       if (!process.env.GROQ_API_KEY) throw new Error('GROQ_API_KEY is not configured.');
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
       try {
-        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-          body: JSON.stringify({
-            model: 'llama-3.1-8b-instant',
-            messages: [
-              { role: 'system', content: aiSystemPrompt },
-              { role: 'user', content: `Extract questions and answers from this text:\n${documentText}` }
-            ],
-            response_format: { type: 'json_object' }
-          }),
-          signal: controller.signal
-        });
+        for (const model of groqModels) {
+          try {
+            const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                model,
+                messages: [
+                  { role: 'system', content: aiSystemPrompt },
+                  { role: 'user', content: `Extract questions and answers from this text:\n${documentText}` }
+                ],
+                response_format: { type: 'json_object' }
+              }),
+              signal: controller.signal
+            });
 
-        if (!groqResponse.ok) {
-          const errorPayload = await groqResponse.text();
-          throw new Error(`Groq HTTP ${groqResponse.status}: ${errorPayload}`);
+            if (!groqResponse.ok) {
+              const errorPayload = await groqResponse.text();
+              console.error(`Groq HTTP ${groqResponse.status} for ${model}: ${errorPayload}`);
+              continue;
+            }
+
+            const groqResult = await groqResponse.json();
+            const questions = parseJsonContent(groqResult.choices?.[0]?.message?.content);
+
+            return res.json({ success: true, items: questions, questions, provider: 'groq' });
+          } catch (groqError) {
+            console.error(`Groq Error for ${model}:`, groqError.message);
+            if (controller.signal.aborted) break;
+          }
         }
-
-        const groqResult = await groqResponse.json();
-        const questions = parseJsonContent(groqResult.choices?.[0]?.message?.content);
-
-        return res.json({ success: true, items: questions, questions, provider: 'groq' });
       } finally {
         clearTimeout(timeoutId);
       }
@@ -991,38 +1156,51 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
 
     const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (geminiApiKey) {
+      const geminiModels = [
+        process.env.GEMINI_QUIZ_PARSE_MODEL,
+        'gemini-1.5-flash-latest',
+        'gemini-1.5-flash',
+        'gemini-2.5-flash',
+        'gemini-3.5-flash-lite'
+      ].filter(Boolean);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
       try {
-        const geminiResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(geminiApiKey)}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{
-                parts: [{
-                  text: `Extract quiz questions and correct answers into JSON format: [{"questionNumber": 1, "questionText": "...", "correctAnswer": "..."}]. Text:\n${documentText}`
-                }]
-              }],
-              generationConfig: { responseMimeType: 'application/json' }
-            }),
-            signal: controller.signal
-          }
-        );
-        if (!geminiResponse.ok) {
-          const errorPayload = await geminiResponse.text();
-          throw new Error(`Gemini HTTP ${geminiResponse.status}: ${errorPayload}`);
-        }
+        for (const model of geminiModels) {
+          try {
+            const geminiResponse = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiApiKey)}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [{
+                    parts: [{
+                      text: `Extract quiz questions and correct answers into JSON format: [{"questionNumber": 1, "questionText": "...", "correctAnswer": "..."}]. Text:\n${documentText}`
+                    }]
+                  }],
+                  generationConfig: { responseMimeType: 'application/json' }
+                }),
+                signal: controller.signal
+              }
+            );
+            if (!geminiResponse.ok) {
+              const errorPayload = await geminiResponse.text();
+              console.error(`Gemini HTTP ${geminiResponse.status} for ${model}: ${errorPayload}`);
+              continue;
+            }
 
-        const result = await geminiResponse.json();
-        const content = result.candidates?.[0]?.content?.parts
-          ?.map(part => part.text || '')
-          .join('');
-        const items = parseJsonContent(content);
-        return res.json({ success: true, items, questions: items, provider: 'gemini' });
-      } catch (geminiError) {
-        console.error('Gemini Error:', geminiError.message);
+            const result = await geminiResponse.json();
+            const content = result.candidates?.[0]?.content?.parts
+              ?.map(part => part.text || '')
+              .join('');
+            const items = parseJsonContent(content);
+            return res.json({ success: true, items, questions: items, provider: 'gemini' });
+          } catch (geminiError) {
+            console.error(`Gemini Error for ${model}:`, geminiError.message);
+            if (controller.signal.aborted) break;
+          }
+        }
       } finally {
         clearTimeout(timeoutId);
       }
@@ -1030,64 +1208,12 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
       console.error('Gemini Error:', 'GEMINI_API_KEY and GOOGLE_API_KEY are not configured.');
     }
 
-    const questions = new Map();
-    let currentQuestion = null;
-    let inAnswerKey = false;
-    for (const rawLine of documentText.split(/\r?\n/)) {
-      const line = rawLine.trim();
-      if (!line) continue;
-      if (/^--\s*\d+\s+of\s+\d+\s+--$/i.test(line)) continue;
-
-      if (/^(?:answer\s*key|answer\s*sheet|key)\s*:?\s*$/i.test(line)) {
-        inAnswerKey = true;
-        currentQuestion = null;
-        continue;
-      }
-
-      const numberedAnswer = line.match(/^(?:Q\s*)?(\d+)\s*[.):]\s*([A-D])(?:\s*[.)])?$/i);
-      if (numberedAnswer && (inAnswerKey || questions.has(Number(numberedAnswer[1])))) {
-        const item = questions.get(Number(numberedAnswer[1]));
-        if (item) item.correctAnswer = numberedAnswer[2].toUpperCase();
-        continue;
-      }
-
-      const explicitAnswer = line.match(/^(?:Answer|Key|Ans|Correct\s+Answer)\s*[:.)-]\s*(.+)$/i);
-      if (explicitAnswer && currentQuestion) {
-        currentQuestion.correctAnswer = explicitAnswer[1].trim();
-        continue;
-      }
-
-      const letterAnswer = line.match(/^([A-D])(?:[.)])?$/i);
-      if (letterAnswer && currentQuestion) {
-        currentQuestion.correctAnswer = letterAnswer[1].toUpperCase();
-        continue;
-      }
-
-      const questionMatch = line.match(/^(?:Question\s+)?(?:Q\s*)?(\d+)\s*[.):]\s*(.+)$/i);
-      if (questionMatch) {
-        const questionNumber = Number(questionMatch[1]);
-        const questionText = questionMatch[2].trim();
-        if (!questionText || /^(?:Answer|Key|Ans)\s*[:.)-]/i.test(questionText)) continue;
-
-        currentQuestion = {
-          id: questionNumber,
-          questionNumber,
-          questionText,
-          correctAnswer: ''
-        };
-        questions.set(questionNumber, currentQuestion);
-        continue;
-      }
-
-      if (currentQuestion && !/^[A-D]\s*[.)]\s*/i.test(line)) {
-        currentQuestion.questionText = `${currentQuestion.questionText} ${line}`.trim();
-      }
-    }
-
-    const items = [...questions.values()]
-      .filter(item => item.correctAnswer)
-      .map(item => ({ ...item, questionText: item.questionText.trim(), correctAnswer: item.correctAnswer.trim() }));
-    return res.json({ success: true, items, questions: items, provider: 'local-regex' });
+    extractedQuestions = parseLocalQuestions(documentText);
+    return res.json({
+      success: true,
+      items: extractedQuestions || [],
+      provider: 'fallback'
+    });
   } catch (error) {
     console.error('QUIZ FILE PARSING ERROR:', error);
     res.status(500).json({ error: error.message || 'Failed to parse quiz file' });
