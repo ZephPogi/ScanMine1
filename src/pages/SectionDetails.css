@@ -3322,9 +3322,23 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 1.25rem;
-    max-height: none;
-    overflow: visible;
-    padding-right: 0;
+    max-height: 380px;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+    -webkit-overflow-scrolling: touch;
+}
+
+.exam-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.exam-list::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.exam-list::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .exam-card {
@@ -3497,6 +3511,10 @@
     .exam-list {
         grid-template-columns: 1fr;
         gap: 0.875rem;
+        max-height: 320px;
+        overflow-y: auto;
+        padding-right: 0.5rem;
+        -webkit-overflow-scrolling: touch;
     }
 
     .exam-card {

@@ -1854,11 +1854,12 @@ button.scan-option-button:disabled {
 .student-view-container .submission-exam-list {
     grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
     gap: 1rem;
-    max-height: 440px;
+    max-height: 380px;
     margin-top: 1rem;
     padding-right: 0.5rem;
     overflow-y: auto;
     scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
 }
 
 .student-view-container .submission-exam-list::-webkit-scrollbar {
@@ -1866,13 +1867,12 @@ button.scan-option-button:disabled {
 }
 
 .student-view-container .submission-exam-list::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 999px;
+    background: transparent;
 }
 
 .student-view-container .submission-exam-list::-webkit-scrollbar-thumb {
     background: #cbd5e1;
-    border-radius: 999px;
+    border-radius: 4px;
 }
 
 .student-view-container .submission-exam-list::-webkit-scrollbar-thumb:hover {
@@ -2048,6 +2048,10 @@ button.scan-option-button:disabled {
     .student-view-container .submission-exam-list {
         grid-template-columns: 1fr;
         gap: 0.875rem;
+        max-height: 320px;
+        overflow-y: auto;
+        padding-right: 0.5rem;
+        -webkit-overflow-scrolling: touch;
     }
 
     .student-quiz-card {
