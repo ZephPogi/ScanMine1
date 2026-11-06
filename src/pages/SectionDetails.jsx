@@ -128,6 +128,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   });
   const [students, setStudents] = useState([]);
   const [exams, setExams] = useState([]);
+  const [selectedQuizIds, setSelectedQuizIds] = useState([]);
   const [showAttachModal, setShowAttachModal] = useState(false);
   const [showExamDetails, setShowExamDetails] = useState(null);
   const [examQuestions, setExamQuestions] = useState({ manual: [], generated: [] });
@@ -246,11 +247,17 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
       const response = await fetch(`/api/exams?classId=${section?.id}`);
       if (response.ok) {
         const data = await response.json();
-        setExams(Array.isArray(data) ? data : []);
+        const fetchedExams = Array.isArray(data) ? data : [];
+        setExams(fetchedExams);
+        setSelectedQuizIds(previous => previous.filter(id => fetchedExams.some(exam => String(exam.id) === String(id))));
       }
     } catch (error) {
       console.error('Error fetching exams:', error);
     }
+  }, [section?.id]);
+
+  useEffect(() => {
+    setSelectedQuizIds([]);
   }, [section?.id]);
 
   useEffect(() => {
@@ -394,27 +401,46 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
     }
   };
 
-  const handleDeleteExam = async (e, examId) => {
-    e.stopPropagation();
-    showConfirm(
-      'Delete quiz?',
-      'Are you sure you want to delete this quiz? All student results for this quiz will also be deleted.',
-      async () => {
-        try {
-          const response = await fetch(`/api/exams/${examId}`, { method: 'DELETE' });
-          if (response.ok) {
-            fetchExams();
-            if (showExamDetails?.id === examId) setShowExamDetails(null);
-          } else {
-            const data = await response.json();
-            showAlert('Delete failed', data.error || 'Failed to delete quiz.', 'error');
-          }
-        } catch (error) {
-          console.error('Error deleting exam:', error);
-          showAlert('Delete failed', error.message || 'Failed to delete quiz.', 'error');
-        }
+  const handleDeleteSingleQuiz = async (quizId) => {
+    if (!window.confirm('Are you sure you want to delete this quiz? All student results for this quiz will also be deleted.')) return;
+    try {
+      const response = await fetch(`/api/quizzes/${quizId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete quiz.');
       }
-    );
+
+      setSelectedQuizIds(previous => previous.filter(id => String(id) !== String(quizId)));
+      if (String(showExamDetails?.id) === String(quizId)) setShowExamDetails(null);
+      await fetchExams();
+    } catch (error) {
+      console.error('Error deleting quiz:', error);
+      showAlert('Delete failed', error.message || 'Failed to delete quiz.', 'error');
+    }
+  };
+
+  const handleDeleteSelectedQuizzes = async () => {
+    const quizIds = selectedQuizIds;
+    if (!quizIds.length) return;
+    const quizLabel = quizIds.length === 1 ? 'quiz' : 'quizzes';
+    if (!window.confirm(`Are you sure you want to delete ${quizIds.length} selected ${quizLabel}? All related questions, answer keys, and student results will also be deleted.`)) return;
+
+    try {
+      const response = await fetch('/api/quizzes/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quizIds })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to delete selected quizzes.');
+
+      setSelectedQuizIds([]);
+      if (quizIds.some(id => String(id) === String(showExamDetails?.id))) setShowExamDetails(null);
+      await fetchExams();
+    } catch (error) {
+      console.error('Error deleting selected quizzes:', error);
+      showAlert('Bulk delete failed', error.message || 'Failed to delete selected quizzes.', 'error');
+    }
   };
 
   const handleSearchStudents = useCallback(async (query) => {
@@ -1292,7 +1318,37 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
             </div>
 
             <div className="action-card">
-              <h4>Quizzes In Class</h4>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '12px' }}>
+                <h4 style={{ margin: 0 }}>Quizzes In Class</h4>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                    <input
+                      type="checkbox"
+                      aria-label="Select all quizzes"
+                      checked={exams.filter(Boolean).length > 0
+                        && exams.filter(Boolean).every(exam => selectedQuizIds.some(id => String(id) === String(exam.id)))}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        const visibleExams = exams.filter(Boolean);
+                        const isChecked = e.target.checked;
+                        setSelectedQuizIds(isChecked ? visibleExams.map(exam => exam.id) : []);
+                      }}
+                    />
+                    Select All
+                  </label>
+                  {selectedQuizIds.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn-action"
+                      style={{ backgroundColor: '#dc2626', color: '#fff', borderColor: '#dc2626', margin: 0 }}
+                      onClick={handleDeleteSelectedQuizzes}
+                    >
+                      Delete Selected ({selectedQuizIds.length})
+                    </button>
+                  )}
+                </div>
+              </div>
               <div className="exam-list">
                 {exams && exams.length > 0 ? (
                   exams.map((exam, idx) => exam ? (
@@ -1304,6 +1360,21 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                         handleViewExam(exam);
                       }}
                     >
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${exam.title || 'Untitled Quiz'}`}
+                        checked={selectedQuizIds.some(id => String(id) === String(exam.id))}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          const isChecked = e.target.checked;
+                          setSelectedQuizIds(previous => (
+                            isChecked
+                              ? [...previous.filter(id => String(id) !== String(exam.id)), exam.id]
+                              : previous.filter(id => String(id) !== String(exam.id))
+                          ));
+                        }}
+                      />
                       <div className="exam-icon">📄</div>
                       <div className="exam-info">
                         <h4>{exam.title || 'Untitled Quiz'}</h4>
@@ -1311,8 +1382,9 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                       </div>
                       <button
                         className="delete-exam-btn"
-                        onClick={(e) => handleDeleteExam(e, exam.id)}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteSingleQuiz(exam.id); }}
                         title="Delete Quiz"
+                        aria-label={`Delete ${exam.title || 'Untitled Quiz'}`}
                       >
                         <Trash2 size={16} />
                       </button>

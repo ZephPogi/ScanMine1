@@ -1679,30 +1679,67 @@ app.post('/api/upload-answer-key', async (req, res) => {
   }
 });
 
-app.delete('/api/exams/:id', async (req, res) => {
+const deleteQuizRecords = async (quizIds) => {
+  await db.query('DELETE FROM answer_keys WHERE exam_id = ANY($1::int[])', [quizIds]);
+  await db.query('DELETE FROM generated_questions WHERE exam_id = ANY($1::int[])', [quizIds]);
+  await db.query('DELETE FROM student_submissions WHERE exam_id = ANY($1::int[])', [quizIds]);
+  return db.query('DELETE FROM Exams WHERE id = ANY($1::int[]) RETURNING id', [quizIds]);
+};
+
+app.delete('/api/quizzes/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-
-    // 1. Delete associated answer keys first (Foreign Key constraint)
-    await db.query('DELETE FROM answer_keys WHERE exam_id = $1', [id]);
-
-    // 2. Delete associated generated questions
-    await db.query('DELETE FROM generated_questions WHERE exam_id = $1', [id]);
-
-    // 3. Delete associated student submissions
-    await db.query('DELETE FROM student_submissions WHERE exam_id = $1', [id]);
-
-    // 4. Finally, delete the exam record itself
-    const result = await db.query('DELETE FROM Exams WHERE id = $1 RETURNING *', [id]);
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Exam not found" });
+    const quizId = Number(req.params.id);
+    if (!Number.isSafeInteger(quizId) || quizId <= 0) {
+      return res.status(400).json({ error: 'Invalid quiz ID' });
     }
 
-    res.json({ message: "Exam and all related data deleted successfully" });
+    const result = await deleteQuizRecords([quizId]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
+
+    res.json({ success: true, message: 'Quiz and related data deleted successfully' });
   } catch (error) {
-    console.error("DELETE EXAM ERROR:", error);
-    res.status(500).json({ error: "Failed to delete exam and related records" });
+    console.error('DELETE QUIZ ERROR:', error);
+    res.status(500).json({ error: 'Failed to delete quiz and related records' });
+  }
+});
+
+app.post('/api/quizzes/bulk-delete', async (req, res) => {
+  try {
+    const { quizIds } = req.body;
+    if (!Array.isArray(quizIds) || quizIds.length === 0) {
+      return res.status(400).json({ error: 'quizIds must be a non-empty array' });
+    }
+
+    const uniqueQuizIds = [...new Set(quizIds.map(Number))];
+    if (uniqueQuizIds.some(id => !Number.isSafeInteger(id) || id <= 0)) {
+      return res.status(400).json({ error: 'quizIds must contain valid positive IDs' });
+    }
+
+    const result = await deleteQuizRecords(uniqueQuizIds);
+    res.json({ success: true, count: result.rowCount });
+  } catch (error) {
+    console.error('BULK DELETE QUIZZES ERROR:', error);
+    res.status(500).json({ error: 'Failed to delete quizzes and related records' });
+  }
+});
+
+app.delete('/api/exams/:id', async (req, res) => {
+  try {
+    const quizId = Number(req.params.id);
+    if (!Number.isSafeInteger(quizId) || quizId <= 0) {
+      return res.status(400).json({ error: 'Invalid exam ID' });
+    }
+    const result = await deleteQuizRecords([quizId]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Exam not found' });
+    }
+    res.json({ message: 'Exam and all related data deleted successfully' });
+  } catch (error) {
+    console.error('DELETE EXAM ERROR:', error);
+    res.status(500).json({ error: 'Failed to delete exam and related records' });
   }
 });
 
