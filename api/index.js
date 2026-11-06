@@ -914,7 +914,7 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
       try {
         const pdfParse = require('pdf-parse/lib/pdf-parse.js');
         const parsedPdf = await pdfParse(file.buffer);
-        documentText = typeof parsedPdf?.text === 'string' ? parsedPdf.text.trim() : '';
+        documentText = typeof parsedPdf?.text === 'string' ? parsedPdf.text : '';
       } catch (error) {
         console.error('PDF text extraction Error:', error.message);
       }
@@ -927,7 +927,6 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
         console.error('Quiz OCR Error:', error.message);
       }
     }
-    const promptText = `${systemPrompt}\nDo not invent questions or answers. Include only items with a readable question and correct answer.\n\nQuiz text:\n${documentText.slice(0, 24000)}`;
     const normalizeParsedItems = (parsed) => {
       const parsedItems = Array.isArray(parsed) ? parsed : (parsed?.items || parsed?.questions);
       if (!Array.isArray(parsedItems)) throw new Error('AI response did not contain an items array.');
@@ -951,57 +950,64 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
       const jsonText = content.trim().replace(/^```(?:json)?\s*|\s*```$/gi, '');
       return normalizeParsedItems(JSON.parse(jsonText));
     };
+    const aiSystemPrompt = 'You are a quiz parsing system. Output ONLY a valid JSON array of objects with keys: questionNumber (number), questionText (string), correctAnswer (string). No markdown formatting or extra commentary.';
     try {
       if (!process.env.GROQ_API_KEY) throw new Error('GROQ_API_KEY is not configured.');
-      const userContent = [{
-        type: 'text',
-        text: promptText
-      }];
-
-      const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      try {
+        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
           Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userContent }
-          ],
-          temperature: 0.1,
-          max_tokens: 8000
-        })
-      });
+          body: JSON.stringify({
+            model: 'llama-3.1-8b-instant',
+            messages: [
+              { role: 'system', content: aiSystemPrompt },
+              { role: 'user', content: `Extract questions and answers from this text:\n${documentText}` }
+            ],
+            response_format: { type: 'json_object' }
+          }),
+          signal: controller.signal
+        });
 
-      if (!groqResponse.ok) {
-        const errorPayload = await groqResponse.text();
-        throw new Error(`Groq HTTP ${groqResponse.status}: ${errorPayload}`);
+        if (!groqResponse.ok) {
+          const errorPayload = await groqResponse.text();
+          throw new Error(`Groq HTTP ${groqResponse.status}: ${errorPayload}`);
+        }
+
+        const groqResult = await groqResponse.json();
+        const questions = parseJsonContent(groqResult.choices?.[0]?.message?.content);
+
+        return res.json({ success: true, items: questions, questions, provider: 'groq' });
+      } finally {
+        clearTimeout(timeoutId);
       }
-
-      const groqResult = await groqResponse.json();
-      const questions = parseJsonContent(groqResult.choices?.[0]?.message?.content);
-
-      return res.json({ success: true, items: questions, questions, provider: 'groq' });
     } catch (groqError) {
       console.error('Groq Error:', groqError.message);
     }
 
     const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (geminiApiKey) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       try {
-        const model = 'gemini-3.8-flash';
         const geminiResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiApiKey)}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(geminiApiKey)}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              systemInstruction: { parts: [{ text: systemPrompt }] },
-              contents: [{ role: 'user', parts: [{ text: promptText }] }],
-              generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
-            })
+              contents: [{
+                parts: [{
+                  text: `Extract quiz questions and correct answers into JSON format: [{"questionNumber": 1, "questionText": "...", "correctAnswer": "..."}]. Text:\n${documentText}`
+                }]
+              }],
+              generationConfig: { responseMimeType: 'application/json' }
+            }),
+            signal: controller.signal
           }
         );
         if (!geminiResponse.ok) {
@@ -1017,6 +1023,8 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
         return res.json({ success: true, items, questions: items, provider: 'gemini' });
       } catch (geminiError) {
         console.error('Gemini Error:', geminiError.message);
+      } finally {
+        clearTimeout(timeoutId);
       }
     } else {
       console.error('Gemini Error:', 'GEMINI_API_KEY and GOOGLE_API_KEY are not configured.');
