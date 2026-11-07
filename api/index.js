@@ -19,6 +19,7 @@ const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const {
   extractText,
   extractPdfTextFallback,
+  extractQuestionsFromDocument,
   generateLocalQuizQuestions,
   generateQuizFromText,
 } = require('../backend/scripts/generateQuestions');
@@ -786,13 +787,12 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
 
     let text = '';
     let fileUrl = null;
+    const isVisualFile = file
+      && (file.mimetype === 'application/pdf' || file.mimetype.startsWith('image/'));
 
     if (file) {
       const { publicUrl } = await uploadFile(file.buffer, file.originalname, file.mimetype);
       fileUrl = publicUrl;
-      if (file.mimetype !== 'application/pdf') {
-        text = await extractText(file.buffer, file.mimetype);
-      }
     }
 
     const examRes = await db.query(
@@ -811,20 +811,17 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
     const examId = examRes.rows[0].id;
 
     let result = null;
-    if (file?.mimetype === 'application/pdf' || text) {
+    if (isVisualFile || text) {
       const generationController = new AbortController();
-      let sourceText = text;
+      let sourceText = isVisualFile ? '' : text;
       let timeoutId;
       const generationPromise = (async () => {
-        if (file?.mimetype === 'application/pdf') {
-          sourceText = await extractPdfTextFallback(file.buffer);
-        }
         return generateQuizFromText(
-          sourceText,
+          isVisualFile ? file.buffer : sourceText,
           requestedQuestionCount,
           questionTypes,
           customPrompt || '',
-          '',
+          file?.mimetype || '',
           questionBreakdown,
           { signal: generationController.signal }
         );
@@ -975,7 +972,33 @@ app.post('/api/upload-answer-key-file', upload.single('file'), async (req, res) 
     if (!file) return res.status(400).json({ error: 'No file uploaded' });
 
     const { publicUrl } = await uploadFile(file.buffer, file.originalname, file.mimetype);
-    res.json({ publicUrl });
+    let visualExtraction = null;
+    let parseError = null;
+    try {
+      visualExtraction = await extractQuestionsFromDocument(file.buffer, file.mimetype);
+    } catch (error) {
+      parseError = error.message || 'Gemini could not parse the uploaded answer key.';
+      console.error('ANSWER KEY VISUAL EXTRACTION ERROR:', parseError);
+    }
+
+    const questions = visualExtraction?.items.map((item, index) => ({
+      id: item.itemNumber || index + 1,
+      questionNumber: item.itemNumber || index + 1,
+      questionText: item.question || (item.correctAnswer ? `Question ${item.itemNumber || index + 1}` : ''),
+      correctAnswer: item.correctAnswer,
+      explanation: item.explanation,
+    })) || [];
+    res.json({
+      publicUrl,
+      ...(visualExtraction && {
+        success: true,
+        hasAnswerKey: visualExtraction.hasAnswerKey,
+        items: questions,
+        questions,
+        provider: 'gemini-visual',
+      }),
+      ...(parseError && { parseError }),
+    });
   } catch (error) {
     console.error('FILE UPLOAD ERROR:', error);
     res.status(500).json({ error: 'Failed to upload file' });
@@ -992,6 +1015,28 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
     if (!isPdf && !isImage) {
       return res.status(400).json({ error: 'Upload a PDF or image file' });
     }
+    try {
+      const visualExtraction = await extractQuestionsFromDocument(file.buffer, file.mimetype);
+      if (visualExtraction.items.length) {
+        const questions = visualExtraction.items.map((item, index) => ({
+          id: item.itemNumber || index + 1,
+          questionNumber: item.itemNumber || index + 1,
+          questionText: item.question || (item.correctAnswer ? `Question ${item.itemNumber || index + 1}` : ''),
+          correctAnswer: item.correctAnswer,
+          explanation: item.explanation,
+        }));
+        return res.json({
+          success: true,
+          hasAnswerKey: visualExtraction.hasAnswerKey,
+          items: questions,
+          questions,
+          provider: 'gemini-visual',
+        });
+      }
+    } catch (error) {
+      console.error('Gemini visual quiz extraction failed; trying text/OCR fallback:', error.message);
+    }
+
     const parseLocalQuestions = (text) => {
       const sourceLines = String(text || '').split(/\r?\n/);
       const questions = new Map();

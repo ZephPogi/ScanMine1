@@ -137,12 +137,13 @@ const GROQ_MODELS = [
 const MAX_GEMINI_ATTEMPTS = GEMINI_MODELS.length;
 
 function getGenAIClient() {
-  if (!process.env.GEMINI_API_KEY) {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
     throw new Error(
-      'GEMINI_API_KEY is not set. Add it to your .env file before using AI question generation.'
+      'GEMINI_API_KEY or GOOGLE_API_KEY is not set. Add one to your .env file before using AI question generation.'
     );
   }
-  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  return new GoogleGenAI({ apiKey });
 }
 
 function callGeminiWithTimeout(callFn, timeoutMs = 10000, abortSignal = null) {
@@ -179,7 +180,8 @@ async function callGeminiWithFailover(
   attachmentBuffer = null,
   mimeType = 'image/jpeg',
   modelNames = GEMINI_MODELS.slice(0, MAX_GEMINI_ATTEMPTS),
-  abortSignal = null
+  abortSignal = null,
+  responseSchema = QUESTION_SCHEMA
 ) {
   const genai = getGenAIClient();
 
@@ -187,7 +189,6 @@ async function callGeminiWithFailover(
     try {
       const payload = attachmentBuffer
         ? [
-            { text: prompt },
             {
               inlineData: {
                 data: Buffer.isBuffer(attachmentBuffer)
@@ -196,6 +197,7 @@ async function callGeminiWithFailover(
                 mimeType,
               },
             },
+            { text: prompt },
           ]
         : prompt;
 
@@ -204,18 +206,95 @@ async function callGeminiWithFailover(
         contents: payload,
         config: {
           responseMimeType: 'application/json',
-          responseSchema: QUESTION_SCHEMA,
+          responseSchema,
           temperature: 0.4,
           abortSignal: requestSignal,
         },
       }), 10000, abortSignal);
     } catch (error) {
       if (abortSignal?.aborted) throw error;
-      console.warn(`[Gemini Timeout] ${error.message}. Moving to next attempt/Groq fallback...`);
+      console.warn(`[Gemini] ${error.message}. Moving to the next model...`);
     }
   }
 
   throw new Error(`Gemini failed after ${modelNames.length} attempts.`);
+}
+
+const DOCUMENT_EXTRACTION_SCHEMA = {
+  type: 'object',
+  properties: {
+    hasAnswerKey: { type: 'boolean' },
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          itemNumber: { type: 'integer' },
+          question: { type: 'string' },
+          correctAnswer: { type: 'string' },
+          explanation: { type: 'string' },
+        },
+        required: ['itemNumber'],
+      },
+    },
+  },
+  required: ['hasAnswerKey', 'items'],
+};
+
+async function extractQuestionsFromDocument(buffer, mimeType, abortSignal = null) {
+  if (!Buffer.isBuffer(buffer)) {
+    throw new TypeError('A PDF or image buffer is required for visual document extraction.');
+  }
+  if (mimeType !== 'application/pdf' && !mimeType?.startsWith('image/')) {
+    throw new TypeError('Visual document extraction requires a PDF or image MIME type.');
+  }
+
+  const prompt = `Analyze the visual layout of this document (exam or answer key table). Identify all questions, options, and explicit answer key pairs (e.g. table rows, pipe-delimited values, or numbered lists like '1. A' or '36 | OWASP'). Do not infer or invent answer-key entries; include only answers explicit in the document.
+Return a valid JSON object matching this structure:
+{
+  "hasAnswerKey": true/false,
+  "items": [
+    {
+      "itemNumber": 1,
+      "question": "Question text if present",
+      "correctAnswer": "A",
+      "explanation": "Optional explanation or answer text"
+    }
+  ]
+}`;
+  const modelNames = [
+    process.env.GEMINI_QUIZ_PARSE_MODEL,
+    'gemini-3.8-flash',
+    'gemini-3.5-flash-lite',
+  ].filter(Boolean);
+  const response = await callGeminiWithFailover(
+    prompt,
+    buffer,
+    mimeType,
+    modelNames,
+    abortSignal,
+    DOCUMENT_EXTRACTION_SCHEMA
+  );
+  const responseText = response.text?.trim();
+  if (!responseText) {
+    throw new Error('Gemini returned an empty visual extraction response.');
+  }
+  const parsed = JSON.parse(responseText.replace(/^```(?:json)?\s*|\s*```$/gi, ''));
+  if (typeof parsed.hasAnswerKey !== 'boolean' || !Array.isArray(parsed.items)) {
+    throw new Error('Gemini visual extraction response did not match the expected structure.');
+  }
+
+  return {
+    hasAnswerKey: parsed.hasAnswerKey,
+    items: parsed.items
+      .filter(item => item && typeof item === 'object')
+      .map((item, index) => ({
+        itemNumber: Number.isInteger(item.itemNumber) ? item.itemNumber : index + 1,
+        question: typeof item.question === 'string' ? item.question.trim() : '',
+        correctAnswer: typeof item.correctAnswer === 'string' ? item.correctAnswer.trim() : '',
+        explanation: typeof item.explanation === 'string' ? item.explanation.trim() : '',
+      })),
+  };
 }
 
 async function extractPdfTextFallback(pdfBuffer) {
@@ -625,15 +704,17 @@ async function generateQuizFromText(text, numberOfQuestions = 10, questionTypes 
     : Number.isSafeInteger(numberOfQuestions) && numberOfQuestions > 0
       ? numberOfQuestions
       : 10;
+  const isVisualDocument = Buffer.isBuffer(text)
+    && (mimeType === 'application/pdf' || mimeType?.startsWith('image/'));
   let lessonText = Buffer.isBuffer(text)
-    ? (mimeType === 'application/pdf' ? await extractPdfTextFallback(text) : text.toString('utf8'))
+    ? (isVisualDocument ? '' : text.toString('utf8'))
     : String(text || '');
   const localFallback = () => ({
     success: true,
     items: generateLocalQuizQuestions(lessonText, requestedQuestionCount, safeTypes, normalizedBreakdown),
     provider: 'local-fallback',
   });
-  if (lessonText.replace(/\s+/g, ' ').trim().length < 50) {
+  if (!isVisualDocument && lessonText.replace(/\s+/g, ' ').trim().length < 50) {
     console.warn('[generateQuizFromText] Source text is too short; generating questions locally.');
     return localFallback();
   }
@@ -659,9 +740,17 @@ async function generateQuizFromText(text, numberOfQuestions = 10, questionTypes 
       ? `\nAdditional instructions from the teacher:\n"${customPrompt.trim()}"\n`
       : '';
 
-    const isPdf = Buffer.isBuffer(text) || mimeType === 'application/pdf';
-    const prompt = isPdf
-      ? `Extract lesson concepts from this attached PDF. ${breakdownInstructions || `Generate ${requestedQuestionCount} quiz questions based on these options: ${safeTypes}.`}\n${multipleChoiceInstruction}\nReturn strictly valid JSON.`
+    const prompt = isVisualDocument
+      ? `Analyze the visual layout and lesson content in this attached ${mimeType === 'application/pdf' ? 'PDF' : 'image'}. Generate exactly ${requestedQuestionCount} quiz questions based on its educational content.
+Only use these question types: ${allowedTypeNames}.
+${normalizedBreakdown ? '' : 'Distribute the questions evenly across the allowed types.'}
+${breakdownInstructions}
+${multipleChoiceInstruction}
+${customInstructions}
+Rules:
+${typeRules}
+- Questions must be directly supported by the document.
+- Return ONLY a JSON array with question, options, correctAnswer, and type fields.`
       : `You are an expert quiz maker.
 
 Analyze the following passage and generate exactly ${requestedQuestionCount} quiz questions.
@@ -682,10 +771,12 @@ ${lessonText.slice(0, 12000)}
 
 JSON output:`;
 
-    const CANDIDATE_MODELS = [
-      ...GROQ_MODELS.map(model => ({ provider: 'groq', model })),
-      ...GEMINI_MODELS.map(model => ({ provider: 'gemini', model })),
-    ];
+    const CANDIDATE_MODELS = isVisualDocument
+      ? GEMINI_MODELS.map(model => ({ provider: 'gemini', model }))
+      : [
+          ...GROQ_MODELS.map(model => ({ provider: 'groq', model })),
+          ...GEMINI_MODELS.map(model => ({ provider: 'gemini', model })),
+        ];
 
     for (const candidate of CANDIDATE_MODELS) {
       try {
@@ -701,13 +792,10 @@ JSON output:`;
             signal
           );
         } else {
-          if (isPdf && !Buffer.isBuffer(text)) {
-            throw new Error('A PDF buffer is required when the MIME type is application/pdf.');
-          }
           const response = await callGeminiWithFailover(
             prompt,
-            isPdf ? text : null,
-            'application/pdf',
+            isVisualDocument ? text : null,
+            mimeType || 'application/pdf',
             [candidate.model],
             signal
           );
@@ -748,6 +836,7 @@ JSON output:`;
 module.exports = {
   extractText,
   extractPdfTextFallback,
+  extractQuestionsFromDocument,
   generateLocalQuizQuestions,
   generateQuizFromText,
 };
