@@ -984,9 +984,8 @@ app.post('/api/upload-answer-key-file', upload.single('file'), async (req, res) 
     const questions = visualExtraction?.items.map((item, index) => ({
       id: item.itemNumber || index + 1,
       questionNumber: item.itemNumber || index + 1,
-      questionText: item.question || (item.correctAnswer ? `Question ${item.itemNumber || index + 1}` : ''),
+      questionText: item.questionText || (item.correctAnswer ? `Question ${item.itemNumber || index + 1}` : ''),
       correctAnswer: item.correctAnswer,
-      explanation: item.explanation,
     })) || [];
     res.json({
       publicUrl,
@@ -1021,9 +1020,8 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
         const questions = visualExtraction.items.map((item, index) => ({
           id: item.itemNumber || index + 1,
           questionNumber: item.itemNumber || index + 1,
-          questionText: item.question || (item.correctAnswer ? `Question ${item.itemNumber || index + 1}` : ''),
+          questionText: item.questionText || (item.correctAnswer ? `Question ${item.itemNumber || index + 1}` : ''),
           correctAnswer: item.correctAnswer,
-          explanation: item.explanation,
         }));
         return res.json({
           success: true,

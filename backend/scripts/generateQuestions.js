@@ -221,24 +221,17 @@ async function callGeminiWithFailover(
 }
 
 const DOCUMENT_EXTRACTION_SCHEMA = {
-  type: 'object',
-  properties: {
-    hasAnswerKey: { type: 'boolean' },
-    items: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          itemNumber: { type: 'integer' },
-          question: { type: 'string' },
-          correctAnswer: { type: 'string' },
-          explanation: { type: 'string' },
-        },
-        required: ['itemNumber'],
-      },
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      itemNumber: { type: 'integer' },
+      questionText: { type: 'string' },
+      correctAnswer: { type: 'string' },
     },
+    required: ['itemNumber', 'questionText', 'correctAnswer'],
+    propertyOrdering: ['itemNumber', 'questionText', 'correctAnswer'],
   },
-  required: ['hasAnswerKey', 'items'],
 };
 
 async function extractQuestionsFromDocument(buffer, mimeType, abortSignal = null) {
@@ -249,24 +242,19 @@ async function extractQuestionsFromDocument(buffer, mimeType, abortSignal = null
     throw new TypeError('Visual document extraction requires a PDF or image MIME type.');
   }
 
-  const prompt = `Analyze the visual layout of this document (exam or answer key table). Identify all questions, options, and explicit answer key pairs (e.g. table rows, pipe-delimited values, or numbered lists like '1. A' or '36 | OWASP'). Do not infer or invent answer-key entries; include only answers explicit in the document.
-Return a valid JSON object matching this structure:
-{
-  "hasAnswerKey": true/false,
-  "items": [
-    {
-      "itemNumber": 1,
-      "question": "Question text if present",
-      "correctAnswer": "A",
-      "explanation": "Optional explanation or answer text"
-    }
-  ]
-}`;
-  const modelNames = [
+  const prompt = `Analyze the entire document visually, including every page and the relationships between its layout sections. Identify each question and correlate it with its explicit correct answer whether the answer appears directly under the question or in an answer key appended elsewhere in the document. Appended keys may be tables, grids, summary lists such as "1-A, 2-B", or sections titled "OFFICIAL ANSWER KEY". Match answers to questions by item number and preserve the original question numbering.
+Do not infer or invent answers. Include only answer key entries explicitly shown in the document. If an answer key entry has no question text in the document, set questionText to "Question N", using its item number.
+Return ONLY a valid JSON array of individual objects with exactly these fields and types:
+[
+  { "itemNumber": 1, "questionText": "Question text", "correctAnswer": "A" },
+  { "itemNumber": 2, "questionText": "Question text", "correctAnswer": "B" }
+]
+If no explicit answer-key entries are present, return an empty array [].`;
+  const modelNames = [...new Set([
+    'gemini-3.5-flash-lite',
     process.env.GEMINI_QUIZ_PARSE_MODEL,
     'gemini-3.8-flash',
-    'gemini-3.5-flash-lite',
-  ].filter(Boolean);
+  ].filter(Boolean))];
   const response = await callGeminiWithFailover(
     prompt,
     buffer,
@@ -280,20 +268,21 @@ Return a valid JSON object matching this structure:
     throw new Error('Gemini returned an empty visual extraction response.');
   }
   const parsed = JSON.parse(responseText.replace(/^```(?:json)?\s*|\s*```$/gi, ''));
-  if (typeof parsed.hasAnswerKey !== 'boolean' || !Array.isArray(parsed.items)) {
-    throw new Error('Gemini visual extraction response did not match the expected structure.');
+  if (!Array.isArray(parsed)) {
+    throw new Error('Gemini visual extraction response must be a JSON array.');
   }
 
+  const items = parsed
+    .filter(item => item && typeof item === 'object' && !Array.isArray(item))
+    .map((item, index) => ({
+      itemNumber: Number.isInteger(item.itemNumber) ? item.itemNumber : index + 1,
+      questionText: typeof item.questionText === 'string' ? item.questionText.trim() : '',
+      correctAnswer: typeof item.correctAnswer === 'string' ? item.correctAnswer.trim() : '',
+    }));
+
   return {
-    hasAnswerKey: parsed.hasAnswerKey,
-    items: parsed.items
-      .filter(item => item && typeof item === 'object')
-      .map((item, index) => ({
-        itemNumber: Number.isInteger(item.itemNumber) ? item.itemNumber : index + 1,
-        question: typeof item.question === 'string' ? item.question.trim() : '',
-        correctAnswer: typeof item.correctAnswer === 'string' ? item.correctAnswer.trim() : '',
-        explanation: typeof item.explanation === 'string' ? item.explanation.trim() : '',
-      })),
+    hasAnswerKey: items.some(item => item.correctAnswer.length > 0),
+    items,
   };
 }
 
