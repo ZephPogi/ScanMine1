@@ -6,6 +6,30 @@ const path = require('path');
 const OCRRouter = require('./ocrRouter');
 const { GoogleGenAI } = require('@google/genai');
 
+async function safePdfParse(buffer) {
+  const pdfReq = require('pdf-parse');
+  try {
+    if (typeof pdfReq === 'function') {
+      return await pdfReq(buffer, { max: 15 });
+    } else if (pdfReq.PDFParse) {
+      const parser = new pdfReq.PDFParse();
+      return await parser.parse(buffer);
+    } else if (typeof pdfReq.default === 'function') {
+      return await pdfReq.default(buffer, { max: 15 });
+    }
+
+    throw new Error('pdf-parse export is unavailable in this runtime.');
+  } catch (err) {
+    const parserClass = typeof pdfReq === 'function'
+      ? pdfReq
+      : (typeof pdfReq.default === 'function' ? pdfReq.default : null);
+    if (err.message?.includes("without 'new'") && parserClass) {
+      return await (new parserClass(buffer)).parse();
+    }
+    throw err;
+  }
+}
+
 /**
  * Extracts text from a file buffer (PDF or plain text)
  * Uses dual-OCR strategy: Tesseract with LSTM for PDFs
@@ -34,29 +58,14 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
     }
 
     // ── Secondary path: pdf-parse → scanned-PDF OCR via temp file ─────────
-    // pdf-parse exports a plain async function — never instantiate it as a class.
     // If it returns empty text (scanned/image PDF), fall through to temp-file OCR.
     let tempPath = null;
     try {
-      let pdfParse;
-      try {
-        const _pdfParseReq = require('pdf-parse');
-        pdfParse = typeof _pdfParseReq === 'function'
-          ? _pdfParseReq
-          : (_pdfParseReq.default || _pdfParseReq.PDFParse);
-      } catch (e) {
-        console.error('pdf-parse initialization failed:', e);
-      }
-
-      if (!pdfParse) {
-        throw new Error('pdf-parse export is unavailable in this runtime.');
-      }
-
       // Guard: filePath may itself be a Buffer (Supabase/Multer memory storage).
       // Never pass a Buffer object to fs.readFileSync — use it directly instead.
       const dataBuffer = fileBuffer
         || (Buffer.isBuffer(filePath) ? filePath : fs.readFileSync(filePath));
-      const data = await pdfParse(dataBuffer);
+      const data = await safePdfParse(dataBuffer);
       const extractedText = (data && data.text ? data.text : '').trim();
 
       if (extractedText.length > 0) {
@@ -114,16 +123,16 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
  */
 const GEMINI_MODELS = [
   process.env.GEMINI_QUIZ_PARSE_MODEL,
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash-latest',
+  'gemini-3.8-flash',
+  'gemini-1.5-flash',
+  'gemini-2.0-flash-exp',
 ].filter(Boolean);
 const GROQ_MODELS = [
   process.env.GROQ_QUIZ_PARSE_MODEL,
   'llama-3.3-70b-versatile',
   'llama-3.1-8b-instant',
-  'llama3-70b-8192',
-  'mixtral-8x7b-32768',
+  'llama-3.1-70b-versatile',
+  'qwen-2.5-72b-instruct',
 ].filter(Boolean).map(model => model.trim().replace(/^['"]|['"]$/g, '').trim()).filter(Boolean);
 const MAX_GEMINI_ATTEMPTS = 2;
 
@@ -210,12 +219,21 @@ async function callGeminiWithFailover(
 }
 
 async function extractPdfTextFallback(pdfBuffer) {
+  const cleanPdfText = text => {
+    const cleanText = String(text || '')
+      .replace(/%PDF-[\d\.]+|obj\s*<<|>>\s*endobj|stream[\s\S]*?endstream|\/(Type|Pages|Catalog|XObject|Subtype|Width|Height|Filter|BitsPerComponent|ColorSpace|Length|Kids|Title|Creator|Producer)/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return cleanText.trim().length < 50
+      ? 'Uploaded PDF contains no extractable text or is a scanned image.'
+      : cleanText.slice(0, 12000);
+  };
   const safeBuffer = Buffer.isBuffer(pdfBuffer) ? pdfBuffer.subarray(0, 300000) : pdfBuffer;
   const fallbackText = Buffer.isBuffer(safeBuffer)
     ? safeBuffer.subarray(0, 12000).toString('utf8').replace(/[^\x20-\x7E\n\r\t]/g, ' ').replace(/\s+/g, ' ').trim()
     : '';
   const createTextFromPdfTokens = () => {
-    if (!Buffer.isBuffer(safeBuffer)) return fallbackText || 'No readable text could be extracted from the PDF.';
+    if (!Buffer.isBuffer(safeBuffer)) return cleanPdfText(fallbackText);
     const pdfSource = safeBuffer.toString('binary');
     const textOperators = /\[((?:\\.|[^\]])*)\]\s*TJ\b|(\(((?:\\.|[^\\()])*)\))\s*Tj\b/g;
     const strings = [];
@@ -272,33 +290,29 @@ async function extractPdfTextFallback(pdfBuffer) {
 
     if (timedOut || Date.now() - startedAt > 1000) {
       console.warn('[PDF Fallback] PDF token extraction exceeded 1000ms; returning truncated text.');
-      return extractedText || fallbackText || 'PDF text extraction timed out.';
+      return cleanPdfText(extractedText || fallbackText);
     }
-    return extractedText || fallbackText || 'No readable text could be extracted from the PDF.';
+    return cleanPdfText(extractedText || fallbackText);
   };
 
   if (!Buffer.isBuffer(pdfBuffer)) {
-    return 'No readable text could be extracted from the PDF.';
+    return cleanPdfText('');
   }
 
   let parserTimeoutId;
   try {
-    const _pdfParseReq = require('pdf-parse');
-    const pdfParse = typeof _pdfParseReq === 'function'
-      ? _pdfParseReq
-      : (_pdfParseReq.default || _pdfParseReq.PDFParse);
-    const parsePromise = pdfParse(pdfBuffer, { max: 15 });
+    const parsePromise = safePdfParse(pdfBuffer);
     const parseTimeout = new Promise((_, reject) => {
       parserTimeoutId = setTimeout(() => reject(new Error('PDF parsing exceeded 1000ms.')), 1000);
     });
     const pdfData = await Promise.race([parsePromise, parseTimeout]);
     const extractedText = typeof pdfData?.text === 'string' ? pdfData.text.trim() : '';
-    if (extractedText) return extractedText.slice(0, 12000);
+    if (extractedText) return cleanPdfText(extractedText);
     console.warn('[PDF Fallback] pdf-parse returned no embedded text; extracting bounded PDF text tokens.');
   } catch (error) {
     console.warn(`[PDF Fallback] pdf-parse failed (${error.message}); returning bounded PDF text.`);
     if (/exceeded 1000ms/.test(error.message)) {
-      return fallbackText || 'PDF text extraction timed out.';
+      return cleanPdfText(fallbackText);
     }
   } finally {
     clearTimeout(parserTimeoutId);
