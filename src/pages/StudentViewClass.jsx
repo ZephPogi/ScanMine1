@@ -106,6 +106,11 @@ const StudentViewClass = () => {
     }
   };
 
+  const handleSuccessOk = () => {
+    closeDialog();
+    fetchGrades();
+  };
+
   const fetchExams = async () => {
     try {
       const response = await fetch(`/api/exams?classId=${section.id}`);
@@ -233,7 +238,7 @@ const StudentViewClass = () => {
         'Submission recorded',
         `Score recorded successfully! You got ${percentage}%.`,
         'success',
-        () => navigate(`/student/grades/${section.id}`, { state: { section } })
+        handleSuccessOk
       );
     } catch (error) {
       console.error("Error grading:", error);
