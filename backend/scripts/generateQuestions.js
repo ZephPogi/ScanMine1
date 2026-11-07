@@ -196,64 +196,98 @@ async function callGeminiWithFailover(
 }
 
 async function extractPdfTextFallback(pdfBuffer) {
+  const safeBuffer = Buffer.isBuffer(pdfBuffer) ? pdfBuffer.subarray(0, 300000) : pdfBuffer;
+  const fallbackText = Buffer.isBuffer(safeBuffer)
+    ? safeBuffer.subarray(0, 12000).toString('utf8').replace(/[^\x20-\x7E\n\r\t]/g, ' ').replace(/\s+/g, ' ').trim()
+    : '';
+  const createTextFromPdfTokens = () => {
+    if (!Buffer.isBuffer(safeBuffer)) return fallbackText || 'No readable text could be extracted from the PDF.';
+    const pdfSource = safeBuffer.toString('binary');
+    const textOperators = /\[((?:\\.|[^\]])*)\]\s*TJ\b|(\(((?:\\.|[^\\()])*)\))\s*Tj\b/g;
+    const strings = [];
+    const startedAt = Date.now();
+    let match;
+    let iterations = 0;
+    let matchCount = 0;
+    let collectedLength = 0;
+    let timedOut = false;
+
+    while (iterations < 500 && matchCount < 500 && Date.now() - startedAt <= 1000
+      && (match = textOperators.exec(pdfSource)) !== null) {
+      iterations += 1;
+      matchCount += 1;
+      const textArray = match[1];
+      const singleText = match[3];
+      if (textArray) {
+        const literalPattern = /\(((?:\\.|[^\\()])*)\)/g;
+        let literalMatch;
+        while (matchCount < 500 && Date.now() - startedAt <= 1000
+          && (literalMatch = literalPattern.exec(textArray)) !== null) {
+          matchCount += 1;
+          const value = literalMatch[1].slice(0, Math.max(0, 12000 - collectedLength));
+          strings.push(value);
+          collectedLength += value.length + 1;
+          if (collectedLength >= 12000) break;
+        }
+        if (Date.now() - startedAt > 1000) timedOut = true;
+      } else if (singleText) {
+        const value = singleText.slice(0, Math.max(0, 12000 - collectedLength));
+        strings.push(value);
+        collectedLength += value.length + 1;
+      }
+
+      if (Date.now() - startedAt > 1000) {
+        timedOut = true;
+        break;
+      }
+    }
+
+    const extractedText = strings
+      .join(' ')
+      .replace(/\\([nrtbf()\\])/g, (_, escaped) => ({
+        n: '\n',
+        r: '\r',
+        t: '\t',
+        b: '\b',
+        f: '\f',
+      }[escaped] || escaped))
+      .replace(/\\([0-7]{1,3})/g, (_, octal) => String.fromCharCode(parseInt(octal, 8)))
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 12000);
+
+    if (timedOut || Date.now() - startedAt > 1000) {
+      console.warn('[PDF Fallback] PDF token extraction exceeded 1000ms; returning truncated text.');
+      return extractedText || fallbackText || 'PDF text extraction timed out.';
+    }
+    return extractedText || fallbackText || 'No readable text could be extracted from the PDF.';
+  };
+
+  if (!Buffer.isBuffer(pdfBuffer)) {
+    return 'No readable text could be extracted from the PDF.';
+  }
+
+  let parserTimeoutId;
   try {
-    const pdfModule = require('pdf-parse');
-    let extractedText = '';
-
-    if (typeof pdfModule === 'function') {
-      const result = await pdfModule(pdfBuffer);
-      extractedText = result?.text || '';
-    } else {
-      const PDFParse = pdfModule.PDFParse || pdfModule.default?.PDFParse;
-      if (typeof PDFParse !== 'function') {
-        throw new Error('pdf-parse does not expose a supported parser in this runtime.');
-      }
-
-      const parser = new PDFParse({ data: pdfBuffer });
-      try {
-        const result = await parser.getText();
-        extractedText = result?.text || '';
-      } finally {
-        await parser.destroy();
-      }
-    }
-
-    const text = extractedText.trim();
-    if (text) {
-      return text;
-    }
-    console.warn('[PDF Fallback] pdf-parse returned no embedded text; extracting PDF text tokens directly.');
+    const pdfParse = require('pdf-parse');
+    const parsePromise = pdfParse(pdfBuffer, { max: 15 });
+    const parseTimeout = new Promise((_, reject) => {
+      parserTimeoutId = setTimeout(() => reject(new Error('PDF parsing exceeded 1000ms.')), 1000);
+    });
+    const pdfData = await Promise.race([parsePromise, parseTimeout]);
+    const extractedText = typeof pdfData?.text === 'string' ? pdfData.text.trim() : '';
+    if (extractedText) return extractedText.slice(0, 12000);
+    console.warn('[PDF Fallback] pdf-parse returned no embedded text; extracting bounded PDF text tokens.');
   } catch (error) {
-    console.warn(`[PDF Fallback] pdf-parse failed (${error.message}); extracting PDF text tokens directly.`);
-  }
-
-  const pdfSource = pdfBuffer.toString('binary');
-  const textOperators = /\[((?:\\.|[^\]])*)\]\s*TJ\b|(\(((?:\\.|[^\\()])*)\))\s*Tj\b/g;
-  const strings = [];
-  let match;
-  while ((match = textOperators.exec(pdfSource)) !== null) {
-    const textArray = match[1];
-    const singleText = match[3];
-    const literals = textArray
-      ? textArray.match(/\(((?:\\.|[^\\()])*)\)/g) || []
-      : [`(${singleText})`];
-
-    for (const literal of literals) {
-      const value = literal.slice(1, -1)
-        .replace(/\\([nrtbf()\\])/g, (_, escaped) => ({
-          n: '\n',
-          r: '\r',
-          t: '\t',
-          b: '\b',
-          f: '\f',
-        }[escaped] || escaped))
-        .replace(/\\([0-7]{1,3})/g, (_, octal) => String.fromCharCode(parseInt(octal, 8)));
-      if (value.trim()) strings.push(value);
+    console.warn(`[PDF Fallback] pdf-parse failed (${error.message}); returning bounded PDF text.`);
+    if (/exceeded 1000ms/.test(error.message)) {
+      return fallbackText || 'PDF text extraction timed out.';
     }
+  } finally {
+    clearTimeout(parserTimeoutId);
   }
 
-  const text = strings.join(' ').replace(/\s+/g, ' ').trim();
-  return text || 'No readable text could be extracted from the PDF.';
+  return createTextFromPdfTokens();
 }
 
 const QUESTION_TYPE_LABELS = {
@@ -568,6 +602,10 @@ async function generateQuizFromText(text, numberOfQuestions = 10, questionTypes 
     items: generateLocalQuizQuestions(lessonText, requestedQuestionCount, safeTypes, normalizedBreakdown),
     provider: 'local-fallback',
   });
+  if (lessonText.replace(/\s+/g, ' ').trim().length < 50) {
+    console.warn('[generateQuizFromText] Source text is too short; generating questions locally.');
+    return localFallback();
+  }
 
   try {
     const breakdownInstructions = createBreakdownInstructions(normalizedBreakdown);
