@@ -805,22 +805,25 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
     );
     const examId = examRes.rows[0].id;
 
-    let generatedQuestions = [];
+    let result = null;
     if (file?.mimetype === 'application/pdf') {
-      const generated = await generateQuizFromText(file.buffer, requestedQuestionCount, questionTypes, customPrompt || '', file.mimetype, questionBreakdown);
-      generatedQuestions = generated.items;
+      result = await generateQuizFromText(file.buffer, requestedQuestionCount, questionTypes, customPrompt || '', file.mimetype, questionBreakdown);
     } else if (text) {
-      const generated = await generateQuizFromText(text, requestedQuestionCount, questionTypes, customPrompt || '', '', questionBreakdown);
-      generatedQuestions = generated.items;
+      result = await generateQuizFromText(text, requestedQuestionCount, questionTypes, customPrompt || '', '', questionBreakdown);
     }
-    res.json({
+    const questionsCandidate = Array.isArray(result)
+      ? result
+      : result?.items || result?.questions || result?.data || [];
+    const finalQuestions = Array.isArray(questionsCandidate) ? questionsCandidate : [];
+
+    return res.json({
       success: true,
       message: 'Exam created successfully',
       examId,
-      items: generatedQuestions,
-      questions: generatedQuestions,
-      count: generatedQuestions.length,
-      provider: 'ai'
+      items: finalQuestions,
+      questions: finalQuestions,
+      count: finalQuestions.length,
+      provider: result?.provider || 'ai'
     });
   } catch (error) {
     console.error('QUIZ GENERATION ERROR:', error);
