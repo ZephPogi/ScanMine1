@@ -22,7 +22,6 @@ const OCRRouter = require('../backend/scripts/ocrRouter');
 const OCRSpaceService = require('../backend/scripts/ocrSpaceService');
 const { parseFullQuestions } = require('../backend/scripts/ocrAnswerParser');
 const { supabase, uploadFile, deleteFile } = require('../backend/supabaseClient');
-const { BUCKET_NAME } = require('../backend/supabaseClient');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -46,6 +45,38 @@ const normalizeMultipleChoiceAnswer = (answer, options) => {
   return index >= 0 && index < MULTIPLE_CHOICE_LETTERS.length
     ? MULTIPLE_CHOICE_LETTERS[index]
     : null;
+};
+
+const getStoragePathFromUrl = (url) => {
+  if (typeof url !== 'string' || !url.trim()) return null;
+
+  let path = url.trim();
+  if (/^[a-z][a-z\d+.-]*:\/\//i.test(path)) {
+    try {
+      const { pathname } = new URL(path);
+      const match = pathname.match(/^\/storage\/v1\/object\/(?:public|sign|authenticated)\/scanned-quizzes\/(.+)$/);
+      if (!match) return null;
+      path = match[1];
+    } catch (error) {
+      if (error instanceof TypeError) return null;
+      throw error;
+    }
+  } else {
+    path = path.split(/[?#]/, 1)[0].replace(/^\/+/, '');
+    if (path.startsWith('scanned-quizzes/')) {
+      path = path.slice('scanned-quizzes/'.length);
+    }
+  }
+
+  try {
+    path = decodeURIComponent(path).replace(/^\/+/, '');
+  } catch (error) {
+    if (error instanceof URIError) return null;
+    throw error;
+  }
+
+  if (!path || path.split('/').some(segment => segment === '..')) return null;
+  return path;
 };
 
 app.use(cors());
@@ -1679,11 +1710,65 @@ app.post('/api/upload-answer-key', async (req, res) => {
   }
 });
 
-const deleteQuizRecords = async (quizIds) => {
-  await db.query('DELETE FROM answer_keys WHERE exam_id = ANY($1::int[])', [quizIds]);
-  await db.query('DELETE FROM generated_questions WHERE exam_id = ANY($1::int[])', [quizIds]);
-  await db.query('DELETE FROM student_submissions WHERE exam_id = ANY($1::int[])', [quizIds]);
-  return db.query('DELETE FROM Exams WHERE id = ANY($1::int[]) RETURNING id', [quizIds]);
+const removeExamStorageFiles = async (filePaths) => {
+  const pathsToDelete = [...new Set(filePaths.map(getStoragePathFromUrl).filter(Boolean))];
+  if (pathsToDelete.length === 0) return;
+
+  const { error } = await supabase.storage.from('scanned-quizzes').remove(pathsToDelete);
+  if (error) throw error;
+};
+
+const deleteSingleExam = async (examId) => {
+  const { data: exam, error: examError } = await supabase
+    .from('exams')
+    .select('id, file_path')
+    .eq('id', examId)
+    .maybeSingle();
+  if (examError) throw examError;
+  if (!exam) return false;
+
+  const { data: submissions, error: submissionsError } = await supabase
+    .from('student_submissions')
+    .select('image_url')
+    .eq('exam_id', examId);
+  if (submissionsError) throw submissionsError;
+
+  await removeExamStorageFiles([
+    exam.file_path,
+    ...submissions.map(submission => submission.image_url),
+  ]);
+
+  const { error: deleteError } = await supabase
+    .from('exams')
+    .delete()
+    .eq('id', examId);
+  if (deleteError) throw deleteError;
+  return true;
+};
+
+const deleteMultipleExams = async (examIds) => {
+  const { data: exams, error: examsError } = await supabase
+    .from('exams')
+    .select('file_path')
+    .in('id', examIds);
+  if (examsError) throw examsError;
+
+  const { data: submissions, error: submissionsError } = await supabase
+    .from('student_submissions')
+    .select('image_url')
+    .in('exam_id', examIds);
+  if (submissionsError) throw submissionsError;
+
+  await removeExamStorageFiles([
+    ...exams.map(exam => exam.file_path),
+    ...submissions.map(submission => submission.image_url),
+  ]);
+
+  const { error: deleteError } = await supabase
+    .from('exams')
+    .delete()
+    .in('id', examIds);
+  if (deleteError) throw deleteError;
 };
 
 app.delete('/api/quizzes/:id', async (req, res) => {
@@ -1693,13 +1778,12 @@ app.delete('/api/quizzes/:id', async (req, res) => {
       return res.status(400).json({ error: 'Invalid quiz ID' });
     }
 
-    const result = await deleteQuizRecords([quizId]);
-
-    if (result.rowCount === 0) {
+    const deleted = await deleteSingleExam(quizId);
+    if (!deleted) {
       return res.status(404).json({ error: 'Quiz not found' });
     }
 
-    res.json({ success: true, message: 'Quiz and related data deleted successfully' });
+    res.json({ success: true, message: 'Deleted exam and storage files successfully' });
   } catch (error) {
     console.error('DELETE QUIZ ERROR:', error);
     res.status(500).json({ error: 'Failed to delete quiz and related records' });
@@ -1718,8 +1802,8 @@ app.post('/api/quizzes/bulk-delete', async (req, res) => {
       return res.status(400).json({ error: 'quizIds must contain valid positive IDs' });
     }
 
-    const result = await deleteQuizRecords(uniqueQuizIds);
-    res.json({ success: true, count: result.rowCount });
+    await deleteMultipleExams(uniqueQuizIds);
+    res.json({ success: true, count: uniqueQuizIds.length });
   } catch (error) {
     console.error('BULK DELETE QUIZZES ERROR:', error);
     res.status(500).json({ error: 'Failed to delete quizzes and related records' });
@@ -1732,11 +1816,11 @@ app.delete('/api/exams/:id', async (req, res) => {
     if (!Number.isSafeInteger(quizId) || quizId <= 0) {
       return res.status(400).json({ error: 'Invalid exam ID' });
     }
-    const result = await deleteQuizRecords([quizId]);
-    if (result.rowCount === 0) {
+    const deleted = await deleteSingleExam(quizId);
+    if (!deleted) {
       return res.status(404).json({ error: 'Exam not found' });
     }
-    res.json({ message: 'Exam and all related data deleted successfully' });
+    res.json({ success: true, message: 'Deleted exam and storage files successfully' });
   } catch (error) {
     console.error('DELETE EXAM ERROR:', error);
     res.status(500).json({ error: 'Failed to delete exam and related records' });
