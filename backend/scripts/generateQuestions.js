@@ -124,8 +124,8 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
 const GEMINI_MODELS = [
   process.env.GEMINI_QUIZ_PARSE_MODEL,
   'gemini-3.8-flash',
+  'gemini-3.5-flash-lite',
   'gemini-1.5-flash',
-  'gemini-2.0-flash-exp',
 ].filter(Boolean);
 const GROQ_MODELS = [
   process.env.GROQ_QUIZ_PARSE_MODEL,
@@ -134,7 +134,7 @@ const GROQ_MODELS = [
   'llama-3.1-70b-versatile',
   'qwen-2.5-72b-instruct',
 ].filter(Boolean).map(model => model.trim().replace(/^['"]|['"]$/g, '').trim()).filter(Boolean);
-const MAX_GEMINI_ATTEMPTS = 2;
+const MAX_GEMINI_ATTEMPTS = GEMINI_MODELS.length;
 
 function getGenAIClient() {
   if (!process.env.GEMINI_API_KEY) {
