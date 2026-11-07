@@ -1082,6 +1082,13 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
         console.error('PDF text extraction Error:', error.message);
       }
     }
+    let cleanText = documentText.replace(/\s+/g, ' ').trim();
+    if (isPdf && cleanText.length < 50) {
+      return res.status(400).json({
+        success: false,
+        message: 'The uploaded slide PDF contains mostly images or non-selectable text. Please upload a text-based document.'
+      });
+    }
 
     let extractedQuestions = parseLocalQuestions(documentText);
     if (extractedQuestions.length) {
@@ -1109,6 +1116,8 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
         provider: 'local-fastpath'
       });
     }
+    cleanText = documentText.replace(/\s+/g, ' ').trim();
+    const truncatedContent = cleanText.slice(0, 12000);
     const normalizeParsedItems = (parsed) => {
       const parsedItems = Array.isArray(parsed) ? parsed : (parsed?.items || parsed?.questions);
       if (!Array.isArray(parsedItems)) throw new Error('AI response did not contain an items array.');
@@ -1156,7 +1165,7 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
                 model,
                 messages: [
                   { role: 'system', content: aiSystemPrompt },
-                  { role: 'user', content: `Extract questions and answers from this text:\n${documentText}` }
+                  { role: 'user', content: `Extract questions and answers from this text:\n${truncatedContent}` }
                 ],
                 response_format: { type: 'json_object' }
               }),
@@ -1207,7 +1216,7 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
                 body: JSON.stringify({
                   contents: [{
                     parts: [{
-                      text: `Extract quiz questions and correct answers into JSON format: [{"questionNumber": 1, "questionText": "...", "correctAnswer": "..."}]. Text:\n${documentText}`
+                      text: `Extract quiz questions and correct answers into JSON format: [{"questionNumber": 1, "questionText": "...", "correctAnswer": "..."}]. Text:\n${truncatedContent}`
                     }]
                   }],
                   generationConfig: { responseMimeType: 'application/json' }
