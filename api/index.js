@@ -16,7 +16,12 @@ if (process.env.NODE_ENV !== 'production') {
 // Fixed import for Vercel Linux compatibility
 const { createCanvas, loadImage } = require('@napi-rs/canvas');
 
-const { extractText, generateQuizFromText } = require('../backend/scripts/generateQuestions');
+const {
+  extractText,
+  extractPdfTextFallback,
+  generateLocalQuizQuestions,
+  generateQuizFromText,
+} = require('../backend/scripts/generateQuestions');
 const { gradeSubmission } = require('../backend/scripts/autoGradeSubmission');
 const OCRRouter = require('../backend/scripts/ocrRouter');
 const OCRSpaceService = require('../backend/scripts/ocrSpaceService');
@@ -806,10 +811,45 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
     const examId = examRes.rows[0].id;
 
     let result = null;
-    if (file?.mimetype === 'application/pdf') {
-      result = await generateQuizFromText(file.buffer, requestedQuestionCount, questionTypes, customPrompt || '', file.mimetype, questionBreakdown);
-    } else if (text) {
-      result = await generateQuizFromText(text, requestedQuestionCount, questionTypes, customPrompt || '', '', questionBreakdown);
+    if (file?.mimetype === 'application/pdf' || text) {
+      const generationController = new AbortController();
+      let sourceText = text;
+      let timeoutId;
+      const generationPromise = (async () => {
+        if (file?.mimetype === 'application/pdf') {
+          sourceText = await extractPdfTextFallback(file.buffer);
+        }
+        return generateQuizFromText(
+          sourceText,
+          requestedQuestionCount,
+          questionTypes,
+          customPrompt || '',
+          '',
+          questionBreakdown,
+          { signal: generationController.signal }
+        );
+      })();
+      const timeoutPromise = new Promise(resolve => {
+        timeoutId = setTimeout(() => {
+          generationController.abort();
+          resolve({
+            success: true,
+            items: generateLocalQuizQuestions(
+              sourceText,
+              requestedQuestionCount,
+              questionTypes,
+              questionBreakdown
+            ),
+            provider: 'local-fallback-timeout'
+          });
+        }, 25000);
+      });
+
+      try {
+        result = await Promise.race([generationPromise, timeoutPromise]);
+      } finally {
+        clearTimeout(timeoutId);
+      }
     }
     const questionsCandidate = Array.isArray(result)
       ? result
@@ -1088,9 +1128,7 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
     let documentText = '';
     if (isPdf) {
       try {
-        const pdfParse = require('pdf-parse/lib/pdf-parse.js');
-        const parsedPdf = await pdfParse(file.buffer);
-        documentText = typeof parsedPdf?.text === 'string' ? parsedPdf.text.trim() : '';
+        documentText = await extractPdfTextFallback(file.buffer);
       } catch (error) {
         console.error('PDF text extraction Error:', error.message);
       }
@@ -1187,6 +1225,9 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
 
             if (!groqResponse.ok) {
               const errorPayload = await groqResponse.text();
+              if (groqResponse.status === 429 || /RESOURCE_EXHAUSTED|quota/i.test(errorPayload)) {
+                console.warn('[AI Loop] Model quota exhausted (429). Skipping immediately to the next provider/model.');
+              }
               console.error(`Groq HTTP ${groqResponse.status} for ${model}: ${errorPayload}`);
               continue;
             }
@@ -1239,6 +1280,9 @@ app.post('/api/quizzes/parse-pdf', upload.single('file'), async (req, res) => {
             );
             if (!geminiResponse.ok) {
               const errorPayload = await geminiResponse.text();
+              if (geminiResponse.status === 429 || /RESOURCE_EXHAUSTED|quota/i.test(errorPayload)) {
+                console.warn('[AI Loop] Model quota exhausted (429). Skipping immediately to the next provider/model.');
+              }
               console.error(`Gemini HTTP ${geminiResponse.status} for ${model}: ${errorPayload}`);
               continue;
             }

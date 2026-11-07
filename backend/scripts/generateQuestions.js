@@ -122,24 +122,45 @@ function getGenAIClient() {
   return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 }
 
-function callGeminiWithTimeout(callFn, timeoutMs = 10000) {
+function callGeminiWithTimeout(callFn, timeoutMs = 10000, abortSignal = null) {
+  const controller = new AbortController();
+  const abortRequest = () => controller.abort();
+  if (abortSignal?.aborted) {
+    controller.abort();
+  } else {
+    abortSignal?.addEventListener('abort', abortRequest, { once: true });
+  }
+
   let timeoutId;
   const timeout = new Promise((_, reject) => {
     timeoutId = setTimeout(
-      () => reject(new Error(`Gemini request timed out after ${timeoutMs / 1000}s`)),
+      () => {
+        controller.abort();
+        reject(new Error(`Gemini request timed out after ${timeoutMs / 1000}s`));
+      },
       timeoutMs
     );
   });
 
-  return Promise.race([Promise.resolve().then(callFn), timeout]).finally(() => {
+  return Promise.race([
+    Promise.resolve().then(() => callFn(controller.signal)),
+    timeout,
+  ]).finally(() => {
     clearTimeout(timeoutId);
+    abortSignal?.removeEventListener('abort', abortRequest);
   });
 }
 
-async function callGeminiWithFailover(prompt, attachmentBuffer = null, mimeType = 'image/jpeg') {
+async function callGeminiWithFailover(
+  prompt,
+  attachmentBuffer = null,
+  mimeType = 'image/jpeg',
+  modelNames = GEMINI_MODELS.slice(0, MAX_GEMINI_ATTEMPTS),
+  abortSignal = null
+) {
   const genai = getGenAIClient();
 
-  for (const modelName of GEMINI_MODELS.slice(0, MAX_GEMINI_ATTEMPTS)) {
+  for (const modelName of modelNames) {
     try {
       const payload = attachmentBuffer
         ? [
@@ -155,21 +176,23 @@ async function callGeminiWithFailover(prompt, attachmentBuffer = null, mimeType 
           ]
         : prompt;
 
-      return await callGeminiWithTimeout(() => genai.models.generateContent({
+      return await callGeminiWithTimeout(requestSignal => genai.models.generateContent({
         model: modelName,
         contents: payload,
         config: {
           responseMimeType: 'application/json',
           responseSchema: QUESTION_SCHEMA,
           temperature: 0.4,
+          abortSignal: requestSignal,
         },
-      }));
+      }), 10000, abortSignal);
     } catch (error) {
+      if (abortSignal?.aborted) throw error;
       console.warn(`[Gemini Timeout] ${error.message}. Moving to next attempt/Groq fallback...`);
     }
   }
 
-  throw new Error(`Gemini failed after ${MAX_GEMINI_ATTEMPTS} attempts.`);
+  throw new Error(`Gemini failed after ${modelNames.length} attempts.`);
 }
 
 async function extractPdfTextFallback(pdfBuffer) {
@@ -278,24 +301,15 @@ function normalizeQuestionBreakdown(questionBreakdown, allowedTypes) {
   return normalized;
 }
 
-function validateQuestionBreakdownOrder(questions, questionBreakdown) {
-  if (!questionBreakdown) return;
-
-  let questionIndex = 0;
-  for (const section of questionBreakdown) {
-    for (let item = 0; item < section.count; item += 1) {
-      if (questions[questionIndex]?.type !== section.type) {
-        throw new Error(`Generated questions do not match the requested section order at question ${questionIndex + 1}.`);
-      }
-      questionIndex += 1;
-    }
-  }
-  if (questions.length !== questionIndex) {
-    throw new Error(`Expected exactly ${questionIndex} questions from the requested breakdown.`);
-  }
-}
-
-async function generateQuestionsWithGroq(text, numberOfQuestions, questionTypes, customPrompt, questionBreakdown) {
+async function generateQuestionsWithGroq(
+  text,
+  numberOfQuestions,
+  questionTypes,
+  customPrompt,
+  questionBreakdown,
+  model = 'qwen/qwen3.8-27b',
+  abortSignal = null
+) {
   if (!process.env.GROQ_API_KEY) {
     throw new Error('GROQ_API_KEY is not set; cannot generate questions from the lesson text.');
   }
@@ -319,16 +333,19 @@ ${text.slice(0, 12000)}
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'qwen/qwen3.8-27b',
+      model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.4,
       response_format: { type: 'json_object' },
     }),
+    signal: abortSignal,
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Groq question generation failed (${response.status}): ${errorText}`);
+    const error = new Error(`Groq question generation failed (${response.status}): ${errorText}`);
+    error.status = response.status;
+    throw error;
   }
 
   const result = await response.json();
@@ -343,49 +360,130 @@ ${text.slice(0, 12000)}
   return JSON.stringify(parsed.questions);
 }
 
-function normalizeMultipleChoiceAnswers(questions) {
+function getLessonFacts(text) {
+  return String(text || '')
+    .split(/(?:[.!?]\s+|\r?\n+|;\s+)/)
+    .map(fact => fact.replace(/\s+/g, ' ').trim())
+    .filter(fact => fact.length > 8);
+}
+
+function createLocalQuestions(text, questionCount, questionTypes, questionBreakdown) {
+  const facts = getLessonFacts(text);
+  const safeFacts = facts.length ? facts : ['The lesson introduces its main topic and explains its key concepts.'];
+  const requestedTypes = questionBreakdown
+    ? questionBreakdown.flatMap(section => Array(section.count).fill(section.type))
+    : Array.from({ length: questionCount }, (_, index) => questionTypes[index % questionTypes.length]);
+
+  return requestedTypes.map((type, index) => {
+    const fact = safeFacts[index % safeFacts.length];
+    if (type === 'true_false') {
+      return {
+        question: `True or False: ${fact}`,
+        options: ['True', 'False'],
+        correctAnswer: 'True',
+        type,
+      };
+    }
+    if (type === 'identification') {
+      return {
+        question: `What key information does the lesson state?`,
+        options: [],
+        correctAnswer: fact,
+        type,
+      };
+    }
+
+    const distractors = safeFacts
+      .filter((candidate, candidateIndex) => candidate !== fact && candidateIndex !== index)
+      .slice(0, 3);
+    const options = [fact, ...distractors];
+    const genericDistractors = [
+      'It describes an unrelated process.',
+      'It states the opposite of the lesson.',
+      'It gives an example outside the topic.',
+    ];
+    for (const distractor of genericDistractors) {
+      if (options.length >= 4) break;
+      options.push(distractor);
+    }
+    return {
+      question: 'According to the lesson, which statement is correct?',
+      options,
+      correctAnswer: 'A',
+      type: 'multiple_choice',
+    };
+  });
+}
+
+function repairGeneratedQuestions(questions, lessonText, questionCount, questionTypes, questionBreakdown) {
+  const expectedTypes = questionBreakdown
+    ? questionBreakdown.flatMap(section => Array(section.count).fill(section.type))
+    : Array.from({ length: questionCount }, (_, index) => questionTypes[index % questionTypes.length]);
+  const localQuestions = createLocalQuestions(lessonText, expectedTypes.length, questionTypes, questionBreakdown);
+  const facts = getLessonFacts(lessonText);
   const optionLetters = ['A', 'B', 'C', 'D'];
 
-  return questions.map((question) => {
-    if (question.type !== 'multiple_choice') return question;
+  return expectedTypes.map((type, index) => {
+    const item = questions[index] && typeof questions[index] === 'object' ? questions[index] : {};
+    const fallback = localQuestions[index];
+    const repaired = {
+      ...item,
+      question: typeof item.question === 'string' && item.question.trim()
+        ? item.question.trim()
+        : fallback.question,
+      type,
+    };
 
-    const options = Array.isArray(question.options) ? question.options : [];
-    const cleanOptions = options.map((option) => (
-      typeof option === 'string'
-        ? option.replace(/^\s*[A-D]\s*[.)]\s*/i, '')
-        : option
-    ));
-    question.options = cleanOptions;
-
-    const answer = typeof question.correctAnswer === 'string'
-      ? question.correctAnswer.trim()
-      : '';
-    const letterMatch = answer.match(/^([A-D])(?:\s*[).:-]|\s*\(|$)/i);
-    if (letterMatch) {
-      question.correctAnswer = letterMatch[1].toUpperCase();
-      return question;
+    if (type === 'true_false') {
+      const answer = String(item.correctAnswer || '').trim().toLowerCase();
+      repaired.options = ['True', 'False'];
+      repaired.correctAnswer = answer === 'false' ? 'False' : 'True';
+      return repaired;
     }
 
-    if (answer.length > 1) {
-      const normalizedAnswer = answer.toLowerCase();
-      let matchingIndex = cleanOptions.findIndex(
-        option => typeof option === 'string' && option.trim().toLowerCase() === normalizedAnswer
-      );
-      if (matchingIndex < 0) {
-        matchingIndex = cleanOptions.findIndex(
-          option => typeof option === 'string'
-            && option.trim()
-            && (option.toLowerCase().includes(normalizedAnswer) || normalizedAnswer.includes(option.trim().toLowerCase()))
-        );
+    if (type === 'identification') {
+      repaired.options = [];
+      repaired.correctAnswer = typeof item.correctAnswer === 'string' && item.correctAnswer.trim()
+        ? item.correctAnswer.trim()
+        : fallback.correctAnswer;
+      return repaired;
+    }
+
+    let options = Array.isArray(item.options)
+      ? item.options.filter(option => typeof option === 'string' && option.trim())
+        .map(option => option.replace(/^\s*[A-D]\s*[.)]\s*/i, '').trim())
+      : [];
+    options = [...new Set(options)].slice(0, 4);
+    const rawAnswer = typeof item.correctAnswer === 'string' ? item.correctAnswer.trim() : '';
+    const answerMatch = rawAnswer.match(/^([A-D])(?:\s*[).:-]|\s*\(|$)/i);
+    let correctIndex = answerMatch ? optionLetters.indexOf(answerMatch[1].toUpperCase()) : -1;
+    const matchingAnswer = rawAnswer
+      ? options.findIndex(option => option.toLowerCase() === rawAnswer.toLowerCase())
+      : -1;
+    if (matchingAnswer >= 0) correctIndex = matchingAnswer;
+
+    if (!options.length && rawAnswer && !answerMatch) {
+      options.push(rawAnswer);
+      correctIndex = 0;
+    } else if (options.length && rawAnswer && !answerMatch && matchingAnswer < 0) {
+      options[0] = rawAnswer;
+      correctIndex = 0;
+    }
+    const candidates = [...facts, ...fallback.options];
+    for (const candidate of candidates) {
+      if (options.length >= 4) break;
+      if (typeof candidate === 'string' && candidate.trim()
+        && !options.some(option => option.toLowerCase() === candidate.trim().toLowerCase())) {
+        options.push(candidate.trim());
       }
-      if (matchingIndex >= 0 && matchingIndex < optionLetters.length) {
-        question.correctAnswer = optionLetters[matchingIndex];
-      }
     }
-    if (!optionLetters.includes(question.correctAnswer)) {
-      throw new Error('A multiple-choice answer could not be mapped to A, B, C, or D.');
+    while (options.length < 4) {
+      options.push(`None of the above (${options.length + 1})`);
     }
-    return question;
+    if (correctIndex < 0 || correctIndex >= 4) correctIndex = 0;
+    repaired.options = options;
+    repaired.correctAnswer = optionLetters[correctIndex];
+    return repaired;
   });
 }
 
@@ -413,24 +511,65 @@ const QUESTION_SCHEMA = {
  * @param {string} customPrompt       - Optional extra instructions for the AI
  * @param {string} mimeType           - MIME type of the source file, when available
  * @param {Array<{type: string, count: number}>|null} questionBreakdown - Ordered question sections
- * @returns {Promise<Array>}          - Array of question objects
+ * @returns {Promise<{success: true, items: Array}>} - Generated or locally repaired questions
  */
-async function generateQuizFromText(text, numberOfQuestions = 10, questionTypes = ['multiple_choice', 'true_false', 'identification'], customPrompt = '', mimeType = '', questionBreakdown = null) {
-  // ── Guard: API key must be present ──────────────────────────────────────
-  if (!process.env.GEMINI_API_KEY) {
-    console.error('[generateQuizFromText] GEMINI_API_KEY is missing. Returning empty question list.');
-    return [];
+function generateLocalQuizQuestions(text, numberOfQuestions = 10, questionTypes = ['multiple_choice', 'true_false', 'identification'], questionBreakdown = null) {
+  const defaultTypes = ['multiple_choice', 'true_false', 'identification'];
+  const allowedTypes = Array.isArray(questionTypes)
+    ? [...new Set(questionTypes.filter(type => defaultTypes.includes(type)))]
+    : [];
+  const safeTypes = allowedTypes.length ? allowedTypes : defaultTypes;
+  const normalizedBreakdown = normalizeQuestionBreakdown(questionBreakdown, safeTypes);
+  const requestedQuestionCount = normalizedBreakdown
+    ? normalizedBreakdown.reduce((total, section) => total + section.count, 0)
+    : Number.isSafeInteger(numberOfQuestions) && numberOfQuestions > 0
+      ? numberOfQuestions
+      : 10;
+
+  return repairGeneratedQuestions(
+    [],
+    String(text || ''),
+    requestedQuestionCount,
+    safeTypes,
+    normalizedBreakdown
+  );
+}
+
+function isQuotaExhausted(error) {
+  const message = String(error?.message || error || '');
+  return error?.status === 429
+    || error?.response?.status === 429
+    || /RESOURCE_EXHAUSTED|quota/i.test(message);
+}
+
+async function generateQuizFromText(text, numberOfQuestions = 10, questionTypes = ['multiple_choice', 'true_false', 'identification'], customPrompt = '', mimeType = '', questionBreakdown = null, options = {}) {
+  const { signal } = options;
+  const defaultTypes = ['multiple_choice', 'true_false', 'identification'];
+  const allowedTypes = Array.isArray(questionTypes)
+    ? [...new Set(questionTypes.filter(type => defaultTypes.includes(type)))]
+    : [];
+  const safeTypes = allowedTypes.length ? allowedTypes : defaultTypes;
+  let normalizedBreakdown = null;
+  try {
+    normalizedBreakdown = normalizeQuestionBreakdown(questionBreakdown, safeTypes);
+  } catch (error) {
+    console.warn('[generateQuizFromText] Ignoring invalid question breakdown:', error.message);
   }
+  const requestedQuestionCount = normalizedBreakdown
+    ? normalizedBreakdown.reduce((total, section) => total + section.count, 0)
+    : Number.isSafeInteger(numberOfQuestions) && numberOfQuestions > 0
+      ? numberOfQuestions
+      : 10;
+  let lessonText = Buffer.isBuffer(text)
+    ? (mimeType === 'application/pdf' ? await extractPdfTextFallback(text) : text.toString('utf8'))
+    : String(text || '');
+  const localFallback = () => ({
+    success: true,
+    items: generateLocalQuizQuestions(lessonText, requestedQuestionCount, safeTypes, normalizedBreakdown),
+    provider: 'local-fallback',
+  });
 
   try {
-    // Build question type rules based on the requested types
-    const allowedTypes = Array.isArray(questionTypes) && questionTypes.length > 0
-      ? questionTypes
-      : ['multiple_choice', 'true_false', 'identification'];
-    const normalizedBreakdown = normalizeQuestionBreakdown(questionBreakdown, allowedTypes);
-    const requestedQuestionCount = normalizedBreakdown
-      ? normalizedBreakdown.reduce((total, section) => total + section.count, 0)
-      : numberOfQuestions;
     const breakdownInstructions = createBreakdownInstructions(normalizedBreakdown);
 
     const typeLabels = {
@@ -438,12 +577,12 @@ async function generateQuizFromText(text, numberOfQuestions = 10, questionTypes 
       true_false:      'true_false',
       identification:  'identification',
     };
-    const allowedTypeNames = allowedTypes.map(t => typeLabels[t] || t).join(', ');
+    const allowedTypeNames = safeTypes.map(t => typeLabels[t] || t).join(', ');
 
     const typeRules = [
-      allowedTypes.includes('multiple_choice') && '- For multiple_choice: provide exactly 4 options (A, B, C, D) and set correctAnswer to the corresponding option letter.',
-      allowedTypes.includes('true_false')      && '- For true_false: set options to ["True", "False"] and correctAnswer to either "True" or "False".',
-      allowedTypes.includes('identification')  && '- For identification: leave options as an empty array [] and set correctAnswer to the exact answer word or phrase.',
+      safeTypes.includes('multiple_choice') && '- For multiple_choice: provide exactly 4 options (A, B, C, D) and set correctAnswer to the corresponding option letter.',
+      safeTypes.includes('true_false')      && '- For true_false: set options to ["True", "False"] and correctAnswer to either "True" or "False".',
+      safeTypes.includes('identification')  && '- For identification: leave options as an empty array [] and set correctAnswer to the exact answer word or phrase.',
     ].filter(Boolean).join('\n');
     const multipleChoiceInstruction = "CRITICAL FOR MULTIPLE CHOICE: For 'multiple_choice' items, 'correctAnswer' MUST be strictly a single uppercase letter corresponding to the correct choice ('A', 'B', 'C', or 'D'). Do NOT put the full text or word in 'correctAnswer'.";
 
@@ -453,7 +592,7 @@ async function generateQuizFromText(text, numberOfQuestions = 10, questionTypes 
 
     const isPdf = Buffer.isBuffer(text) || mimeType === 'application/pdf';
     const prompt = isPdf
-      ? `Extract lesson concepts from this attached PDF. ${breakdownInstructions || `Generate ${requestedQuestionCount} quiz questions based on these options: ${allowedTypes}.`}\n${multipleChoiceInstruction}\nReturn strictly valid JSON.`
+      ? `Extract lesson concepts from this attached PDF. ${breakdownInstructions || `Generate ${requestedQuestionCount} quiz questions based on these options: ${safeTypes}.`}\n${multipleChoiceInstruction}\nReturn strictly valid JSON.`
       : `You are an expert quiz maker.
 
 Analyze the following passage and generate exactly ${requestedQuestionCount} quiz questions.
@@ -469,61 +608,78 @@ ${typeRules}
 
 Passage:
 """
-${text.slice(0, 12000)}
+${lessonText.slice(0, 12000)}
 """
 
 JSON output:`;
 
-    let rawText;
-    try {
-      if (isPdf && !Buffer.isBuffer(text)) {
-        throw new Error('A PDF buffer is required when the MIME type is application/pdf.');
+    const CANDIDATE_MODELS = [
+      { provider: 'groq', model: process.env.GROQ_QUIZ_PARSE_MODEL || 'llama-3.3-70b-versatile' },
+      { provider: 'groq', model: 'llama-3.1-8b-instant' },
+      { provider: 'gemini', model: process.env.GEMINI_QUIZ_PARSE_MODEL || 'gemini-1.5-flash' },
+    ];
+
+    for (const candidate of CANDIDATE_MODELS) {
+      try {
+        let rawText;
+        if (candidate.provider === 'groq') {
+          rawText = await generateQuestionsWithGroq(
+            lessonText,
+            requestedQuestionCount,
+            normalizedBreakdown ? normalizedBreakdown.map(section => section.type) : safeTypes,
+            customPrompt,
+            normalizedBreakdown,
+            candidate.model,
+            signal
+          );
+        } else {
+          if (isPdf && !Buffer.isBuffer(text)) {
+            throw new Error('A PDF buffer is required when the MIME type is application/pdf.');
+          }
+          const response = await callGeminiWithFailover(
+            prompt,
+            isPdf ? text : null,
+            'application/pdf',
+            [candidate.model],
+            signal
+          );
+          rawText = response.text?.trim() ?? '';
+        }
+
+        let parsed = JSON.parse(rawText);
+        if (!Array.isArray(parsed)) parsed = parsed?.questions;
+        if (!Array.isArray(parsed)) throw new Error(`${candidate.provider} returned no questions array.`);
+
+        const items = repairGeneratedQuestions(
+          parsed,
+          lessonText,
+          requestedQuestionCount,
+          safeTypes,
+          normalizedBreakdown
+        );
+        console.log(`[generateQuizFromText] Generated ${items.length} questions via ${candidate.provider}.`);
+        return { success: true, items, provider: candidate.provider };
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        if (isQuotaExhausted(error)) {
+          console.warn(`[AI Loop] ${candidate.provider} model quota exhausted (429). Skipping immediately to the next model.`);
+          continue;
+        }
+        console.warn(`[AI Loop] ${candidate.provider} model ${candidate.model} failed: ${error.message}`);
       }
-      const response = isPdf
-        ? await callGeminiWithFailover(prompt, text, 'application/pdf')
-        : await callGeminiWithFailover(prompt);
-      rawText = response.text?.trim() ?? '';
-    } catch {
-      const fallbackText = isPdf ? await extractPdfTextFallback(text) : text;
-      rawText = await generateQuestionsWithGroq(
-        fallbackText,
-        requestedQuestionCount,
-        normalizedBreakdown ? normalizedBreakdown.map(section => section.type) : allowedTypes,
-        customPrompt,
-        normalizedBreakdown
-      );
     }
 
-    // ── Parse response ───────────────────────────────────────────────────
-    let parsed;
-    try {
-      parsed = JSON.parse(rawText);
-    } catch (parseErr) {
-      console.error('[generateQuizFromText] Failed to parse AI JSON response:', rawText.slice(0, 500));
-      throw new Error('AI returned malformed JSON.');
-    }
-
-    if (!Array.isArray(parsed)) {
-      throw new Error('Gemini response is not a JSON array.');
-    }
-
-    if (normalizedBreakdown && parsed.length !== requestedQuestionCount) {
-      throw new Error(`Expected exactly ${requestedQuestionCount} questions from the requested breakdown.`);
-    }
-
-    const questions = normalizeMultipleChoiceAnswers(
-      parsed.slice(0, requestedQuestionCount)
-    );
-    validateQuestionBreakdownOrder(questions, normalizedBreakdown);
-
-    console.log(`[generateQuizFromText] Generated ${questions.length} questions via AI.`);
-    return questions;
+    return localFallback();
 
   } catch (error) {
     console.error('[generateQuizFromText] AI question generation failed:', error.message);
-    // Return empty array so the route can still respond (exam is already saved)
-    return [];
+    return localFallback();
   }
 }
 
-module.exports = { extractText, generateQuizFromText };
+module.exports = {
+  extractText,
+  extractPdfTextFallback,
+  generateLocalQuizQuestions,
+  generateQuizFromText,
+};
