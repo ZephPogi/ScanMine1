@@ -805,15 +805,23 @@ app.post('/api/generate-quiz', upload.single('lessonFile'), async (req, res) => 
     );
     const examId = examRes.rows[0].id;
 
-    let questions = [];
+    let generatedQuestions = [];
     if (file?.mimetype === 'application/pdf') {
       const generated = await generateQuizFromText(file.buffer, requestedQuestionCount, questionTypes, customPrompt || '', file.mimetype, questionBreakdown);
-      questions = generated.items;
+      generatedQuestions = generated.items;
     } else if (text) {
       const generated = await generateQuizFromText(text, requestedQuestionCount, questionTypes, customPrompt || '', '', questionBreakdown);
-      questions = generated.items;
+      generatedQuestions = generated.items;
     }
-    res.json({ success: true, message: 'Exam created successfully', examId, items: questions, questions });
+    res.json({
+      success: true,
+      message: 'Exam created successfully',
+      examId,
+      items: generatedQuestions,
+      questions: generatedQuestions,
+      count: generatedQuestions.length,
+      provider: 'ai'
+    });
   } catch (error) {
     console.error('QUIZ GENERATION ERROR:', error);
     res.status(500).json({ error: 'Failed to create exam' });

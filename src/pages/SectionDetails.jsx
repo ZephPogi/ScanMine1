@@ -129,6 +129,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
   const [students, setStudents] = useState([]);
   const [exams, setExams] = useState([]);
   const [selectedQuizIds, setSelectedQuizIds] = useState([]);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [showAttachModal, setShowAttachModal] = useState(false);
   const [showExamDetails, setShowExamDetails] = useState(null);
   const [examQuestions, setExamQuestions] = useState({ manual: [], generated: [] });
@@ -401,45 +402,61 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
     }
   };
 
-  const handleDeleteSingleQuiz = async (quizId) => {
-    if (!window.confirm('Are you sure you want to delete this quiz? All student results for this quiz will also be deleted.')) return;
-    try {
-      const response = await fetch(`/api/quizzes/${quizId}`, { method: 'DELETE' });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to delete quiz.');
-      }
-
-      setSelectedQuizIds(previous => previous.filter(id => String(id) !== String(quizId)));
-      if (String(showExamDetails?.id) === String(quizId)) setShowExamDetails(null);
-      await fetchExams();
-    } catch (error) {
-      console.error('Error deleting quiz:', error);
-      showAlert('Delete failed', error.message || 'Failed to delete quiz.', 'error');
-    }
+  const handleDeleteSingleQuiz = (quizId) => {
+    const quiz = exams.find(item => String(item.id) === String(quizId));
+    setDeleteTarget({
+      type: 'single',
+      id: String(quizId),
+      name: quiz?.title || 'Untitled Quiz'
+    });
   };
 
-  const handleDeleteSelectedQuizzes = async () => {
-    const quizIds = selectedQuizIds;
-    if (!quizIds.length) return;
-    const quizLabel = quizIds.length === 1 ? 'quiz' : 'quizzes';
-    if (!window.confirm(`Are you sure you want to delete ${quizIds.length} selected ${quizLabel}? All related questions, answer keys, and student results will also be deleted.`)) return;
+  const handleDeleteSelectedQuizzes = () => {
+    if (!selectedQuizIds.length) return;
+    const quizLabel = selectedQuizIds.length === 1 ? 'quiz' : 'quizzes';
+    setDeleteTarget({
+      type: 'bulk',
+      id: selectedQuizIds.map(String).join(','),
+      name: `${selectedQuizIds.length} selected ${quizLabel}`
+    });
+  };
+
+  const confirmDeleteTarget = async () => {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeleteTarget(null);
 
     try {
+      if (target.type === 'single') {
+        const response = await fetch(`/api/quizzes/${encodeURIComponent(target.id)}`, { method: 'DELETE' });
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || 'Failed to delete quiz.');
+        }
+
+        setSelectedQuizIds(previous => previous.filter(id => String(id) !== target.id));
+        if (String(showExamDetails?.id) === target.id) setShowExamDetails(null);
+        await fetchExams();
+        return;
+      }
+
+      const quizIds = target.id.split(',');
       const response = await fetch('/api/quizzes/bulk-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quizIds })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to delete selected quizzes.');
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete selected quizzes.');
+      }
 
       setSelectedQuizIds([]);
-      if (quizIds.some(id => String(id) === String(showExamDetails?.id))) setShowExamDetails(null);
+      if (quizIds.some(id => id === String(showExamDetails?.id))) setShowExamDetails(null);
       await fetchExams();
     } catch (error) {
-      console.error('Error deleting selected quizzes:', error);
-      showAlert('Bulk delete failed', error.message || 'Failed to delete selected quizzes.', 'error');
+      console.error('Error deleting quiz selection:', error);
+      showAlert('Delete failed', error.message || 'Failed to delete quiz.', 'error');
     }
   };
 
@@ -746,22 +763,12 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
         throw new Error(data?.error || 'Quiz generation failed. Please try again.');
       }
 
-      const questions = Array.isArray(data?.questions)
-        ? Array.from(new Map(data.questions.map(question => [
-          JSON.stringify([
-            question.type,
-            question.question || question.question_text,
-            question.correctAnswer || question.answer_text,
-            question.options
-          ]),
-          question
-        ])).values())
-        : [];
-      if (questions.length === 0) {
+      const generatedItems = data?.items || data?.questions || data?.data || [];
+      if (!Array.isArray(generatedItems) || generatedItems.length === 0) {
         throw new Error('No questions were generated. Try a different PDF or prompt.');
       }
 
-      setGeneratedQuestions(questions);
+      setGeneratedQuestions(generatedItems);
       setGeneratedExamId(data?.examId || null);
     } catch (error) {
       console.error('Quiz generation error:', error);
@@ -1579,7 +1586,18 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
 
       {showExamDetails && (
         <div className="modal-overlay" onClick={() => setShowExamDetails(null)}>
-          <div className="modal-content details-modal exam-details-modal" onClick={e => e.stopPropagation()}>
+          <div
+            className="modal-content details-modal max-w-4xl w-[95vw] max-h-[90vh] flex flex-col overflow-hidden"
+            style={{
+              width: '95vw',
+              maxWidth: '56rem',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
             <div className="exam-details-header">
               <div className="exam-details-heading">
                 <div>
@@ -1667,9 +1685,20 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
               </div>
             </div>
 
-            <div className="modal-body exam-details-grid">
+            <div
+              className="modal-body exam-details-grid grid grid-cols-1 md:grid-cols-2 gap-6 p-6 overflow-y-auto"
+              style={{
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 20rem), 1fr))',
+                gap: '1.5rem',
+                padding: '1.5rem',
+                overflowY: 'auto'
+              }}
+            >
               {/* Left Column: Manual Answer Key */}
-              <div className="exam-details-left">
+              <div
+                className="exam-details-left"
+                style={{ minHeight: '250px', maxHeight: '450px', overflowY: 'auto', paddingRight: '0.5rem' }}
+              >
                 <div className="details-section exam-detail-card">
                   <div className="exam-key-heading">
                     <h4>Manual Answer Key ({examQuestions?.manual?.length || 0})</h4>
@@ -1734,14 +1763,47 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                               </label>
                             </div>
                           ) : (
-                            <>
-                              <p><strong>{idx + 1}. {a.question_text || `Question ${idx + 1}`}</strong></p>
-                              <p className="ans-text" style={{ color: '#059669', fontWeight: 'bold' }}>
-                                Answer: {a.type === 'multiple_choice' || (Array.isArray(a.options) && a.options.length > 0)
-                                  ? getMultipleChoiceDetails({ ...a, correctAnswer: a.correct_answer }).answer
-                                  : cleanAnswer(a.correct_answer) || 'N/A'}
-                              </p>
-                            </>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                              <span
+                                aria-label={`Question ${idx + 1}`}
+                                style={{
+                                  flex: '0 0 32px',
+                                  height: '32px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  borderRadius: '10px',
+                                  background: '#e8f4ef',
+                                  color: '#176b55',
+                                  fontWeight: 800
+                                }}
+                              >
+                                {idx + 1}
+                              </span>
+                              <div style={{ minWidth: 0, flex: 1 }}>
+                                <p style={{ margin: '2px 0 8px', fontWeight: 650 }}>
+                                  {a.question_text || `Question ${idx + 1}`}
+                                </p>
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    maxWidth: '100%',
+                                    padding: '5px 10px',
+                                    borderRadius: '999px',
+                                    background: '#ecfdf5',
+                                    color: '#047857',
+                                    fontSize: '0.85rem',
+                                    fontWeight: 700,
+                                    overflowWrap: 'anywhere'
+                                  }}
+                                >
+                                  Answer: {a.type === 'multiple_choice' || (Array.isArray(a.options) && a.options.length > 0)
+                                    ? getMultipleChoiceDetails({ ...a, correctAnswer: a.correct_answer }).answer
+                                    : cleanAnswer(a.correct_answer) || 'N/A'}
+                                </span>
+                              </div>
+                            </div>
                           )}
                         </div>
                       ) : null)
@@ -1754,7 +1816,10 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
               </div>
 
               {/* Right Column: Student Progress */}
-              <section className="exam-detail-card exam-progress-card">
+              <section
+                className="exam-detail-card exam-progress-card"
+                style={{ minHeight: '250px', maxHeight: '450px', overflowY: 'auto', paddingRight: '0.5rem' }}
+              >
                 <div className="exam-card-heading">
                   <div>
                     <span className="exam-card-kicker">CLASS ACTIVITY</span>
@@ -1949,6 +2014,56 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                   </div>
                 </div>
               </section>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="custom-dialog-overlay" onClick={() => setDeleteTarget(null)}>
+          <div
+            className="custom-dialog-card"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-quiz-title"
+            aria-describedby="delete-quiz-message"
+            onClick={event => event.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '12px',
+                  background: '#fee2e2',
+                  color: '#b91c1c'
+                }}
+              >
+                <Trash2 size={19} />
+              </span>
+              <h2 id="delete-quiz-title" className="custom-dialog-title">
+                {deleteTarget.type === 'bulk' ? 'Delete selected quizzes?' : 'Delete quiz?'}
+              </h2>
+            </div>
+            <p id="delete-quiz-message" className="custom-dialog-message">
+              Are you sure you want to delete '{deleteTarget.name}'? All associated student grades will be permanently deleted.
+            </p>
+            <div className="custom-dialog-actions">
+              <button type="button" className="custom-dialog-cancel" onClick={() => setDeleteTarget(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="custom-dialog-confirm"
+                style={{ borderColor: '#dc2626', background: '#dc2626' }}
+                onClick={confirmDeleteTarget}
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>
