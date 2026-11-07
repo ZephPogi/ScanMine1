@@ -40,8 +40,10 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
     try {
       let pdfParse;
       try {
-        const rawPdfParse = require('pdf-parse');
-        pdfParse = typeof rawPdfParse === 'function' ? rawPdfParse : (rawPdfParse.default || rawPdfParse);
+        const _pdfParseReq = require('pdf-parse');
+        pdfParse = typeof _pdfParseReq === 'function'
+          ? _pdfParseReq
+          : (_pdfParseReq.default || _pdfParseReq.PDFParse);
       } catch (e) {
         console.error('pdf-parse initialization failed:', e);
       }
@@ -110,7 +112,19 @@ async function extractText(filePath, mimetype, fileBuffer = null) {
  * Returns an initialised GoogleGenAI client.
  * Throws a descriptive error early if the API key is absent.
  */
-const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
+const GEMINI_MODELS = [
+  process.env.GEMINI_QUIZ_PARSE_MODEL,
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash-latest',
+].filter(Boolean);
+const GROQ_MODELS = [
+  process.env.GROQ_QUIZ_PARSE_MODEL,
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+  'llama3-70b-8192',
+  'mixtral-8x7b-32768',
+].filter(Boolean).map(model => model.trim().replace(/^['"]|['"]$/g, '').trim()).filter(Boolean);
 const MAX_GEMINI_ATTEMPTS = 2;
 
 function getGenAIClient() {
@@ -269,7 +283,10 @@ async function extractPdfTextFallback(pdfBuffer) {
 
   let parserTimeoutId;
   try {
-    const pdfParse = require('pdf-parse');
+    const _pdfParseReq = require('pdf-parse');
+    const pdfParse = typeof _pdfParseReq === 'function'
+      ? _pdfParseReq
+      : (_pdfParseReq.default || _pdfParseReq.PDFParse);
     const parsePromise = pdfParse(pdfBuffer, { max: 15 });
     const parseTimeout = new Promise((_, reject) => {
       parserTimeoutId = setTimeout(() => reject(new Error('PDF parsing exceeded 1000ms.')), 1000);
@@ -652,9 +669,8 @@ ${lessonText.slice(0, 12000)}
 JSON output:`;
 
     const CANDIDATE_MODELS = [
-      { provider: 'groq', model: process.env.GROQ_QUIZ_PARSE_MODEL || 'llama-3.3-70b-versatile' },
-      { provider: 'groq', model: 'llama-3.1-8b-instant' },
-      { provider: 'gemini', model: process.env.GEMINI_QUIZ_PARSE_MODEL || 'gemini-1.5-flash' },
+      ...GROQ_MODELS.map(model => ({ provider: 'groq', model })),
+      ...GEMINI_MODELS.map(model => ({ provider: 'gemini', model })),
     ];
 
     for (const candidate of CANDIDATE_MODELS) {
