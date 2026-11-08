@@ -322,56 +322,58 @@ const StudentViewClass = () => {
               {exams.length} {exams.length === 1 ? 'assessment' : 'assessments'}
             </span>
           </div>
-          <div className="student-quiz-grid">
-            {exams.length === 0 ? (
-              <p className="submission-exam-empty">No exams are assigned to this class yet.</p>
-            ) : exams.map((exam, index) => {
-              const isOpen = isExamSubmissionOpen(exam, submissionClockNow);
-              const deadlineTime = exam.submission_deadline
-                ? new Date(exam.submission_deadline).getTime()
-                : null;
-              return (
-                <article className="student-quiz-card student-assessment-action" key={exam.id}>
-                  <div className="student-quiz-number">
-                    <span>Assessment</span>
-                    <strong>{String(index + 1).padStart(2, '0')}</strong>
-                  </div>
-                  <div className="student-quiz-info">
-                    <h3 className="quiz-title">{exam.title}</h3>
-                    {isOpen ? (
-                      <>
-                        <span className="status-badge open student-open-status">
-                          <span className="status-dot" aria-hidden="true" />
-                          SUBMISSIONS OPEN
-                        </span>
-                        {deadlineTime && (
-                          <span className="student-submission-countdown">
-                            Closes in {formatSubmissionCountdown(deadlineTime - submissionClockNow)}
+          <div className="student-quiz-scroll-container">
+            <div className="student-quiz-grid">
+              {exams.length === 0 ? (
+                <p className="submission-exam-empty">No exams are assigned to this class yet.</p>
+              ) : exams.map((exam, index) => {
+                const isOpen = isExamSubmissionOpen(exam, submissionClockNow);
+                const deadlineTime = exam.submission_deadline
+                  ? new Date(exam.submission_deadline).getTime()
+                  : null;
+                return (
+                  <article className="student-quiz-card student-assessment-action" key={exam.id}>
+                    <div className="student-quiz-number">
+                      <span>Assessment</span>
+                      <strong>{String(index + 1).padStart(2, '0')}</strong>
+                    </div>
+                    <div className="student-quiz-info">
+                      <h3 className="quiz-title">{exam.title}</h3>
+                      {isOpen ? (
+                        <>
+                          <span className="status-badge open student-open-status">
+                            <span className="status-dot" aria-hidden="true" />
+                            SUBMISSIONS OPEN
                           </span>
-                        )}
-                      </>
-                    ) : (
-                      <span className="status-badge closed student-closed-status">Submission Closed</span>
-                    )}
-                  </div>
-                  <div className="student-quiz-actions">
-                    <button
-                      type="button"
-                      className="student-scan-btn"
-                      disabled={!isOpen}
-                      onClick={() => {
-                        setSelectedExamId(String(exam.id));
-                        setScanError('');
-                        setShowScanModal(true);
-                      }}
-                    >
-                      <Camera size={17} />
-                      Scan / Upload Paper
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
+                          {deadlineTime && (
+                            <span className="student-submission-countdown">
+                              Closes in {formatSubmissionCountdown(deadlineTime - submissionClockNow)}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="status-badge closed student-closed-status">Submission Closed</span>
+                      )}
+                    </div>
+                    <div className="student-quiz-actions">
+                      <button
+                        type="button"
+                        className="student-scan-btn"
+                        disabled={!isOpen}
+                        onClick={() => {
+                          setSelectedExamId(String(exam.id));
+                          setScanError('');
+                          setShowScanModal(true);
+                        }}
+                      >
+                        <Camera size={17} />
+                        Scan / Upload Paper
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </div>
         </section>
 

@@ -537,12 +537,6 @@ code {
   }
 }
 
-@media (min-width: 1024px) {
-  .student-quiz-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 767px) {
   .dashboard-content.student-dashboard-page,
   .section-container.student-view-container.student-class-page {
@@ -657,4 +651,45 @@ code {
     background: #3b82f6;
     color: #ffffff;
   }
+}
+
+@media (min-width: 768px) {
+  .section-container.student-view-container.student-class-page {
+    box-sizing: border-box;
+    width: calc(100% - 260px);
+    max-width: none;
+    min-width: 0;
+    margin-left: 260px;
+    margin-right: 0;
+  }
+}
+
+@media (min-width: 1025px) {
+  .student-quiz-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.student-quiz-scroll-container {
+  max-height: 520px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 8px;
+  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-width: thin;
+}
+
+.student-quiz-scroll-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.student-quiz-scroll-container::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: #cbd5e1;
+}
+
+.student-quiz-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
 }
