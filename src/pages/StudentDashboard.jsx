@@ -1,6 +1,28 @@
 import { useState, useEffect } from 'react';
-import { BookOpen, TrendingUp, CheckCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { BookOpen, TrendingUp, CheckCircle, LayoutDashboard, UserRound, LogOut } from 'lucide-react';
 import './StudentDashboard.css';
+
+const StudentMobileNav = () => (
+  <nav className="student-mobile-nav md:hidden" aria-label="Student navigation">
+    <Link to="/student-dashboard" className="student-mobile-nav-item active" aria-current="page">
+      <LayoutDashboard size={19} />
+      <span>Dashboard</span>
+    </Link>
+    <Link to="/student-classes" className="student-mobile-nav-item">
+      <BookOpen size={19} />
+      <span>My Classes</span>
+    </Link>
+    <Link to="/student-profile" className="student-mobile-nav-item">
+      <UserRound size={19} />
+      <span>Profile</span>
+    </Link>
+    <Link to="/login" className="student-mobile-nav-item">
+      <LogOut size={19} />
+      <span>Logout</span>
+    </Link>
+  </nav>
+);
 
 const StudentDashboard = () => {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -41,83 +63,86 @@ const StudentDashboard = () => {
   const formatDate = (iso) =>
     new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-  const getGradeInfo = (score, total) => {
-    if (!total || total === '0') return { label: '—', cls: '' };
-    const pct = (score / total) * 100;
-    if (pct >= 90) return { label: 'A', cls: 'grade-badge-a' };
-    if (pct >= 80) return { label: 'B', cls: 'grade-badge-b' };
-    if (pct >= 70) return { label: 'C', cls: 'grade-badge-c' };
-    return { label: 'F', cls: 'grade-badge-f' };
-  };
-
   return (
-    <main className="dashboard-content">
-      <header className="dashboard-header">
-        <div>
-          <h1>Welcome back, {user.name || 'Student'}</h1>
-          <p>Here is a summary of your academic activity.</p>
-        </div>
-        <div className="student-avatar-circle">{avatar}</div>
-      </header>
-
-      {/* Stats Grid */}
-      <section className="stats-grid">
-        {stats.map(stat => {
-          const Icon = stat.icon;
-          return (
-            <div key={stat.id} className="stat-card">
-              <div className="stat-icon"><Icon size={20} strokeWidth={1.75} /></div>
-              <div className="stat-info">
-                <span className="stat-label">{stat.label}</span>
-                <h2 className="stat-value">{loading ? '—' : stat.value}</h2>
-              </div>
+    <>
+      <main className="dashboard-content student-dashboard-page">
+        <header className="dashboard-header student-dashboard-header">
+          <div className="student-mobile-greeting">
+            <div>
+              <span className="student-greeting-eyebrow">Student Portal</span>
+              <h1>Welcome back, {user.name || 'Student'}</h1>
             </div>
-          );
-        })}
-      </section>
+            <div className="student-mobile-avatar" aria-label={`Initials: ${avatar}`}>{avatar}</div>
+          </div>
+          <div className="dashboard-heading">
+            <h1>Welcome back, {user.name || 'Student'}</h1>
+            <p>Here is a summary of your academic activity.</p>
+          </div>
+          <div className="student-avatar-circle">{avatar}</div>
+        </header>
 
-      {/* Recent Submissions Table — full width */}
-      <section className="dashboard-card table-container dashboard-full-card">
-        <div className="card-header">
-          <h3>Recent Submissions</h3>
-        </div>
-        <div className="table-responsive-wrapper">
-          <table className="dashboard-table">
-            <thead>
-              <tr>
-                <th>Exam Title</th>
-                <th>Date Submitted</th>
-                <th>Score</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
+        <section className="stats-grid student-stats-grid" aria-label="Academic summary">
+          {stats.map(stat => {
+            const Icon = stat.icon;
+            return (
+              <article key={stat.id} className="stat-card student-stat-card">
+                <div className="stat-icon"><Icon size={20} strokeWidth={1.75} /></div>
+                <div className="stat-info">
+                  <span className="stat-label">{stat.label}</span>
+                  <h2 className="stat-value">{loading ? '—' : stat.value}</h2>
+                </div>
+              </article>
+            );
+          })}
+        </section>
+
+        <section className="dashboard-card table-container dashboard-full-card student-submissions-card">
+          <div className="card-header">
+            <div>
+              <span className="student-section-eyebrow">Your activity</span>
+              <h3>Recent Submissions</h3>
+            </div>
+          </div>
+          <div className="table-responsive-wrapper">
+            <table className="dashboard-table student-submissions-table">
+              <thead>
                 <tr>
-                  <td colSpan="4" className="table-empty-state">Loading your submissions...</td>
+                  <th>Exam Title</th>
+                  <th>Date Submitted</th>
+                  <th>Score</th>
                 </tr>
-              ) : dashData.recentSubmissions.length === 0 ? (
-                <tr>
-                  <td colSpan="4" className="table-empty-state">
-                    No submissions yet. Scan your first answer sheet to get started.
-                  </td>
-                </tr>
-              ) : (
-                dashData.recentSubmissions.map(sub => {
-                  const { label, cls } = getGradeInfo(sub.score, sub.total_questions);
-                  return (
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan="3" className="table-empty-state">Loading your submissions...</td>
+                  </tr>
+                ) : dashData.recentSubmissions.length === 0 ? (
+                  <tr>
+                    <td colSpan="3" className="table-empty-state">
+                      No submissions yet. Scan your first answer sheet to get started.
+                    </td>
+                  </tr>
+                ) : (
+                  dashData.recentSubmissions.map(sub => (
                     <tr key={sub.id}>
                       <td className="fw-600">{sub.exam_title}</td>
                       <td className="text-muted">{formatDate(sub.created_at)}</td>
-                      <td>{sub.points_earned ?? Math.round(sub.score) ?? 0} / {sub.total_items ?? sub.total_questions ?? '?'}</td>
+                      <td>
+                        <span className="student-dashboard-score">
+                          {sub.points_earned ?? Math.round(sub.score) ?? 0} / {sub.total_items ?? sub.total_questions ?? '?'}
+                        </span>
+                      </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </main>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+      <StudentMobileNav />
+    </>
   );
 };
 

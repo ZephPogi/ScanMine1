@@ -1,10 +1,31 @@
 import imageCompression from 'browser-image-compression';
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, X, CheckCircle, Clock } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Camera, X, CheckCircle, Clock, LayoutDashboard, BookOpen, UserRound, LogOut } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import './StudentViewClass.css';
 import './SectionDetails.css';
+
+const StudentMobileNav = () => (
+  <nav className="student-mobile-nav md:hidden" aria-label="Student navigation">
+    <Link to="/student-dashboard" className="student-mobile-nav-item">
+      <LayoutDashboard size={19} />
+      <span>Dashboard</span>
+    </Link>
+    <Link to="/student-classes" className="student-mobile-nav-item active" aria-current="page">
+      <BookOpen size={19} />
+      <span>My Classes</span>
+    </Link>
+    <Link to="/student-profile" className="student-mobile-nav-item">
+      <UserRound size={19} />
+      <span>Profile</span>
+    </Link>
+    <Link to="/login" className="student-mobile-nav-item">
+      <LogOut size={19} />
+      <span>Logout</span>
+    </Link>
+  </nav>
+);
 
 const isExamSubmissionOpen = (exam, now) => {
   const deadline = exam?.submission_deadline ? new Date(exam.submission_deadline).getTime() : null;
@@ -27,6 +48,7 @@ const StudentViewClass = () => {
   const section = location.state?.section || JSON.parse(localStorage.getItem('currentSection') || '{}');
   
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const avatar = (user.name || 'S').substring(0, 2).toUpperCase();
   const [dialog, setDialog] = useState({
     isOpen: false,
     title: '',
@@ -253,19 +275,36 @@ const StudentViewClass = () => {
   };
 
   if (!section || !section.id) return (
-        <div className="section-container student-view-container">
-            <header className="minimal-header">
-                <button className="back-btn" onClick={() => navigate('/student-classes')}>← Back to Classes</button>
-            </header>
-            <p>No class selected.</p>
+    <>
+      <main className="section-container student-view-container student-class-page">
+        <div className="student-mobile-greeting">
+          <div>
+            <span className="student-greeting-eyebrow">Student Portal</span>
+            <h1>Welcome back, {user.name || 'Student'}</h1>
+          </div>
+          <div className="student-mobile-avatar" aria-label={`Initials: ${avatar}`}>{avatar}</div>
         </div>
+        <header className="minimal-header">
+          <button className="back-btn" onClick={() => navigate('/student-classes')}>← Back to Classes</button>
+        </header>
+        <p>No class selected.</p>
+      </main>
+      <StudentMobileNav />
+    </>
   );
 
   return (
     <>
-      <div className="section-container student-view-container">
+      <main className="section-container student-view-container student-class-page">
         <header className="minimal-header">
           <button className="back-btn" onClick={() => navigate('/student-classes')}>← Back to Classes</button>
+          <div className="student-mobile-greeting">
+            <div>
+              <span className="student-greeting-eyebrow">Student Portal</span>
+              <h1>Welcome back, {user.name || 'Student'}</h1>
+            </div>
+            <div className="student-mobile-avatar" aria-label={`Initials: ${avatar}`}>{avatar}</div>
+          </div>
           <div className="subject-title">
             <span className="student-portal-badge">Student Portal</span>
             <h1>{section?.subject || 'No Subject'}</h1>
@@ -273,105 +312,115 @@ const StudentViewClass = () => {
           </div>
         </header>
 
-        <div className="section-grid student-view-grid">
-          <aside className="actions-sidebar">
-            <div className="action-card student-actions-panel">
-              <div className="student-actions-card">
-                <h4>Student Actions</h4>
-                <div className="submission-exam-list">
-                  {exams.length === 0 ? (
-                    <p className="submission-exam-empty">No exams are assigned to this class yet.</p>
-                  ) : exams.map(exam => {
-                    const isOpen = isExamSubmissionOpen(exam, submissionClockNow);
-                    const deadlineTime = exam.submission_deadline
-                      ? new Date(exam.submission_deadline).getTime()
-                      : null;
-                    return (
-                      <div className="student-quiz-card" key={exam.id}>
-                        <div className="student-quiz-info">
-                          <h5 className="quiz-title">{exam.title}</h5>
-                          {isOpen ? (
-                            deadlineTime ? (
-                              <span className="status-badge open">
-                                <span className="status-dot" aria-hidden="true" />
-                                ⏱️ Closes in {formatSubmissionCountdown(deadlineTime - submissionClockNow)}
-                              </span>
-                            ) : (
-                              <span className="status-badge open">
-                                <span className="status-dot" aria-hidden="true" />
-                                Submissions Open
-                              </span>
-                            )
-                          ) : (
-                            <span className="status-badge closed">Submission Closed</span>
-                          )}
-                        </div>
-                        <div className="student-quiz-actions">
-                          <button
-                            type="button"
-                            className="student-scan-btn"
-                            disabled={!isOpen}
-                            onClick={() => {
-                              setSelectedExamId(String(exam.id));
-                              setScanError('');
-                              setShowScanModal(true);
-                            }}
-                          >
-                            <Camera size={17} />
-                            Scan / Upload Paper
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="smg-table-card student-assessment-card">
-                <h3 className="smg-table-title">Detailed Assessment Results</h3>
-                <div className="table-responsive-wrapper">
-                  <table className="smg-table student-assessment-table">
-                    <thead>
-                      <tr>
-                        <th>Assessment</th>
-                        <th>Date Submitted</th>
-                        <th>Score</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {loadingGrades ? (
-                        <tr>
-                          <td colSpan="3" className="student-assessment-empty">
-                            Loading grades...
-                          </td>
-                        </tr>
-                      ) : assessments.length === 0 ? (
-                        <tr>
-                          <td colSpan="3" className="student-assessment-empty">
-                            No submissions found for this class.
-                          </td>
-                        </tr>
-                      ) : (
-                        assessments.map(a => (
-                          <tr key={a.id}>
-                            <td className="student-assessment-name">{a.exam_title}</td>
-                            <td className="student-assessment-date">{new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-                            <td>
-                              <span className="student-score-badge">
-                                {a.points_earned ?? a.score ?? 0} / {a.total_items ?? a.total_questions ?? '?'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+        <section className="student-actions-panel student-actions-shell">
+          <div className="student-actions-heading">
+            <div>
+              <span className="student-section-eyebrow">Class workspace</span>
+              <h2>Student Actions</h2>
             </div>
-          </aside>
-        </div>
-      </div>
+            <span className="student-assessment-count">
+              {exams.length} {exams.length === 1 ? 'assessment' : 'assessments'}
+            </span>
+          </div>
+          <div className="student-quiz-grid">
+            {exams.length === 0 ? (
+              <p className="submission-exam-empty">No exams are assigned to this class yet.</p>
+            ) : exams.map((exam, index) => {
+              const isOpen = isExamSubmissionOpen(exam, submissionClockNow);
+              const deadlineTime = exam.submission_deadline
+                ? new Date(exam.submission_deadline).getTime()
+                : null;
+              return (
+                <article className="student-quiz-card student-assessment-action" key={exam.id}>
+                  <div className="student-quiz-number">
+                    <span>Assessment</span>
+                    <strong>{String(index + 1).padStart(2, '0')}</strong>
+                  </div>
+                  <div className="student-quiz-info">
+                    <h3 className="quiz-title">{exam.title}</h3>
+                    {isOpen ? (
+                      <>
+                        <span className="status-badge open student-open-status">
+                          <span className="status-dot" aria-hidden="true" />
+                          SUBMISSIONS OPEN
+                        </span>
+                        {deadlineTime && (
+                          <span className="student-submission-countdown">
+                            Closes in {formatSubmissionCountdown(deadlineTime - submissionClockNow)}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="status-badge closed student-closed-status">Submission Closed</span>
+                    )}
+                  </div>
+                  <div className="student-quiz-actions">
+                    <button
+                      type="button"
+                      className="student-scan-btn"
+                      disabled={!isOpen}
+                      onClick={() => {
+                        setSelectedExamId(String(exam.id));
+                        setScanError('');
+                        setShowScanModal(true);
+                      }}
+                    >
+                      <Camera size={17} />
+                      Scan / Upload Paper
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="smg-table-card student-assessment-card">
+          <div className="student-assessment-heading">
+            <span className="student-section-eyebrow">Performance</span>
+            <h2 className="smg-table-title">Detailed Assessment Results</h2>
+          </div>
+          <div className="table-responsive-wrapper">
+            <table className="smg-table student-assessment-table">
+              <thead>
+                <tr>
+                  <th>Assessment</th>
+                  <th>Date Submitted</th>
+                  <th>Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingGrades ? (
+                  <tr>
+                    <td colSpan="3" className="student-assessment-empty">
+                      Loading grades...
+                    </td>
+                  </tr>
+                ) : assessments.length === 0 ? (
+                  <tr>
+                    <td colSpan="3" className="student-assessment-empty">
+                      No submissions found for this class.
+                    </td>
+                  </tr>
+                ) : (
+                  assessments.map(a => (
+                    <tr key={a.id}>
+                      <td className="student-assessment-name">{a.exam_title}</td>
+                      <td className="student-assessment-date">{new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                      <td>
+                        <span className="student-score-badge">
+                          {a.points_earned ?? a.score ?? 0} / {a.total_items ?? a.total_questions ?? '?'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+      <StudentMobileNav />
 
       {showScanModal && (
         <div className="modal-overlay" onClick={closeScanModal}>

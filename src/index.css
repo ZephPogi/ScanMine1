@@ -160,3 +160,501 @@ code {
     background: #ffffff;
   }
 }
+
+.dashboard-content.student-dashboard-page,
+.section-container.student-view-container.student-class-page {
+  background-color: #f8fafc;
+  background-image: radial-gradient(#cbd5e1 0.7px, transparent 0.7px);
+  background-size: 18px 18px;
+}
+
+.dashboard-content.student-dashboard-page {
+  padding: 2rem;
+  min-height: 100vh;
+}
+
+.student-dashboard-page .student-dashboard-header {
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.dashboard-heading h1 {
+  margin: 0;
+  color: #1c2438;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.dashboard-heading p {
+  margin-top: 0.5rem;
+  color: #64748b;
+}
+
+.student-mobile-greeting {
+  display: none;
+}
+
+.student-dashboard-page .student-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+  margin-bottom: 1.75rem;
+}
+
+.student-dashboard-page .student-stat-card {
+  min-width: 0;
+  padding: 1.5rem;
+  gap: 0.9rem;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 0.75rem;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.student-dashboard-page .student-stat-card:hover,
+.student-submissions-card:hover {
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.student-dashboard-page .stat-icon {
+  width: auto;
+  height: auto;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.student-dashboard-page .stat-label {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.student-dashboard-page .stat-value {
+  margin: 0.35rem 0 0;
+  color: #1c2438;
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.student-dashboard-page .student-submissions-card {
+  padding: 1.5rem;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 0.75rem;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  transition: box-shadow 0.2s ease;
+}
+
+.student-section-eyebrow,
+.student-greeting-eyebrow {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.student-submissions-card .card-header {
+  margin-bottom: 1rem;
+}
+
+.student-submissions-card .card-header h3 {
+  margin: 0;
+  color: #1c2438;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.student-submissions-table {
+  min-width: 540px;
+}
+
+.student-dashboard-page .student-submissions-table th {
+  padding: 0.8rem 0.75rem;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.student-dashboard-page .student-submissions-table td {
+  padding: 1rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+}
+
+.student-dashboard-score {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 0.3rem 0.75rem;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.section-container.student-view-container.student-class-page {
+  width: 100%;
+  max-width: 1200px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.student-class-page .minimal-header {
+  margin-bottom: 1.75rem;
+}
+
+.student-class-page .back-btn {
+  color: #2563eb;
+}
+
+.student-class-page .student-portal-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 0.7rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 9999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.student-class-page .subject-title h1 {
+  color: #1c2438;
+  font-size: 2.15rem;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.student-class-page .subject-title p {
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.student-class-page .student-actions-shell {
+  padding: 1.5rem;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 0.75rem;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.student-actions-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.student-actions-heading h2 {
+  margin: 0;
+  color: #1c2438;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.student-assessment-count {
+  flex: 0 0 auto;
+  border-radius: 9999px;
+  padding: 0.35rem 0.7rem;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.student-quiz-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+.student-quiz-grid .submission-exam-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  border: 1px dashed #cbd5e1;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+}
+
+.student-quiz-card.student-assessment-action {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 1rem;
+  padding: 1.1rem;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 0.75rem;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.student-quiz-card.student-assessment-action:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+}
+
+.student-quiz-number {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.student-quiz-number strong {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 0.6rem;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 0.8rem;
+}
+
+.student-assessment-action .student-quiz-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.student-assessment-action .quiz-title {
+  width: 100%;
+  color: #1c2438;
+  font-size: 1rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.student-assessment-action .student-open-status {
+  border: 1px solid #6ee7b7;
+  background: #d1fae5;
+  color: #065f46;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.student-assessment-action .student-closed-status {
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.student-submission-countdown {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.student-assessment-action .student-quiz-actions {
+  width: 100%;
+  margin-top: auto;
+}
+
+.student-assessment-action .student-quiz-actions .student-scan-btn {
+  display: inline-flex;
+  width: 100%;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 0;
+  border-radius: 0.6rem;
+  background: #059669;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: normal;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.student-assessment-action .student-quiz-actions .student-scan-btn:hover:not(:disabled) {
+  background: #047857;
+}
+
+.student-assessment-action .student-quiz-actions .student-scan-btn:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
+.student-class-page .student-assessment-card {
+  margin-top: 1.5rem;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 0.75rem;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.student-assessment-heading {
+  margin-bottom: 0.75rem;
+}
+
+.student-assessment-card .smg-table-title {
+  margin: 0;
+  color: #1c2438;
+  font-size: 1.2rem;
+}
+
+.student-mobile-nav {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .student-dashboard-page .student-stats-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 640px) {
+  .student-quiz-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .student-quiz-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .dashboard-content.student-dashboard-page,
+  .section-container.student-view-container.student-class-page {
+    width: 100%;
+    min-height: 100vh;
+    margin: 0;
+    padding: 1.25rem 1rem 6.5rem;
+  }
+
+  .student-dashboard-page .student-dashboard-header {
+    display: block;
+    margin-bottom: 1.5rem;
+  }
+
+  .student-dashboard-header .dashboard-heading,
+  .student-dashboard-header .student-avatar-circle {
+    display: none;
+  }
+
+  .student-mobile-greeting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .student-mobile-greeting h1 {
+    margin: 0;
+    color: #1c2438;
+    font-size: 1.3rem !important;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+  }
+
+  .student-mobile-avatar {
+    display: grid;
+    width: 2.8rem;
+    height: 2.8rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 2px solid #bfdbfe;
+    border-radius: 50%;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.85rem;
+    font-weight: 800;
+  }
+
+  .student-class-page .minimal-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .student-class-page .minimal-header .student-mobile-greeting {
+    order: -1;
+    margin-bottom: 0.75rem;
+  }
+
+  .student-class-page .subject-title h1 {
+    font-size: 1.7rem !important;
+  }
+
+  .student-actions-shell,
+  .student-assessment-card,
+  .student-submissions-card {
+    padding: 1rem;
+  }
+
+  .student-actions-heading {
+    align-items: flex-start;
+  }
+
+  .student-submissions-table {
+    min-width: 500px;
+  }
+
+  .student-mobile-nav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    display: flex;
+    justify-content: space-around;
+    gap: 0.25rem;
+    border-top: 1px solid #293247;
+    background: #1c2438;
+    padding: 0.625rem 1rem;
+    padding-bottom: max(0.625rem, env(safe-area-inset-bottom));
+  }
+
+  .student-mobile-nav-item {
+    display: flex;
+    min-width: 3.8rem;
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    border-radius: 0.7rem;
+    padding: 0.35rem 0.2rem;
+    color: #cbd5e1;
+    font-size: 0.65rem;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+  }
+
+  .student-mobile-nav-item.active {
+    background: #3b82f6;
+    color: #ffffff;
+  }
+}
