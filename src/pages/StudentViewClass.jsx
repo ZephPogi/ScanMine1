@@ -1,7 +1,7 @@
 import imageCompression from 'browser-image-compression';
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Camera, X, CheckCircle, Clock, LayoutDashboard, BookOpen, UserRound, LogOut } from 'lucide-react';
+import { Camera, X, CheckCircle, Clock, LayoutDashboard, BookOpen, UserRound, LogOut, Award } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import './StudentViewClass.css';
 import './SectionDetails.css';
@@ -62,6 +62,7 @@ const StudentViewClass = () => {
   const [assessments, setAssessments] = useState([]);
   const [loadingGrades, setLoadingGrades] = useState(true);
   const [submissionClockNow, setSubmissionClockNow] = useState(Date.now());
+  const [showScoresModal, setShowScoresModal] = useState(false);
   
   // Scan Modal State
   const [showScanModal, setShowScanModal] = useState(false);
@@ -423,6 +424,82 @@ const StudentViewClass = () => {
         </section>
       </main>
       <StudentMobileNav />
+
+      <button
+        type="button"
+        className="student-scores-trigger"
+        onClick={() => setShowScoresModal(true)}
+      >
+        <Award size={20} aria-hidden="true" />
+        <span>See Scores</span>
+      </button>
+
+      {showScoresModal && (
+        <div
+          className="student-scores-overlay"
+          onClick={() => setShowScoresModal(false)}
+        >
+          <section
+            className="student-scores-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="student-scores-title"
+            onClick={event => event.stopPropagation()}
+          >
+            <header className="student-scores-modal-header">
+              <h2 id="student-scores-title">Detailed Assessment Results</h2>
+              <button
+                type="button"
+                className="student-scores-close"
+                aria-label="Close assessment results"
+                onClick={() => setShowScoresModal(false)}
+              >
+                <X size={20} />
+              </button>
+            </header>
+            <div className="table-responsive-wrapper student-scores-table-wrapper">
+              <table className="smg-table student-assessment-table">
+                <thead>
+                  <tr>
+                    <th>Assessment</th>
+                    <th>Date Submitted</th>
+                    <th>Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingGrades ? (
+                    <tr>
+                      <td colSpan="3" className="student-assessment-empty">
+                        Loading grades...
+                      </td>
+                    </tr>
+                  ) : assessments.length === 0 ? (
+                    <tr>
+                      <td colSpan="3" className="student-assessment-empty">
+                        No submissions found for this class.
+                      </td>
+                    </tr>
+                  ) : (
+                    assessments.map(a => (
+                      <tr key={a.id}>
+                        <td className="student-assessment-name">{a.exam_title}</td>
+                        <td className="student-assessment-date">
+                          {new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </td>
+                        <td>
+                          <span className="student-score-badge">
+                            {a.points_earned ?? a.score ?? 0} / {a.total_items ?? a.total_questions ?? '?'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      )}
 
       {showScanModal && (
         <div className="modal-overlay" onClick={closeScanModal}>

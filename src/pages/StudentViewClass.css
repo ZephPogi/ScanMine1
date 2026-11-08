@@ -425,6 +425,101 @@
     white-space: nowrap;
 }
 
+.student-scores-trigger {
+    position: fixed;
+    bottom: 84px;
+    right: 18px;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 18px;
+    border: 0;
+    border-radius: 9999px;
+    background: #059669;
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 10px 25px -5px rgba(5, 150, 105, 0.4);
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.student-scores-trigger:hover {
+    background: #047857;
+    transform: translateY(-2px);
+}
+
+.student-scores-trigger:focus-visible,
+.student-scores-close:focus-visible {
+    outline: 3px solid #6ee7b7;
+    outline-offset: 3px;
+}
+
+.student-scores-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(4px);
+}
+
+.student-scores-modal {
+    width: 100%;
+    max-width: 42rem;
+    max-height: 85vh;
+    overflow-y: auto;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.student-scores-modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+    background: #fff;
+}
+
+.student-scores-modal-header h2 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.student-scores-close {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border: 0;
+    border-radius: 0.5rem;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+}
+
+.student-scores-close:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+.student-scores-table-wrapper {
+    padding: 0.5rem 1.5rem 1.5rem;
+}
+
 /* ===== PREMIUM ATTACH EXAM MODAL ===== */
 .modal-overlay {
     position: fixed;
