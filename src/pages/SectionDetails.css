@@ -3702,43 +3702,281 @@
     overflow: visible;
 }
 
+.modal-overlay .details-modal .exam-details-title-row {
+    display: flex;
+    flex: 1;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+}
+
+.modal-overlay .details-modal .exam-details-title {
+    min-width: 0;
+}
+
+.modal-overlay .details-modal .exam-details-header-icons {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 8px;
+}
+
+.modal-overlay .details-modal .exam-details-metadata {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.modal-overlay .details-modal .exam-details-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+}
+
+.modal-overlay .details-modal .exam-details-secondary-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.modal-overlay .details-modal .exam-details-actions .exam-action-primary {
+    width: 100%;
+}
+
 @media (max-width: 768px) {
     .modal-overlay .modal-content.details-modal.exam-details-modal {
-        width: 100% !important;
-        max-width: 100% !important;
+        box-sizing: border-box;
+        width: 92vw !important;
+        max-width: 480px !important;
+        max-height: 88vh !important;
+        margin: 0 auto;
+        padding: 16px !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        border-radius: 20px;
+    }
+
+    .modal-overlay .details-modal.exam-details-modal,
+    .modal-overlay .details-modal.exam-details-modal * {
+        box-sizing: border-box;
+        min-width: 0;
+    }
+
+    .modal-overlay .details-modal .exam-details-header {
+        align-items: stretch;
+        gap: 12px;
+        padding: 0 0 14px;
+    }
+
+    .modal-overlay .details-modal .exam-details-heading {
+        width: 100%;
+        align-items: stretch;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .modal-overlay .details-modal .exam-details-title-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .modal-overlay .details-modal .exam-details-title {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .modal-overlay .details-modal .exam-details-heading h2 {
+        font-size: 1.2rem;
+        overflow-wrap: anywhere;
+    }
+
+    .modal-overlay .details-modal .exam-details-header-icons {
+        display: flex;
+        flex: 0 0 auto;
+        gap: 6px;
+    }
+
+    .modal-overlay .details-modal .exam-details-header-icons .exam-icon-action {
+        width: 40px;
+        min-height: 40px;
+    }
+
+    .modal-overlay .details-modal .exam-details-metadata {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
     }
 
     .modal-overlay .details-modal .exam-details-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .modal-overlay .details-modal .exam-details-actions .exam-action-primary {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        padding: 12px;
+        border-radius: 10px;
+        background: #059669;
+        border-color: #059669;
+        color: #fff;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .modal-overlay .details-modal .exam-details-actions .exam-action-primary:hover {
+        background: #047857;
+        border-color: #047857;
+    }
+
+    .modal-overlay .details-modal .exam-details-secondary-actions {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         align-items: stretch;
         gap: 8px;
+        width: 100%;
     }
 
-    .modal-overlay .details-modal .exam-details-actions .exam-action-button {
+    .modal-overlay .details-modal .exam-details-secondary-actions .exam-action-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
         width: 100%;
         min-width: 0;
-        white-space: normal;
-    }
-
-    .modal-overlay .details-modal .exam-details-actions .exam-icon-action {
-        width: 100%;
         min-height: 44px;
+        padding: 8px;
+        white-space: normal;
     }
 
     .modal-overlay .details-modal .exam-details-grid {
         grid-template-columns: minmax(0, 1fr);
         gap: 1rem;
-        padding: 1rem;
-        padding-bottom: 2.5rem !important;
+        width: 100%;
+        min-height: 0;
+        padding: 14px 0 0 !important;
+        overflow: visible;
     }
 
     .modal-overlay .details-modal .exam-details-left,
     .modal-overlay .details-modal .exam-progress-card {
         grid-column: 1;
+        width: 100%;
+        max-height: none !important;
+        overflow: visible !important;
     }
 
     .modal-overlay .details-modal .exam-detail-card {
+        width: 100%;
+        min-width: 0;
         padding: 14px;
+    }
+
+    .modal-overlay .details-modal .answer-key-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        width: 100%;
+        padding: 12px;
+        border: 0;
+        border-radius: 12px;
+        background: #f8fafc;
+    }
+
+    .modal-overlay .details-modal .answer-key-content {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .modal-overlay .details-modal .item-number-badge {
+        display: flex;
+        flex: 0 0 32px;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: #e0f2fe;
+        color: #0284c7;
+        font-weight: 700;
+    }
+
+    .modal-overlay .details-modal .question-text {
+        flex: 1;
+        min-width: 0;
+        color: #1e293b;
+        font-size: 0.9rem;
+        word-break: break-word;
+    }
+
+    .modal-overlay .details-modal .question-text p {
+        margin: 2px 0 8px;
+        font-weight: 650;
+    }
+
+    .modal-overlay .details-modal .answer-key-answer {
+        display: inline-flex;
+        align-items: center;
+        max-width: 100%;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: #ecfdf5;
+        color: #047857;
+        font-size: 0.85rem;
+        font-weight: 700;
+        overflow-wrap: anywhere;
+    }
+
+    .modal-overlay .details-modal .student-progress-table-wrapper {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .modal-overlay .details-modal .exam-progress-list {
+        width: 100%;
+        min-width: 430px;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .modal-overlay .details-modal .exam-progress-row {
+        flex-wrap: nowrap;
+        min-width: 430px;
+    }
+
+    .modal-overlay .details-modal .exam-progress-row > *,
+    .modal-overlay .details-modal .exam-student-actions {
+        flex-shrink: 0;
+    }
+
+    .modal-overlay .details-modal .exam-progress-identity {
+        flex: 1 1 auto;
+        min-width: 80px;
+    }
+
+    .modal-overlay .details-modal .exam-progress-name {
+        white-space: nowrap;
+    }
+
+    .modal-overlay .details-modal button svg {
+        flex-shrink: 0;
     }
 }

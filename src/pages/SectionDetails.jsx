@@ -1587,24 +1587,39 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
       {showExamDetails && (
         <div className="modal-overlay" onClick={() => setShowExamDetails(null)}>
           <div
-            className="modal-content details-modal max-w-4xl w-[95vw] max-h-[90vh] flex flex-col overflow-hidden"
-            style={{
-              width: '95vw',
-              maxWidth: '56rem',
-              maxHeight: '90vh',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden'
-            }}
+            className="modal-content details-modal exam-details-modal max-w-4xl w-[95vw] max-h-[90vh] flex flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
             <div className="exam-details-header">
               <div className="exam-details-heading">
-                <div>
-                  <span className="exam-details-eyebrow">QUIZ DETAILS</span>
-                  <h2>{showExamDetails?.title || 'Untitled'}</h2>
+                <div className="exam-details-title-row">
+                  <div className="exam-details-title">
+                    <span className="exam-details-eyebrow">QUIZ DETAILS</span>
+                    <h2>{showExamDetails?.title || 'Untitled'}</h2>
+                  </div>
+                  <div className="exam-details-header-icons">
+                    {showExamDetails?.file_path && (
+                      <button
+                        type="button"
+                        className="exam-icon-action"
+                        onClick={() => window.open(showExamDetails.file_path, '_blank')}
+                        title="View answer key document"
+                        aria-label="View answer key document"
+                      >
+                        <Eye size={17} />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="exam-icon-action exam-close-action"
+                      onClick={() => setShowExamDetails(null)}
+                      aria-label="Close quiz details"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                <div className="exam-details-metadata">
                   <span className={`exam-submission-status${isSubmissionWindowOpen(showExamDetails, submissionClockNow) ? ' is-open' : ' is-closed'}`}>
                     {isSubmissionWindowOpen(showExamDetails, submissionClockNow) ? '🟢 Submissions Open' : '🔴 Submissions Closed'}
                   </span>
@@ -1614,20 +1629,6 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                 </div>
               </div>
               <div className="exam-details-actions">
-                <button
-                  className="exam-action-button"
-                  type="button"
-                  onClick={handleToggleSubmissions}
-                  disabled={isTogglingSubmission}
-                  title={isSubmissionWindowOpen(showExamDetails, submissionClockNow) ? 'Close this quiz to submissions' : 'Re-open submissions for this quiz'}
-                >
-                  {isTogglingSubmission
-                    ? 'Updating...'
-                    : isSubmissionWindowOpen(showExamDetails, submissionClockNow)
-                      ? <><Lock size={14} />Lock Submissions</>
-                      : <><LockOpen size={14} />Re-open Submissions</>}
-                </button>
-
                 <button
                   className="exam-action-button exam-action-primary"
                   onClick={() => {
@@ -1648,52 +1649,49 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                   Scan Papers
                 </button>
 
-                <button
-                  className="exam-action-button"
-                  onClick={handleExportExcel}
-                  title="Export student scores to Excel"
-                >
-                  <Download size={16} />
-                  Export to Excel
-                </button>
-
-                <button
-                  className="exam-action-button"
-                  onClick={isEditingExamKey
-                    ? () => {
-                      setIsEditingExamKey(false);
-                      setExamKeyDraft([]);
-                    }
-                    : startEditingExamKey}
-                  title={isEditingExamKey ? 'Cancel answer key edits' : 'Edit answer key'}
-                  disabled={isSavingExamKey}
-                >
-                  {isEditingExamKey ? <X size={15} /> : <Edit size={15} />}
-                  {isEditingExamKey ? 'Cancel Edit' : 'Edit Key'}
-                </button>
-
-                {showExamDetails?.file_path && (
+                <div className="exam-details-secondary-actions">
                   <button
-                    className="exam-icon-action"
-                    onClick={() => window.open(showExamDetails.file_path, '_blank')}
-                    title="View answer key document"
+                    className="exam-action-button"
+                    type="button"
+                    onClick={handleToggleSubmissions}
+                    disabled={isTogglingSubmission}
+                    title={isSubmissionWindowOpen(showExamDetails, submissionClockNow) ? 'Close this quiz to submissions' : 'Re-open submissions for this quiz'}
                   >
-                    <Eye size={17} />
+                    {isTogglingSubmission
+                      ? 'Updating...'
+                      : isSubmissionWindowOpen(showExamDetails, submissionClockNow)
+                        ? <><Lock size={14} />Lock Submissions</>
+                        : <><LockOpen size={14} />Re-open Submissions</>}
                   </button>
-                )}
-                <button className="exam-icon-action exam-close-action" onClick={() => setShowExamDetails(null)} aria-label="Close quiz details">×</button>
+
+                  <button
+                    className="exam-action-button"
+                    onClick={handleExportExcel}
+                    title="Export student scores to Excel"
+                  >
+                    <Download size={16} />
+                    Export to Excel
+                  </button>
+
+                  <button
+                    className="exam-action-button"
+                    onClick={isEditingExamKey
+                      ? () => {
+                        setIsEditingExamKey(false);
+                        setExamKeyDraft([]);
+                      }
+                      : startEditingExamKey}
+                    title={isEditingExamKey ? 'Cancel answer key edits' : 'Edit answer key'}
+                    disabled={isSavingExamKey}
+                  >
+                    {isEditingExamKey ? <X size={15} /> : <Edit size={15} />}
+                    {isEditingExamKey ? 'Cancel Edit' : 'Edit Key'}
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div
-              className="modal-body exam-details-grid grid grid-cols-1 md:grid-cols-2 gap-6 p-6 overflow-y-auto"
-              style={{
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 20rem), 1fr))',
-                gap: '1.5rem',
-                padding: '1.5rem',
-                overflowY: 'auto'
-              }}
-            >
+            <div className="modal-body exam-details-grid">
               {/* Left Column: Manual Answer Key */}
               <div
                 className="exam-details-left"
@@ -1716,7 +1714,7 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                   <div className="questions-list">
                     {examQuestions?.manual && examQuestions.manual.length > 0 ? (
                       examQuestions.manual.map((a, idx) => a ? (
-                        <div key={a.id || `manual-${idx}`} className="question-item">
+                        <div key={a.id || `manual-${idx}`} className="question-item answer-key-item">
                           {isEditingExamKey ? (
                             <div className="exam-key-editor">
                               <label>
@@ -1763,41 +1761,15 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                               </label>
                             </div>
                           ) : (
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                              <span
-                                aria-label={`Question ${idx + 1}`}
-                                style={{
-                                  flex: '0 0 32px',
-                                  height: '32px',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  borderRadius: '10px',
-                                  background: '#e8f4ef',
-                                  color: '#176b55',
-                                  fontWeight: 800
-                                }}
-                              >
+                            <div className="answer-key-content">
+                              <span className="item-number-badge" aria-label={`Question ${idx + 1}`}>
                                 {idx + 1}
                               </span>
-                              <div style={{ minWidth: 0, flex: 1 }}>
-                                <p style={{ margin: '2px 0 8px', fontWeight: 650 }}>
+                              <div className="question-text">
+                                <p>
                                   {a.question_text || `Question ${idx + 1}`}
                                 </p>
-                                <span
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    maxWidth: '100%',
-                                    padding: '5px 10px',
-                                    borderRadius: '999px',
-                                    background: '#ecfdf5',
-                                    color: '#047857',
-                                    fontSize: '0.85rem',
-                                    fontWeight: 700,
-                                    overflowWrap: 'anywhere'
-                                  }}
-                                >
+                                <span className="answer-key-answer">
                                   Answer: {a.type === 'multiple_choice' || (Array.isArray(a.options) && a.options.length > 0)
                                     ? getMultipleChoiceDetails({ ...a, correctAnswer: a.correct_answer }).answer
                                     : cleanAnswer(a.correct_answer) || 'N/A'}
@@ -1892,13 +1864,14 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                       </button>
                     </div>
                   )}
-                  <div className="exam-progress-list">
-                    {gradedStudentRows.map(({ student, submission }) => {
-                      const id = String(submission.id);
-                      const isSelected = selectedGradedIds.includes(id);
-                      const displayedScore = scoreDrafts[id] ?? submission.points_earned ?? 0;
-                      return (
-                        <div key={student.user_id} className="exam-progress-row">
+                  <div className="student-progress-table-wrapper">
+                    <div className="exam-progress-list">
+                      {gradedStudentRows.map(({ student, submission }) => {
+                        const id = String(submission.id);
+                        const isSelected = selectedGradedIds.includes(id);
+                        const displayedScore = scoreDrafts[id] ?? submission.points_earned ?? 0;
+                        return (
+                          <div key={student.user_id} className="exam-progress-row">
                           <label className="exam-score-row-checkbox">
                             <input
                               type="checkbox"
@@ -1982,9 +1955,10 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                               <Pencil size={15} />
                             </button>
                           </div>
-                        </div>
-                      );
-                    })}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
