@@ -65,59 +65,43 @@ const Signup = () => {
         throw new Error('Signup failed. Please try again.');
       }
 
-      // ── Redirect to the correct dashboard based on selected role ──────────
-      // Supabase auto-signs in on signUp. We need to fetch the newly created 
-      // PostgreSQL user profile (created by the DB trigger) to store in localStorage
-      // so the dashboards can access the user's database ID and role.
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Pass isSupabaseAuth: true and the supabaseId so the backend matches by UUID
-        body: JSON.stringify({ 
-          email:          email, 
-          password:       password, 
-          role:           activeRole, 
-          isSupabaseAuth: true,
-          supabaseId:     data.user.id,
-          firstName:      firstName.trim(),
-          middleInitial:  middleInitial.trim().toUpperCase(),
-          lastName:       lastName.trim(),
-          name:           fullName,
-        }),
+      if (data.session) {
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) {
+          throw new Error(`Account created, but signing out failed: ${signOutError.message}`);
+        }
+      }
+
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // Pass isSupabaseAuth: true and the supabaseId so the backend matches by UUID
+          body: JSON.stringify({
+            email:          email,
+            password:       password,
+            role:           activeRole,
+            isSupabaseAuth: true,
+            supabaseId:     data.user.id,
+            firstName:      firstName.trim(),
+            middleInitial:  middleInitial.trim().toUpperCase(),
+            lastName:       lastName.trim(),
+            name:           fullName,
+          }),
+        });
+
+        if (!response.ok) {
+          console.warn('Could not sync user profile immediately after signup.');
+        }
+      } catch (syncError) {
+        console.warn('Could not sync user profile immediately after signup.', syncError);
+      }
+
+      navigate('/login', {
+        state: {
+          message: 'Registration successful! Please check your email to verify your account before logging in.',
+        },
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        // Support response shape { user: ... } or raw user object
-        const profile = data.user || data;
-        localStorage.setItem('user', JSON.stringify({
-          ...profile,
-          first_name:     profile.first_name || firstName.trim(),
-          middle_initial: profile.middle_initial || middleInitial.trim().toUpperCase().slice(0, 1),
-          last_name:      profile.last_name || lastName.trim(),
-          name:           profile.name || fullName,
-          role:           profile.role || activeRole,
-          email:          profile.email || email,
-        }));
-      } else {
-        // If the trigger was slightly delayed or failed, provide a fallback.
-        console.warn('Could not fetch user profile immediately after signup.');
-        // Fallback object with split and composite name fields
-        localStorage.setItem('user', JSON.stringify({
-          name:           fullName,
-          first_name:     firstName.trim(),
-          middle_initial: middleInitial.trim().toUpperCase().slice(0, 1),
-          last_name:      lastName.trim(),
-          role:           activeRole,
-          email:          email
-        }));
-      }
-
-      if (activeRole === 'teacher') {
-        navigate('/dashboard');
-      } else {
-        navigate('/student-dashboard');
-      }
 
     } catch (err) {
       setError(err.message);
@@ -137,6 +121,22 @@ const Signup = () => {
           <div className="auth-form-header">
             <h2>Create Account</h2>
             <p>Register as a {activeRole} to ScanMine</p>
+          </div>
+
+          <div
+            role="status"
+            className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
+            style={{
+              backgroundColor: '#ecfdf5',
+              border: '1px solid #a7f3d0',
+              borderRadius: '8px',
+              color: '#065f46',
+              fontSize: '0.9rem',
+              marginBottom: '12px',
+              padding: '10px 14px',
+            }}
+          >
+            Note: After registering, please check your email (including your spam folder) to verify your account before logging in.
           </div>
 
           <div className="role-tabs">
