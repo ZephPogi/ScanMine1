@@ -65,10 +65,7 @@ const parseQuestionOptions = (options) => {
   }
 };
 
-const isMissingQuizQuestionColumn = (error) => (
-  error?.code === '42703'
-  && /question_type|options/i.test(error.message || '')
-);
+const isUndefinedColumnError = error => error?.code === '42703';
 
 const getStoragePathFromUrl = (url) => {
   if (typeof url !== 'string' || !url.trim()) return null;
@@ -1006,7 +1003,7 @@ app.post('/api/save-quiz', async (req, res) => {
         );
       } catch (err) {
         console.error('Save Quiz Error:', err);
-        if (!isMissingQuizQuestionColumn(err)) throw err;
+        if (!isUndefinedColumnError(err)) throw err;
 
         const values = [];
         const valuePlaceholders = insertItems.map((item, index) => {
@@ -1630,17 +1627,36 @@ app.get('/api/exams/:id/questions', async (req, res) => {
     try {
       result = await db.query(query, [id]);
     } catch (error) {
-      if (!isMissingQuizQuestionColumn(error)) throw error;
-      result = await db.query(`
-        SELECT id, question_text, correct_answer,
-               'multiple_choice'::VARCHAR(30) as type, '[]'::JSONB as options
-        FROM generated_questions WHERE exam_id = $1
-        UNION ALL
-        SELECT id, question_text, answer_text as correct_answer,
-               'multiple_choice'::VARCHAR(30) as type, '[]'::JSONB as options
-        FROM answer_keys WHERE exam_id = $1
-        ORDER BY id ASC;
-      `, [id]);
+      if (!isUndefinedColumnError(error)) throw error;
+      console.error('Fetch questions query error; retrying with basic columns:', error);
+
+      try {
+        result = await db.query(`
+          SELECT id, exam_id, question_number, question_text, correct_answer,
+                 'multiple_choice'::VARCHAR(30) as question_type, '[]'::JSONB as options
+          FROM generated_questions WHERE exam_id = $1
+          UNION ALL
+          SELECT id, exam_id, NULL::INTEGER as question_number, question_text,
+                 answer_text as correct_answer,
+                 'multiple_choice'::VARCHAR(30) as question_type, '[]'::JSONB as options
+          FROM answer_keys WHERE exam_id = $1
+          ORDER BY id ASC;
+        `, [id]);
+      } catch (fallbackError) {
+        if (!isUndefinedColumnError(fallbackError)) throw fallbackError;
+        console.error('Fetch questions basic-column query error; retrying legacy columns:', fallbackError);
+        result = await db.query(`
+          SELECT id, exam_id, NULL::INTEGER as question_number, question_text, correct_answer,
+                 'multiple_choice'::VARCHAR(30) as question_type, '[]'::JSONB as options
+          FROM generated_questions WHERE exam_id = $1
+          UNION ALL
+          SELECT id, exam_id, NULL::INTEGER as question_number, question_text,
+                 answer_text as correct_answer,
+                 'multiple_choice'::VARCHAR(30) as question_type, '[]'::JSONB as options
+          FROM answer_keys WHERE exam_id = $1
+          ORDER BY id ASC;
+        `, [id]);
+      }
     }
     
     // We format it so the frontend thinks they are all 'manual' answers for now
