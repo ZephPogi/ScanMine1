@@ -1344,6 +1344,9 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                 >
                   <span className="attach-file-name">{examFile?.name || 'Drop your quiz file here'}</span>
                   <span className="attach-file-hint">PDF or image</span>
+                  <span style={{ marginTop: '8px', padding: '4px 10px', fontSize: '12px', color: '#b45309', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', display: 'inline-block', fontWeight: 500 }}>
+                    Note: Only files up to 15 pages can be attached.
+                  </span>
                   <input
                     type="file"
                     ref={examInputRef}
@@ -2310,6 +2313,9 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                     {quizLessonFile?.name || 'Choose a lesson PDF to upload'}
                   </span>
                   <span className="ai-quiz-file-hint">PDF files only</span>
+                  <span style={{ marginTop: '8px', padding: '4px 10px', fontSize: '12px', color: '#b45309', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', display: 'inline-block', fontWeight: 500 }}>
+                    Note: Only PDF files up to 15 pages can be attached.
+                  </span>
                   <span className="ai-quiz-browse">Browse</span>
                 </label>
               </div>
