@@ -78,8 +78,7 @@ const TeacherDashboard = () => {
   const stats = [
     { id: 1, label: "Total Students", value: dashboardData.totalStudents.toString(), icon: Users, color: 'indigo', bgClass: 'bg-indigo', trend: "", trendClass: "neutral" },
     { id: 2, label: "Quizzes Checked", value: dashboardData.quizzesChecked.toString(), icon: FileText, color: 'blue', bgClass: 'bg-blue', trend: "", trendClass: "neutral" },
-    { id: 3, label: "Average Score", value: `${dashboardData.classAverage}%`, icon: TrendingUp, color: 'emerald', bgClass: 'bg-emerald', trend: "", trendClass: "positive" },
-    { id: 4, label: "Pending Scans", value: dashboardData.pendingScans === null || dashboardData.pendingScans === undefined ? "—" : String(dashboardData.pendingScans), icon: Camera, color: 'amber', bgClass: 'bg-amber', trend: dashboardData.pendingScans === null || dashboardData.pendingScans === undefined ? "" : dashboardData.pendingScans ? "Action Required" : "All caught up", trendClass: dashboardData.pendingScans ? "warning" : "positive" },
+    { id: 3, label: "Average Score", value: String(Math.round(averageScore)), icon: TrendingUp, color: 'emerald', bgClass: 'bg-emerald', trend: "", trendClass: "positive" },
   ];
 
   // Skeleton rows for loading state
@@ -101,7 +100,16 @@ const TeacherDashboard = () => {
       <Sidebar />
       <main className="dashboard-content">
         {/* ── Header ── */}
-        <header className="dashboard-header">
+        <header
+          className="dashboard-header"
+          style={{
+            padding: '28px 30px',
+            background: 'linear-gradient(120deg, #ffffff 0%, #f0fdfa 70%, #eef2ff 100%)',
+            border: '1px solid #dbeafe',
+            borderRadius: '18px',
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)',
+          }}
+        >
           <div className="dashboard-header-text">
             <p className="dashboard-eyebrow">TEACHER DASHBOARD</p>
             <h1>Welcome back, <span>{firstName}</span> <span className="dashboard-wave" aria-hidden="true">👋</span></h1>
@@ -114,11 +122,18 @@ const TeacherDashboard = () => {
         </header>
 
         {/* ── Stats Grid ── */}
-        <section className="stats-grid">
+        <section
+          className="stats-grid"
+          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}
+        >
           {stats.map(stat => {
             const Icon = stat.icon;
             return (
-              <div key={stat.id} className={`stat-card color-${stat.color}`}>
+              <div
+                key={stat.id}
+                className={`stat-card color-${stat.color}`}
+                style={{ borderColor: '#e2e8f0', boxShadow: '0 4px 14px rgba(15, 23, 42, 0.045)' }}
+              >
                 <div className={`stat-icon ${stat.bgClass}`}>
                   <Icon size={22} />
                 </div>
@@ -139,7 +154,10 @@ const TeacherDashboard = () => {
         {/* ── Main Grid ── */}
         <div className="dashboard-main-grid">
           {/* Recent Activity Table */}
-          <section className="dashboard-card table-container">
+          <section
+            className="dashboard-card table-container"
+            style={{ borderColor: '#e2e8f0', boxShadow: '0 6px 20px rgba(15, 23, 42, 0.05)' }}
+          >
             <div className="card-header">
               <h3>
                 <div className="card-header-icon"><ClipboardList size={16} /></div>
@@ -178,7 +196,14 @@ const TeacherDashboard = () => {
                         <td>{activity.student_name}</td>
                         <td>{activity.subject}</td>
                         <td>{getStatusBadge(activity.score)}</td>
-                        <td><strong>{activity.score}%</strong></td>
+                        <td>
+                          <strong>
+                            {activity.total_items !== null && activity.total_items !== undefined
+                              && activity.points_earned !== null && activity.points_earned !== undefined
+                              ? `${activity.points_earned} / ${activity.total_items}`
+                              : Math.round(Number.parseFloat(activity.score) || 0)}
+                          </strong>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -189,7 +214,10 @@ const TeacherDashboard = () => {
 
           <div className="dashboard-side-column">
           {/* Quick Actions Panel */}
-          <section className="dashboard-card quick-actions-card">
+          <section
+            className="dashboard-card quick-actions-card"
+            style={{ borderColor: '#e2e8f0', boxShadow: '0 6px 20px rgba(15, 23, 42, 0.05)' }}
+          >
             <div className="card-header">
               <div>
                 <p className="card-eyebrow">GET THINGS DONE</p>
@@ -224,7 +252,10 @@ const TeacherDashboard = () => {
             </div>
           </section>
 
-          <section className="dashboard-card performance-card">
+          <section
+            className="dashboard-card performance-card"
+            style={{ borderColor: '#e2e8f0', boxShadow: '0 6px 20px rgba(15, 23, 42, 0.05)' }}
+          >
             <div className="card-header">
               <div>
                 <p className="card-eyebrow">AT A GLANCE</p>
@@ -235,19 +266,9 @@ const TeacherDashboard = () => {
             <div className="performance-score-row">
               <div>
                 <span className="performance-label">Average score</span>
-                <strong>{dashboardData.classAverage}%</strong>
+                <strong>{Math.round(averageScore)}</strong>
               </div>
               <span className="performance-range">Class-wide</span>
-            </div>
-            <div
-              className="performance-progress-track"
-              role="progressbar"
-              aria-label="Class average score"
-              aria-valuenow={Math.max(0, Math.min(100, averageScore))}
-              aria-valuemin="0"
-              aria-valuemax="100"
-            >
-              <span style={{ width: `${Math.max(0, Math.min(100, averageScore))}%` }} />
             </div>
             <div className="performance-stats">
               <div>
