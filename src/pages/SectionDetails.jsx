@@ -2,9 +2,9 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trash2, Search, UserPlus, UserMinus, Download, Camera, Edit, Sparkles, Eye, Upload, X, Check, Pencil, ArrowUp, ArrowDown, Lock, LockOpen } from 'lucide-react';
-import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
+import { generateQuizPDF } from '../utils/generateQuizPDF';
 import './SectionDetails.css';
 import Sidebar from './Sidebar';
 
@@ -926,131 +926,11 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
       return;
     }
 
-    const doc = new jsPDF();
-    const margin = 15;
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const contentWidth = pageWidth - margin * 2;
-    const lineHeight = 5;
-    const questionGroups = Array.from(generatedQuestions.reduce((groups, question, index) => {
-      const type = question.type || 'other';
-      if (!groups.has(type)) groups.set(type, []);
-      groups.get(type).push({ question, index });
-      return groups;
-    }, new Map()));
-    const typeLabels = {
-      multiple_choice: 'MULTIPLE CHOICE',
-      true_false: 'TRUE / FALSE',
-      identification: 'IDENTIFICATION'
-    };
-    const romanNumerals = ['I', 'II', 'III', 'IV', 'V', 'VI'];
-    let yPosition = 0;
-
-    const drawPageHeader = () => {
-      doc.setTextColor(15, 23, 42);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(16);
-      doc.text('SCANMINE QUIZ ANSWER KEY', pageWidth / 2, 20, { align: 'center' });
-
-      const details = `Quiz Title: ${examTitle || 'Untitled Quiz'}   |   Total Questions: ${generatedQuestions.length}   |   Date: ${new Date().toLocaleDateString()}`;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      const detailLines = doc.splitTextToSize(details, contentWidth - 8);
-      const detailsY = 26;
-      const detailsHeight = Math.max(12, detailLines.length * 4.5 + 5);
-      doc.setFillColor(241, 245, 249);
-      doc.roundedRect(margin, detailsY, contentWidth, detailsHeight, 2, 2, 'F');
-      doc.setTextColor(51, 65, 85);
-      doc.text(detailLines, margin + 4, detailsY + 6);
-      const ruleY = detailsY + detailsHeight + 5;
-      doc.setDrawColor(16, 185, 129);
-      doc.setLineWidth(0.8);
-      doc.line(margin, ruleY, pageWidth - margin, ruleY);
-      return ruleY + 9;
-    };
-
-    const addPage = () => {
-      doc.addPage();
-      yPosition = drawPageHeader();
-    };
-    const ensureSpace = (height) => {
-      if (yPosition + height > pageHeight - margin) addPage();
-    };
-    const writeWrappedText = (text, x, width, fontSize, fontStyle, color) => {
-      doc.setFont('helvetica', fontStyle);
-      doc.setFontSize(fontSize);
-      doc.setTextColor(...color);
-      const lines = doc.splitTextToSize(String(text || ''), width);
-      lines.forEach(line => {
-        ensureSpace(lineHeight);
-        doc.text(line, x, yPosition);
-        yPosition += lineHeight;
-      });
-    };
-
-    yPosition = drawPageHeader();
-    questionGroups.forEach(([type, items], groupIndex) => {
-      if (questionGroups.length > 1) {
-        ensureSpace(12);
-        doc.setFillColor(238, 242, 255);
-        doc.roundedRect(margin, yPosition - 4, contentWidth, 9, 1.5, 1.5, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.setTextColor(67, 56, 202);
-        const sectionLabel = typeLabels[type] || type.replace(/[_-]/g, ' ').toUpperCase();
-        doc.text(`PART ${romanNumerals[groupIndex] || groupIndex + 1}: ${sectionLabel}`, margin + 3, yPosition + 2);
-        yPosition += 12;
-      }
-
-      items.forEach(({ question, index }) => {
-        const questionText = question.question || question.question_text || `Question ${index + 1}`;
-        writeWrappedText(`${index + 1}. ${questionText}`, margin, contentWidth, 10, 'bold', [30, 41, 59]);
-        yPosition += 1;
-
-        if (question.type === 'multiple_choice') {
-          const options = getMultipleChoiceDetails(question).options;
-          for (let row = 0; row < 2; row += 1) {
-            const leftIndex = row * 2;
-            const rightIndex = leftIndex + 1;
-            const columnWidth = (contentWidth - 8) / 2;
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
-            const leftLines = doc.splitTextToSize(
-              `${String.fromCharCode(65 + leftIndex)}) ${options[leftIndex] || ''}`,
-              columnWidth
-            );
-            const rightLines = doc.splitTextToSize(
-              `${String.fromCharCode(65 + rightIndex)}) ${options[rightIndex] || ''}`,
-              columnWidth
-            );
-            const rowLines = Math.max(leftLines.length, rightLines.length);
-            for (let lineIndex = 0; lineIndex < rowLines; lineIndex += 1) {
-              ensureSpace(lineHeight);
-              doc.setTextColor(71, 85, 105);
-              if (leftLines[lineIndex]) doc.text(leftLines[lineIndex], margin + 3, yPosition);
-              if (rightLines[lineIndex]) doc.text(rightLines[lineIndex], margin + 4 + columnWidth, yPosition);
-              yPosition += lineHeight;
-            }
-          }
-        }
-
-        const answer = question.type === 'multiple_choice'
-          ? getMultipleChoiceDetails(question).letter || cleanAnswer(question.correctAnswer || question.answer_text || '')
-          : cleanAnswer(question.correctAnswer || question.answer_text || question.correct_answer || '');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        const answerLines = doc.splitTextToSize(`Correct Answer: ${answer || 'N/A'}`, contentWidth - 8);
-        const answerBoxHeight = answerLines.length * 4.5 + 4;
-        ensureSpace(answerBoxHeight);
-        doc.setFillColor(236, 253, 245);
-        doc.roundedRect(margin, yPosition - 3, contentWidth, answerBoxHeight, 1.5, 1.5, 'F');
-        doc.setTextColor(4, 120, 87);
-        doc.text(answerLines, margin + 4, yPosition + 1);
-        yPosition += answerBoxHeight + 6;
-      });
-    });
-
-    doc.save('ScanMine-Answer-Key.pdf');
+    try {
+      generateQuizPDF({ title: examTitle || 'Untitled Quiz', section, questions: generatedQuestions });
+    } catch (error) {
+      showAlert('PDF download failed', error.message || 'Unable to generate the quiz PDF.', 'error');
+    }
   };
 
   const handleExportExcel = () => {
@@ -1671,6 +1551,26 @@ const SectionDetails = ({ section, onBack, initialOpenQuizGenerator = false }) =
                   >
                     <Download size={16} />
                     Export to Excel
+                  </button>
+
+                  <button
+                    className="exam-action-button"
+                    type="button"
+                    onClick={() => {
+                      try {
+                        generateQuizPDF({
+                          ...showExamDetails,
+                          section,
+                          questions: [...(examQuestions?.manual || []), ...(examQuestions?.generated || [])]
+                        });
+                      } catch (error) {
+                        showAlert('PDF download failed', error.message || 'Unable to generate the quiz PDF.', 'error');
+                      }
+                    }}
+                    title="Download a printable quiz and answer key"
+                  >
+                    <Download size={16} />
+                    Download PDF
                   </button>
 
                   <button

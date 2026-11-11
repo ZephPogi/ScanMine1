@@ -1,0 +1,3 @@
+ALTER TABLE answer_keys
+  ADD COLUMN IF NOT EXISTS question_type VARCHAR(30),
+  ADD COLUMN IF NOT EXISTS options JSONB;

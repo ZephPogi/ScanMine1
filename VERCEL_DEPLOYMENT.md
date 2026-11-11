@@ -34,8 +34,9 @@ ScanMine uses PostgreSQL with Supabase integration for both database and file st
 1. Create a Supabase project at https://supabase.com
 2. Run the schema from `server/schema.sql` in the Supabase SQL Editor
 3. Run the migration from `server/migration_add_image_urls.sql` to add image URL columns
-4. Create a storage bucket named `scanned-quizzes` in Supabase Storage
-5. Make the bucket public (or configure appropriate RLS policies)
+4. Run `backend/migration_add_quiz_question_details.sql` to preserve quiz question types and options
+5. Create a storage bucket named `scanned-quizzes` in Supabase Storage
+6. Make the bucket public (or configure appropriate RLS policies)
 
 ### Database Schema
 
@@ -70,6 +71,7 @@ The OCR.space API calls have a 45-second timeout configured to stay within Verce
 
 - [ ] Set up Supabase project and run schema.sql
 - [ ] Run migration_add_image_urls.sql
+- [ ] Run migration_add_quiz_question_details.sql
 - [ ] Create `scanned-quizzes` storage bucket in Supabase
 - [ ] Configure all environment variables in Vercel
 - [ ] Test OCR functionality with a sample image

@@ -268,6 +268,18 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('Migration warning (name backfill):', err.message);
   }
+
+  // 7. Preserve answer-key question type and options for printable quizzes
+  try {
+    await db.query(`
+      ALTER TABLE answer_keys
+        ADD COLUMN IF NOT EXISTS question_type VARCHAR(30),
+        ADD COLUMN IF NOT EXISTS options JSONB
+    `);
+    console.log('Migration OK: answer_keys question type and options columns ready');
+  } catch (err) {
+    console.error('Migration warning (quiz question details):', err.message);
+  }
 }
 
 // Guard: NEVER run migrations during a Vercel serverless cold start.
@@ -943,16 +955,18 @@ app.post('/api/save-quiz', async (req, res) => {
     if (questionCount > 0) {
       const values = [];
       const valuePlaceholders = insertItems.map((item, index) => {
-        const offset = index * 3;
+        const offset = index * 5;
         values.push(
           id,
           item.correctAnswer,
-          item.questionText || item.question || item.question_text || `Question ${index + 1}`
+          item.questionText || item.question || item.question_text || `Question ${index + 1}`,
+          item.type || null,
+          Array.isArray(item.options) ? JSON.stringify(item.options) : null
         );
-        return `($${offset + 1}, $${offset + 2}, $${offset + 3})`;
+        return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5})`;
       });
       await db.query(
-        `INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ${valuePlaceholders.join(', ')}`,
+        `INSERT INTO answer_keys (exam_id, answer_text, question_text, question_type, options) VALUES ${valuePlaceholders.join(', ')}`,
         values
       );
     }
@@ -1550,9 +1564,11 @@ app.get('/api/exams/:id/questions', async (req, res) => {
     
     // This query now looks in BOTH tables and combines the results
     const query = `
-      SELECT id, question_text, correct_answer FROM generated_questions WHERE exam_id = $1
+      SELECT id, question_text, correct_answer, NULL::VARCHAR(30) as type, NULL::JSONB as options
+      FROM generated_questions WHERE exam_id = $1
       UNION ALL
-      SELECT id, question_text, answer_text as correct_answer FROM answer_keys WHERE exam_id = $1
+      SELECT id, question_text, answer_text as correct_answer, question_type as type, options
+      FROM answer_keys WHERE exam_id = $1
       ORDER BY id ASC;
     `;
     
@@ -1748,8 +1764,14 @@ app.post('/api/upload-answer-key', async (req, res) => {
         if (item.correctAnswer && item.correctAnswer !== '?') {
           questionCount++;
           await db.query(
-            'INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ($1, $2, $3)',
-            [examId, item.correctAnswer, item.questionText || `Question ${questionCount}`]
+            'INSERT INTO answer_keys (exam_id, answer_text, question_text, question_type, options) VALUES ($1, $2, $3, $4, $5)',
+            [
+              examId,
+              item.correctAnswer,
+              item.questionText || `Question ${questionCount}`,
+              item.type || null,
+              Array.isArray(item.options) ? JSON.stringify(item.options) : null
+            ]
           );
         }
       }

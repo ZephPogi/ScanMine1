@@ -19,7 +19,7 @@
     "jspdf": "^4.2.1",
     "lucide-react": "^1.14.0",
     "opencv-wasm": "^4.3.0-10",
-    "pdf-parse": "^2.4.5",
+    "pdf-parse": "^1.1.1",
     "pg": "^8.22.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
