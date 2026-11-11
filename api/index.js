@@ -53,6 +53,23 @@ const normalizeMultipleChoiceAnswer = (answer, options) => {
     : null;
 };
 
+const parseQuestionOptions = (options) => {
+  if (Array.isArray(options)) return options;
+  if (typeof options !== 'string' || !options.trim()) return [];
+
+  try {
+    const parsedOptions = JSON.parse(options);
+    return Array.isArray(parsedOptions) ? parsedOptions : [];
+  } catch {
+    return [];
+  }
+};
+
+const isMissingQuizQuestionColumn = (error) => (
+  error?.code === '42703'
+  && /question_type|options/i.test(error.message || '')
+);
+
 const getStoragePathFromUrl = (url) => {
   if (typeof url !== 'string' || !url.trim()) return null;
 
@@ -895,13 +912,23 @@ app.post('/api/save-quiz', async (req, res) => {
       ? answers.map((answer, index) => ({
           ...sourceQuestions[index],
           ...answer,
-          type: answer.type || sourceQuestions[index]?.type,
-          options: answer.options || sourceQuestions[index]?.options
+          type: answer.type
+            || answer.question_type
+            || sourceQuestions[index]?.type
+            || sourceQuestions[index]?.question_type
+            || 'multiple_choice',
+          options: Array.isArray(answer.options)
+            ? answer.options
+            : Array.isArray(sourceQuestions[index]?.options)
+              ? sourceQuestions[index].options
+              : []
         }))
       : sourceQuestions.map(q => ({
           ...q,
           questionText: q.question || q.question_text,
-          correctAnswer: q.correctAnswer || q.answer_text
+          correctAnswer: q.correctAnswer || q.answer_text,
+          type: q.type || q.question_type || 'multiple_choice',
+          options: Array.isArray(q.options) ? q.options : []
         }));
 
     if (!items.length) return res.status(400).json({ error: 'No questions to save' });
@@ -915,7 +942,14 @@ app.post('/api/save-quiz', async (req, res) => {
           return res.status(400).json({ error: 'A multiple-choice answer could not be mapped to A, B, C, or D.' });
         }
       }
-      normalizedItems.push({ ...item, correctAnswer });
+      const questionType = item.type || item.question_type || 'multiple_choice';
+      normalizedItems.push({
+        ...item,
+        type: questionType,
+        question_type: questionType,
+        options: Array.isArray(item.options) ? item.options : [],
+        correctAnswer
+      });
     }
 
     let id = examId;
@@ -953,27 +987,47 @@ app.post('/api/save-quiz', async (req, res) => {
     const insertItems = normalizedItems.filter(item => item.correctAnswer);
     const questionCount = insertItems.length;
     if (questionCount > 0) {
-      const values = [];
-      const valuePlaceholders = insertItems.map((item, index) => {
-        const offset = index * 5;
-        values.push(
-          id,
-          item.correctAnswer,
-          item.questionText || item.question || item.question_text || `Question ${index + 1}`,
-          item.type || null,
-          Array.isArray(item.options) ? JSON.stringify(item.options) : null
+      try {
+        const values = [];
+        const valuePlaceholders = insertItems.map((item, index) => {
+          const offset = index * 5;
+          values.push(
+            id,
+            item.correctAnswer,
+            item.questionText || item.question || item.question_text || `Question ${index + 1}`,
+            item.type || 'multiple_choice',
+            JSON.stringify(Array.isArray(item.options) ? item.options : [])
+          );
+          return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5})`;
+        });
+        await db.query(
+          `INSERT INTO answer_keys (exam_id, answer_text, question_text, question_type, options) VALUES ${valuePlaceholders.join(', ')}`,
+          values
         );
-        return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5})`;
-      });
-      await db.query(
-        `INSERT INTO answer_keys (exam_id, answer_text, question_text, question_type, options) VALUES ${valuePlaceholders.join(', ')}`,
-        values
-      );
+      } catch (err) {
+        console.error('Save Quiz Error:', err);
+        if (!isMissingQuizQuestionColumn(err)) throw err;
+
+        const values = [];
+        const valuePlaceholders = insertItems.map((item, index) => {
+          const offset = index * 3;
+          values.push(
+            id,
+            item.correctAnswer,
+            item.questionText || item.question || item.question_text || `Question ${index + 1}`
+          );
+          return `($${offset + 1}, $${offset + 2}, $${offset + 3})`;
+        });
+        await db.query(
+          `INSERT INTO answer_keys (exam_id, answer_text, question_text) VALUES ${valuePlaceholders.join(', ')}`,
+          values
+        );
+      }
     }
 
     res.json({ message: 'Quiz saved and assigned to class', examId: id, questionCount });
   } catch (error) {
-    console.error('SAVE QUIZ ERROR:', error);
+    console.error('Save Quiz Error:', error);
     res.status(500).json({ error: 'Failed to save quiz' });
   }
 });
@@ -1572,10 +1626,34 @@ app.get('/api/exams/:id/questions', async (req, res) => {
       ORDER BY id ASC;
     `;
     
-    const result = await db.query(query, [id]);
+    let result;
+    try {
+      result = await db.query(query, [id]);
+    } catch (error) {
+      if (!isMissingQuizQuestionColumn(error)) throw error;
+      result = await db.query(`
+        SELECT id, question_text, correct_answer,
+               'multiple_choice'::VARCHAR(30) as type, '[]'::JSONB as options
+        FROM generated_questions WHERE exam_id = $1
+        UNION ALL
+        SELECT id, question_text, answer_text as correct_answer,
+               'multiple_choice'::VARCHAR(30) as type, '[]'::JSONB as options
+        FROM answer_keys WHERE exam_id = $1
+        ORDER BY id ASC;
+      `, [id]);
+    }
     
     // We format it so the frontend thinks they are all 'manual' answers for now
-    res.json({ manual: result.rows, generated: [] });
+    const questions = result.rows.map(question => {
+      const questionType = question.type || question.question_type || 'multiple_choice';
+      return {
+        ...question,
+        type: questionType,
+        question_type: questionType,
+        options: parseQuestionOptions(question.options)
+      };
+    });
+    res.json({ manual: questions, generated: [] });
   } catch (error) {
     console.error("Fetch questions error:", error);
     res.status(500).json({ error: "Failed to fetch questions" });
